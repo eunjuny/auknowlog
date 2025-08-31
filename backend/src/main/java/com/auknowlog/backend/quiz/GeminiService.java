@@ -21,14 +21,19 @@ public class GeminiService {
 
     public Mono<QuizResponse> generateQuiz(String topic) {
         String prompt = createQuizPrompt(topic);
-        GeminiRequest request = new GeminiRequest(List.of(new Content(List.of(new Part(prompt))))));
+        GeminiRequest request = new GeminiRequest(List.of(new Content(List.of(new Part(prompt)))));
+
+        if (apiKey == null || apiKey.isBlank() || "YOUR_API_KEY_HERE".equals(apiKey)) {
+            return Mono.just(createDummyQuizResponse(topic));
+        }
 
         return webClient.post()
                 .uri(uriBuilder -> uriBuilder.queryParam("key", apiKey).build())
                 .bodyValue(request)
                 .retrieve()
                 .bodyToMono(GeminiResponse.class)
-                .map(geminiResponse -> parseToQuizResponse(geminiResponse));
+                .map(geminiResponse -> parseToQuizResponse(geminiResponse))
+                .onErrorResume(ex -> Mono.just(createDummyQuizResponse(topic)));
     }
 
     private String createQuizPrompt(String topic) {
@@ -49,7 +54,7 @@ public class GeminiService {
             // into a QuizResponse object. This is aփplaceholder for that logic.
             // For example, with Jackson: new ObjectMapper().readValue(jsonResponse, QuizResponse.class);
             // As we can't easily add new dependencies here, we will return a dummy response.
-            
+
             // Dummy response for demonstration:
             List<Question> questions = List.of(
                 new Question("This is a sample question from the parser.", List.of("A", "B", "C", "D"), "A", "This is a dummy explanation.")
@@ -60,5 +65,12 @@ public class GeminiService {
             // Handle parsing error
             return new QuizResponse("Error parsing quiz", List.of());
         }
+    }
+
+    private QuizResponse createDummyQuizResponse(String topic) {
+        List<Question> questions = List.of(
+            new Question("This is a sample question about " + topic + ".", List.of("A", "B", "C", "D"), "A", "This is a dummy explanation.")
+        );
+        return new QuizResponse("Sample Quiz Title", questions);
     }
 }

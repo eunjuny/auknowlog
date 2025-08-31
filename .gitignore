@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+
+# Node
+frontend/node_modules/
+frontend/.npm-cache/
+frontend/.vite-dev.pid
+
+# Java/Gradle
+backend/build/
+backend/.gradle/

@@ -1,5 +1,8 @@
-package com.auknowlog.backend.quiz;
+package com.auknowlog.backend.quiz.controller;
 
+import com.auknowlog.backend.quiz.dto.QuizRequest;
+import com.auknowlog.backend.quiz.dto.QuizResponse;
+import com.auknowlog.backend.quiz.service.GeminiService;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 
@@ -15,6 +18,7 @@ public class QuizController {
 
     @PostMapping
     public Mono<QuizResponse> createQuiz(@RequestBody QuizRequest request) {
-        return geminiService.generateQuiz(request.topic());
+        int questionsToGenerate = (request.numberOfQuestions() != null) ? request.numberOfQuestions() : 10;
+        return geminiService.generateQuiz(request.topic(), questionsToGenerate);
     }
 }

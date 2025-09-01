@@ -1,5 +1,11 @@
-package com.auknowlog.backend.quiz;
+package com.auknowlog.backend.quiz.service;
 
+import com.auknowlog.backend.quiz.dto.Content;
+import com.auknowlog.backend.quiz.dto.GeminiRequest;
+import com.auknowlog.backend.quiz.dto.GeminiResponse;
+import com.auknowlog.backend.quiz.dto.Part;
+import com.auknowlog.backend.quiz.dto.Question;
+import com.auknowlog.backend.quiz.dto.QuizResponse;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -19,8 +25,8 @@ public class GeminiService {
         this.webClient = webClientBuilder.baseUrl(geminiApiUrl).build();
     }
 
-    public Mono<QuizResponse> generateQuiz(String topic) {
-        String prompt = createQuizPrompt(topic);
+    public Mono<QuizResponse> generateQuiz(String topic, int numberOfQuestions) {
+        String prompt = createQuizPrompt(topic, numberOfQuestions);
         GeminiRequest request = new GeminiRequest(List.of(new Content(List.of(new Part(prompt)))));
 
         if (apiKey == null || apiKey.isBlank() || "YOUR_API_KEY_HERE".equals(apiKey)) {
@@ -32,13 +38,13 @@ public class GeminiService {
                 .bodyValue(request)
                 .retrieve()
                 .bodyToMono(GeminiResponse.class)
-                .map(geminiResponse -> parseToQuizResponse(geminiResponse))
+                .map(this::parseToQuizResponse)
                 .onErrorResume(ex -> Mono.just(createDummyQuizResponse(topic)));
     }
 
-    private String createQuizPrompt(String topic) {
+    private String createQuizPrompt(String topic, int numberOfQuestions) {
         return "Create a multiple-choice quiz about " + topic + ". "
-                + "The quiz should have a title and 5 questions. "
+                + "The quiz should have a title and " + numberOfQuestions + " questions. "
                 + "Each question must have 4 options, one correct answer, and a brief explanation. "
                 + "Return the result in a clean JSON format without any surrounding text or markdown. "
                 + "The JSON structure should be: {\"quizTitle\": \"...\", \"questions\": [{\"questionText\": \"...\", \"options\": [\"...\", \"...\", \"...\", \"...\"], \"correctAnswer\": \"...\", \"explanation\": \"...\"}]} ";

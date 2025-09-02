@@ -23,10 +23,10 @@ public class GeminiService {
     private final ObjectMapper objectMapper;
     private static final Logger log = LoggerFactory.getLogger(GeminiService.class);
 
-    @Value("${gemini.api.key}")
+    @Value("${auknowlog.gemini.api.key}")
     private String apiKey;
 
-    public GeminiService(WebClient.Builder webClientBuilder, @Value("${gemini.api.url}") String geminiApiUrl, ObjectMapper objectMapper) {
+    public GeminiService(WebClient.Builder webClientBuilder, @Value("${auknowlog.gemini.api.url}") String geminiApiUrl, ObjectMapper objectMapper) {
         this.webClient = webClientBuilder.baseUrl(geminiApiUrl).build();
         this.objectMapper = objectMapper;
     }

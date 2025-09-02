@@ -12,3 +12,5 @@ frontend/.vite-dev.pid
 # Java/Gradle
 backend/build/
 backend/.gradle/
+backend/application-gemini.properties
+${user.home}/.auknowlog/application-gemini.properties

@@ -30,28 +30,33 @@ body {
 
 #app {
   width: 100%;
-  min-height: 100vh;
+  max-width: 1200px;
+  margin: 40px auto;
 }
 
 header {
   width: 100%;
+  margin: 0 auto;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   color: white;
-  padding: 10px 20px;
+  padding: 0px 40px 80px 40px;
   text-align: center;
-  margin-bottom: 15px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  margin-bottom: 0;
+  box-shadow: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
 header h1 {
   margin: 0;
-  font-size: 18px;
-  font-weight: 600;
+  font-size: 22px;
+  font-weight: 700;
 }
 
 main {
   width: 100%;
-  margin: 0;
+  margin: 0 auto;
   padding: 0;
   display: block;
 }

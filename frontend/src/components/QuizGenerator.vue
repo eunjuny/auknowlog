@@ -7,14 +7,17 @@ const numberOfQuestions = ref(10); // Default value
 const quizResult = ref(null);
 const error = ref(null);
 const loading = ref(false);
+const selectedAnswers = ref({});
 
 async function generateQuiz() {
   loading.value = true;
   quizResult.value = null;
   error.value = null;
+  selectedAnswers.value = {}; // Reset selected answers
 
   try {
-    const response = await axios.post('http://localhost:8080/api/quizzes', {
+    const response = await axios.post('/api/quizzes/dummy', {
+    // const response = await axios.post('/api/quizzes/create', {
       topic: topic.value,
       numberOfQuestions: numberOfQuestions.value
     });
@@ -24,6 +27,15 @@ async function generateQuiz() {
     error.value = '퀴즈 생성에 실패했습니다: ' + (err.response?.data?.message || err.message);
   } finally {
     loading.value = false;
+  }
+}
+
+function selectOption(questionIndex, optionIndex) {
+  // 이미 같은 옵션을 선택했다면 선택 해제, 아니면 새로 선택
+  if (selectedAnswers.value[questionIndex] === optionIndex) {
+    selectedAnswers.value[questionIndex] = null;
+  } else {
+    selectedAnswers.value[questionIndex] = optionIndex;
   }
 }
 </script>
@@ -52,13 +64,38 @@ async function generateQuiz() {
       <h2>{{ quizResult.quizTitle }}</h2>
       <div v-for="(question, index) in quizResult.questions" :key="index" class="question-item">
         <h3>{{ index + 1 }}. {{ question.questionText }}</h3>
-        <ul>
-          <li v-for="(option, optIndex) in question.options" :key="optIndex">
-            {{ option }}
-          </li>
-        </ul>
-        <p><strong>정답:</strong> {{ question.correctAnswer }}</p>
-        <p><strong>설명:</strong> {{ question.explanation }}</p>
+        <div class="options-container">
+          <div 
+            v-for="(option, optIndex) in question.options" 
+            :key="optIndex"
+            class="option-item"
+            :class="{
+              'selected': selectedAnswers[index] === optIndex,
+              'correct-answer': selectedAnswers[index] !== null && selectedAnswers[index] === optIndex && option === question.correctAnswer,
+              'wrong-answer': selectedAnswers[index] !== null && selectedAnswers[index] === optIndex && option !== question.correctAnswer,
+              'not-selected': selectedAnswers[index] !== null && selectedAnswers[index] !== optIndex
+            }"
+            @click="selectOption(index, optIndex)"
+          >
+            {{ String.fromCharCode(65 + optIndex) }}. {{ option }}
+          </div>
+        </div>
+        
+        <div v-if="selectedAnswers[index] !== null && selectedAnswers[index] !== undefined" 
+             class="answer-section"
+             :class="{
+               'correct-result': question.options[selectedAnswers[index]] === question.correctAnswer,
+               'incorrect-result': question.options[selectedAnswers[index]] !== question.correctAnswer
+             }">
+          <div class="result-indicator">
+            <span v-if="question.options[selectedAnswers[index]] === question.correctAnswer" class="correct-icon">✓</span>
+            <span v-else class="incorrect-icon">✗</span>
+            <strong v-if="question.options[selectedAnswers[index]] === question.correctAnswer">정답입니다!</strong>
+            <strong v-else>틀렸습니다.</strong>
+          </div>
+          <p><strong>정답:</strong> {{ question.correctAnswer }}</p>
+          <p><strong>설명:</strong> {{ question.explanation }}</p>
+        </div>
       </div>
     </div>
   </div>
@@ -66,16 +103,24 @@ async function generateQuiz() {
 
 <style scoped>
 .quiz-container {
-  max-width: 800px;
-  margin: 20px auto;
-  padding: 20px;
+  max-width: 1600px;
+  min-width: 800px;
+  margin: 0 auto;
+  padding: 40px 50px;
   background-color: #ffffff;
-  border-radius: 8px;
+  border-radius: 0 0 8px 8px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  min-height: 120px;
+  margin-top: 0;
+}
+
+.quiz-input-section {
+  margin-top: 20px;
+  margin-bottom: 20px;
 }
 
 .quiz-input-group {
-  margin-bottom: 15px;
+  margin-bottom: 25px;
 }
 
 .quiz-input-group label {
@@ -87,12 +132,14 @@ async function generateQuiz() {
 
 .quiz-input-group input[type="text"],
 .quiz-input-group input[type="number"] {
-  width: calc(100% - 20px);
-  padding: 10px;
+  width: 100%;
+  max-width: 900px;
+  padding: 15px 20px;
   border: 1px solid #e0e0e0;
   border-radius: 5px;
   font-size: 16px;
   transition: border-color 0.3s ease;
+  box-sizing: border-box;
 }
 
 .quiz-input-group input[type="text"]:focus,
@@ -104,7 +151,7 @@ async function generateQuiz() {
 button {
   background-color: #667eea;
   color: white;
-  padding: 12px 25px;
+  padding: 18px 25px;
   border: none;
   border-radius: 5px;
   cursor: pointer;
@@ -112,6 +159,7 @@ button {
   font-weight: 600;
   transition: background-color 0.3s ease;
   width: 100%;
+  margin-top: 10px;
 }
 
 button:hover:not(:disabled) {
@@ -133,8 +181,10 @@ button:disabled {
 }
 
 .quiz-output-section {
-  margin-top: 30px;
-  padding-top: 20px;
+  margin-top: 40px;
+  margin-bottom: 40px;
+  padding-top: 30px;
+  padding-bottom: 30px;
   border-top: 1px solid #eee;
 }
 
@@ -161,28 +211,113 @@ button:disabled {
   margin-bottom: 15px;
 }
 
-.question-item ul {
-  list-style: none;
-  padding: 0;
+.options-container {
   margin-bottom: 15px;
 }
 
-.question-item li {
+.option-item {
   background-color: #f0f2f5;
-  padding: 10px;
+  padding: 18px 20px;
   margin-bottom: 8px;
-  border-radius: 4px;
+  border-radius: 8px;
   font-size: 15px;
   color: #555;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  border: 2px solid transparent;
+  width: 100%;
+  box-sizing: border-box;
 }
 
-.question-item p {
+.option-item:hover {
+  background-color: #e8f0fe;
+  border-color: #667eea;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
+}
+
+.option-item.selected {
+  background-color: #667eea;
+  color: white;
+  border-color: #5a67d8;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.option-item.correct-answer {
+  background-color: #4caf50;
+  color: white;
+  border-color: #45a049;
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+  font-weight: 600;
+}
+
+.option-item.wrong-answer {
+  background-color: #f44336;
+  color: white;
+  border-color: #d32f2f;
+  box-shadow: 0 4px 12px rgba(244, 67, 54, 0.3);
+  font-weight: 600;
+}
+
+.option-item.not-selected {
+  background-color: #f5f5f5;
+  color: #666;
+  border-color: #e0e0e0;
+}
+
+.answer-section {
+  background-color: #f8f9fa;
+  padding: 20px;
+  border-radius: 8px;
+  margin-top: 15px;
+  border-left: 4px solid #667eea;
+  width: 100%;
+  box-sizing: border-box;
+  transition: all 0.3s ease;
+}
+
+.answer-section.correct-result {
+  background-color: #e8f5e8;
+  border-left-color: #4caf50;
+}
+
+.answer-section.incorrect-result {
+  background-color: #ffeaea;
+  border-left-color: #f44336;
+}
+
+.result-indicator {
+  display: flex;
+  align-items: center;
+  margin-bottom: 15px;
+  font-size: 16px;
+}
+
+.correct-icon {
+  color: #4caf50;
+  font-size: 20px;
+  font-weight: bold;
+  margin-right: 8px;
+}
+
+.incorrect-icon {
+  color: #f44336;
+  font-size: 20px;
+  font-weight: bold;
+  margin-right: 8px;
+}
+
+.result-indicator strong {
+  font-size: 16px;
+}
+
+.answer-section p {
   font-size: 15px;
   color: #444;
   margin-bottom: 5px;
 }
 
-.question-item strong {
+.answer-section strong {
   color: #333;
 }
 </style>

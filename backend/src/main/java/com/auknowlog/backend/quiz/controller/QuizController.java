@@ -32,7 +32,7 @@ public class QuizController {
             content = @Content(mediaType = "application/json", schema = @Schema(implementation = QuizResponse.class)))
     @ApiResponse(responseCode = "400", description = "잘못된 요청 파라미터",
             content = @Content(mediaType = "application/json"))
-    @PostMapping
+    @PostMapping("/create")
     public Mono<QuizResponse> createQuiz(
             @Parameter(description = "퀴즈 생성 요청 객체 (주제 및 문제 수 포함)", required = true)
             @RequestBody QuizRequest request) {
@@ -43,7 +43,7 @@ public class QuizController {
     @Operation(summary = "개발용 더미 퀴즈 생성", description = "실제 AI 호출 없이 더미 데이터로 퀴즈를 생성합니다. 개발 및 테스트용으로 사용됩니다.")
     @ApiResponse(responseCode = "200", description = "더미 퀴즈 생성 성공",
             content = @Content(mediaType = "application/json", schema = @Schema(implementation = QuizResponse.class)))
-    @PostMapping("/dev/dummy")
+    @PostMapping("/dummy")
     public Mono<QuizResponse> createDummyQuiz(
             @Parameter(description = "퀴즈 생성 요청 객체 (주제 및 문제 수 포함)", required = true)
             @RequestBody QuizRequest request) {
@@ -53,7 +53,7 @@ public class QuizController {
 
     private QuizResponse createDummyQuizResponse(String topic, int numberOfQuestions) {
         String quizTitle = topic != null ? topic + " 퀴즈" : "더미 퀴즈";
-        
+
         List<Question> questions = new ArrayList<>();
         for (int i = 1; i <= numberOfQuestions; i++) {
             questions.add(new Question(
@@ -63,7 +63,7 @@ public class QuizController {
                 "이것은 더미 데이터로 생성된 문제입니다. 정답은 선택지 A입니다."
             ));
         }
-        
+
         return new QuizResponse(quizTitle, questions);
     }
 }

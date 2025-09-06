@@ -97,6 +97,12 @@ function selectOption(questionIndex, optionIndex) {
           <p><strong>설명:</strong> {{ question.explanation }}</p>
         </div>
       </div>
+      
+      <div class="next-quiz-section">
+        <button @click="generateQuiz" class="next-quiz-button">
+          다음 문제 생성
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -319,5 +325,36 @@ button:disabled {
 
 .answer-section strong {
   color: #333;
+}
+
+.next-quiz-section {
+  text-align: center;
+  margin-top: 40px;
+  padding-top: 30px;
+  border-top: 2px solid #e0e0e0;
+}
+
+.next-quiz-button {
+  background-color: #667eea;
+  color: white;
+  padding: 15px 30px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.next-quiz-button:hover {
+  background-color: #5a67d8;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
+}
+
+.next-quiz-button:active {
+  transform: translateY(0);
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
 }
 </style>

@@ -8,6 +8,9 @@ const quizResult = ref(null);
 const error = ref(null);
 const loading = ref(false);
 const selectedAnswers = ref({});
+const showNextQuizForm = ref(false);
+const nextQuizTopic = ref('');
+const nextQuizQuestions = ref(10);
 
 async function generateQuiz() {
   loading.value = true;
@@ -37,6 +40,23 @@ function selectOption(questionIndex, optionIndex) {
   } else {
     selectedAnswers.value[questionIndex] = optionIndex;
   }
+}
+
+function showNextQuizOptions() {
+  nextQuizTopic.value = topic.value;
+  nextQuizQuestions.value = numberOfQuestions.value;
+  showNextQuizForm.value = true;
+}
+
+async function generateNextQuiz() {
+  topic.value = nextQuizTopic.value;
+  numberOfQuestions.value = nextQuizQuestions.value;
+  showNextQuizForm.value = false;
+  await generateQuiz();
+}
+
+function cancelNextQuiz() {
+  showNextQuizForm.value = false;
 }
 </script>
 
@@ -99,9 +119,39 @@ function selectOption(questionIndex, optionIndex) {
       </div>
       
       <div class="next-quiz-section">
-        <button @click="generateQuiz" class="next-quiz-button">
+        <button @click="showNextQuizOptions" class="next-quiz-button">
           다음 문제 생성
         </button>
+        
+        <div v-if="showNextQuizForm" class="next-quiz-form">
+          <h3>다음 퀴즈 설정</h3>
+          <div class="form-group">
+            <label for="nextTopic">주제:</label>
+            <input 
+              type="text" 
+              id="nextTopic" 
+              v-model="nextQuizTopic" 
+              placeholder="예: 자바스크립트, 인공지능" 
+            />
+          </div>
+          <div class="form-group">
+            <label for="nextQuestions">문제 수:</label>
+            <input 
+              type="number" 
+              id="nextQuestions" 
+              v-model.number="nextQuizQuestions" 
+              min="1" 
+            />
+          </div>
+          <div class="form-buttons">
+            <button @click="generateNextQuiz" class="confirm-button">
+              퀴즈 생성
+            </button>
+            <button @click="cancelNextQuiz" class="cancel-button">
+              취소
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   </div>
@@ -356,5 +406,88 @@ button:disabled {
 .next-quiz-button:active {
   transform: translateY(0);
   box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.next-quiz-form {
+  background-color: #f8f9fa;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 25px;
+  margin-top: 20px;
+  max-width: 500px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.next-quiz-form h3 {
+  margin: 0 0 20px 0;
+  color: #333;
+  text-align: center;
+  font-size: 18px;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 8px;
+  font-weight: 600;
+  color: #333;
+}
+
+.form-group input {
+  width: 100%;
+  padding: 12px 15px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  font-size: 14px;
+  transition: border-color 0.3s ease;
+  box-sizing: border-box;
+}
+
+.form-group input:focus {
+  border-color: #667eea;
+  outline: none;
+}
+
+.form-buttons {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+  margin-top: 25px;
+}
+
+.confirm-button {
+  background-color: #667eea;
+  color: white;
+  padding: 12px 25px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.confirm-button:hover {
+  background-color: #5a67d8;
+}
+
+.cancel-button {
+  background-color: #6c757d;
+  color: white;
+  padding: 12px 25px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+}
+
+.cancel-button:hover {
+  background-color: #5a6268;
 }
 </style>

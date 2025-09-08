@@ -15,6 +15,7 @@ import reactor.core.publisher.Mono;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Tag(name = "Quiz API", description = "퀴즈 생성 및 관리를 위한 API")
 @RestController
@@ -65,5 +66,13 @@ public class QuizController {
         }
 
         return new QuizResponse(quizTitle, questions);
+    }
+
+    @Operation(summary = "퀴즈 결과 마크다운 렌더링", description = "프론트에서 전달한 JSON(payload_json)을 규칙에 따라 마크다운으로 변환합니다.")
+    @ApiResponse(responseCode = "200", description = "마크다운 렌더링 성공",
+            content = @Content(mediaType = "text/markdown", schema = @Schema(implementation = String.class)))
+    @PostMapping(value = "/markdown", consumes = "application/json", produces = "text/markdown;charset=UTF-8")
+    public Mono<String> renderMarkdown(@RequestBody Map<String, Object> payload) {
+        return geminiService.renderQuizMarkdown(payload);
     }
 }

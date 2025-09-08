@@ -11,12 +11,14 @@ const selectedAnswers = ref({});
 const showNextQuizForm = ref(false);
 const nextQuizTopic = ref('');
 const nextQuizQuestions = ref(10);
+const saveMessage = ref(null);
 
 async function generateQuiz() {
   loading.value = true;
   quizResult.value = null;
   error.value = null;
   selectedAnswers.value = {}; // Reset selected answers
+  saveMessage.value = null; // Clear save message on new quiz generation
 
   try {
     const response = await axios.post('/api/quizzes/dummy', {
@@ -53,6 +55,56 @@ async function generateNextQuiz() {
   numberOfQuestions.value = nextQuizQuestions.value;
   showNextQuizForm.value = false;
   await generateQuiz();
+}
+
+function isAllQuestionsAnswered() {
+  if (!quizResult.value || !quizResult.value.questions) return false;
+  return quizResult.value.questions.every((_, index) => selectedAnswers.value[index] !== null && selectedAnswers.value[index] !== undefined);
+}
+
+async function saveQuizAsMarkdown() {
+  if (!isAllQuestionsAnswered()) {
+    saveMessage.value = '모든 문제를 풀어야 저장할 수 있습니다.';
+    return;
+  }
+
+  loading.value = true;
+  saveMessage.value = null;
+  error.value = null;
+
+  try {
+    const questionsWithUser = quizResult.value.questions.map((question, index) => {
+      const selectedIndex = selectedAnswers.value[index];
+      const userSelectedAnswer = question.options[selectedIndex];
+      const isCorrect = userSelectedAnswer === question.correctAnswer;
+      return {
+        ...question,
+        userSelectedIndex: selectedIndex,
+        userSelectedAnswer,
+        isCorrect,
+      };
+    });
+
+    const numCorrect = questionsWithUser.filter(q => q.isCorrect).length;
+    const payload = {
+      ...quizResult.value,
+      userAnswers: selectedAnswers.value,
+      questions: questionsWithUser,
+      stats: {
+        total: questionsWithUser.length,
+        correct: numCorrect,
+        wrong: questionsWithUser.length - numCorrect,
+      },
+    };
+
+    const response = await axios.post('/api/documents/save-quiz-markdown', payload);
+    saveMessage.value = response.data;
+  } catch (err) {
+    console.error('Save API call failed:', err);
+    saveMessage.value = '저장 실패: ' + (err.response?.data || err.message);
+  } finally {
+    loading.value = false;
+  }
 }
 
 function cancelNextQuiz() {
@@ -119,9 +171,18 @@ function cancelNextQuiz() {
       </div>
       
       <div class="next-quiz-section">
-        <button @click="showNextQuizOptions" class="next-quiz-button">
-          다음 문제 생성
-        </button>
+        <div class="quiz-actions">
+          <button @click="showNextQuizOptions" class="next-quiz-button">
+            다음 문제 생성
+          </button>
+          <button @click="saveQuizAsMarkdown" :disabled="loading || !isAllQuestionsAnswered()" class="save-button">
+            {{ loading ? '저장 중...' : isAllQuestionsAnswered() ? 'Markdown으로 저장' : '모든 문제를 풀어주세요' }}
+          </button>
+        </div>
+        
+        <div v-if="saveMessage" class="save-message" :class="{ 'error-message': saveMessage.includes('실패') || saveMessage.includes('풀어야') }">
+          {{ saveMessage }}
+        </div>
         
         <div v-if="showNextQuizForm" class="next-quiz-form">
           <h3>다음 퀴즈 설정</h3>
@@ -382,6 +443,56 @@ button:disabled {
   margin-top: 40px;
   padding-top: 30px;
   border-top: 2px solid #e0e0e0;
+}
+
+.quiz-actions {
+  display: flex;
+  gap: 15px;
+  justify-content: center;
+  margin-bottom: 20px;
+}
+
+.save-button {
+  background-color: #28a745;
+  color: white;
+  padding: 15px 30px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
+}
+
+.save-button:hover:not(:disabled) {
+  background-color: #218838;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(40, 167, 69, 0.4);
+}
+
+.save-button:disabled {
+  background-color: #6c757d;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+.save-message {
+  margin-top: 15px;
+  padding: 12px 20px;
+  background-color: #d4edda;
+  border: 1px solid #c3e6cb;
+  color: #155724;
+  border-radius: 5px;
+  text-align: center;
+  font-weight: 500;
+}
+
+.save-message.error-message {
+  background-color: #f8d7da;
+  border-color: #f5c6cb;
+  color: #721c24;
 }
 
 .next-quiz-button {

@@ -97,7 +97,7 @@ async function saveQuizAsMarkdown() {
       },
     };
 
-    const response = await axios.post('/api/documents/save-quiz-markdown', payload);
+    const response = await axios.post('/api/documents/save-quiz-markdown-raw', payload);
     saveMessage.value = response.data;
   } catch (err) {
     console.error('Save API call failed:', err);

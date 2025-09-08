@@ -112,71 +112,173 @@ public class GeminiService {
         return trimmed;
     }
 
-    public Mono<String> renderQuizMarkdown(Map<String, Object> payload) {
-        String systemPrompt = """
-            너는 퀴즈 결과 JSON을 마크다운으로 렌더링하는 생성기다. 출력은 오직 마크다운 본문이며 코드펜스(````), 언어 태그, HTML, 불필요한 설명·메타텍스트를 절대 포함하지 않는다. 한글로 작성한다.
+    // LLM 호출 없이 로컬 렌더링만 사용합니다. (renderQuizMarkdownLocally 참고)
 
-            규칙:
-            - 첫 줄: "# {quizTitle}" (없으면 "퀴즈 결과")
-            - 둘째 줄: "총 {N}문항 · 정답 {M} · 오답 {K}" 
-              - stats(total, correct, wrong)가 없으면 questions[].isCorrect를 이용해 계산하되, 미응답은 wrong에 포함하지 말고 뒤에 " · 미응답 {U}"를 덧붙여 표기한다.
-            - 각 문항 블록:
-              - "## Q{번호}. {questionText}"
-              - 보기 목록(각 줄): "- A. {옵션텍스트}" (인덱스 0→A, 1→B, 2→C, 3→D)
-              - 선택/정오 표시(보기 목록 아래 한 줄):
-                - isCorrect=true → "✅ 내 답: {userSelectedAnswer}"
-                - isCorrect=false → "❌ 내 답: {userSelectedAnswer}  |  정답: {correctAnswer}"
-                - userSelectedIndex가 null/undefined → "❗ 미응답  |  정답: {correctAnswer}"
-              - explanation이 존재하면 마지막 줄에 "설명: {explanation}"
-            - 입력에 없는 값은 추측하지 않는다. 개행은 과도하지 않게 유지한다.
-            """;
 
-        String payloadJson;
-        try {
-            payloadJson = objectMapper.writeValueAsString(payload);
-        } catch (Exception e) {
-            return Mono.error(new IllegalArgumentException("Failed to serialize payload to JSON", e));
+    public Mono<String> renderQuizMarkdownLocally(Map<String, Object> payload) {
+        String title = asString(payload.get("quizTitle"));
+        if (title == null || title.isBlank()) {
+            title = "퀴즈 결과";
         }
 
-        String userPrompt = """
-            아래 JSON(payload)을 위 규칙에 맞춰 마크다운으로 변환해줘.
+        List<?> questionListRaw = asList(payload.get("questions"));
+        int total = questionListRaw != null ? questionListRaw.size() : 0;
 
-            %s
-            """.formatted(payloadJson);
-
-        String combinedPrompt = systemPrompt + "\n\n" + userPrompt;
-
-        GeminiRequest request = new GeminiRequest(List.of(new Content(List.of(new Part(combinedPrompt)))));
-
-        if (apiKey == null || apiKey.isBlank() || "YOUR_API_KEY_HERE".equals(apiKey)) {
-            return Mono.error(new IllegalStateException("Gemini API key is not configured"));
+        Integer statsTotal = null, statsCorrect = null, statsWrong = null;
+        Map<String, Object> statsMap = asMap(payload.get("stats"));
+        if (statsMap != null) {
+            statsTotal = asInteger(statsMap.get("total"));
+            statsCorrect = asInteger(statsMap.get("correct"));
+            statsWrong = asInteger(statsMap.get("wrong"));
         }
 
-        return webClient.post()
-                .uri(uriBuilder -> uriBuilder.queryParam("key", apiKey).build())
-                .bodyValue(request)
-                .retrieve()
-                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
-                        resp -> resp.bodyToMono(String.class)
-                                .defaultIfEmpty("")
-                                .map(body -> new RuntimeException("Gemini API error: " + resp.statusCode() + " body=" + body)))
-                .bodyToMono(GeminiResponse.class)
-                .map(response -> {
-                    String text = response.candidates().get(0).content().parts().get(0).text();
-                    return sanitizeModelText(text);
-                })
-                .doOnError(ex -> log.error("Gemini markdown render failed", ex));
-    }
+        int computedCorrect = 0;
+        int computedWrong = 0;
+        int computedUnanswered = 0;
 
-    private String sanitizeModelText(String text) {
-        if (text == null) return "";
-        String trimmed = text.trim();
-        if (trimmed.startsWith("```") && trimmed.endsWith("```") && trimmed.length() >= 6) {
-            trimmed = trimmed.substring(3, trimmed.length() - 3).trim();
-            if (trimmed.startsWith("text")) {
-                trimmed = trimmed.substring(4).trim();
+        if (questionListRaw != null) {
+            for (int i = 0; i < questionListRaw.size(); i++) {
+                Map<String, Object> q = asMap(questionListRaw.get(i));
+                if (q == null) continue;
+
+                Boolean isCorrect = asBoolean(q.get("isCorrect"));
+                Integer userIndex = asInteger(q.get("userSelectedIndex"));
+                String correctAnswer = asString(q.get("correctAnswer"));
+                List<String> options = asStringList(q.get("options"));
+
+                if (userIndex == null) {
+                    computedUnanswered++;
+                } else {
+                    if (isCorrect != null) {
+                        if (isCorrect) computedCorrect++; else computedWrong++;
+                    } else {
+                        String userAnswer = deriveUserSelectedAnswer(q, options, userIndex);
+                        if (userAnswer != null && correctAnswer != null) {
+                            if (userAnswer.trim().equals(correctAnswer.trim())) computedCorrect++; else computedWrong++;
+                        }
+                    }
+                }
             }
         }
-        return trimmed;
+
+        int headerTotal = statsTotal != null ? statsTotal : total;
+        int headerCorrect = statsCorrect != null ? statsCorrect : computedCorrect;
+        int headerWrong = statsWrong != null ? statsWrong : computedWrong;
+
+        StringBuilder sb = new StringBuilder();
+        sb.append("# ").append(title).append('\n');
+        sb.append("총 ").append(headerTotal).append("문항 · 정답 ").append(headerCorrect).append(" · 오답 ").append(headerWrong);
+        int unansweredToShow;
+        if (statsMap == null) {
+            unansweredToShow = computedUnanswered;
+        } else {
+            unansweredToShow = 0; // stats가 있으면 별도 표기 지침이 없으므로 생략
+        }
+        if (unansweredToShow > 0) {
+            sb.append(" · 미응답 ").append(unansweredToShow);
+        }
+
+        if (questionListRaw != null && !questionListRaw.isEmpty()) {
+            for (int i = 0; i < questionListRaw.size(); i++) {
+                Map<String, Object> q = asMap(questionListRaw.get(i));
+                if (q == null) continue;
+
+                String questionText = asString(q.get("questionText"));
+                List<String> options = asStringList(q.get("options"));
+                String correctAnswer = asString(q.get("correctAnswer"));
+                String explanation = asString(q.get("explanation"));
+                Integer userIndex = asInteger(q.get("userSelectedIndex"));
+                String userAnswer = asString(q.get("userSelectedAnswer"));
+                if ((userAnswer == null || userAnswer.isBlank()) && userIndex != null) {
+                    userAnswer = deriveUserSelectedAnswer(q, options, userIndex);
+                }
+                Boolean isCorrect = asBoolean(q.get("isCorrect"));
+                if (isCorrect == null && userAnswer != null && correctAnswer != null) {
+                    isCorrect = userAnswer.trim().equals(correctAnswer.trim());
+                }
+
+                sb.append('\n');
+                sb.append("\n## Q").append(i + 1).append(". ").append(questionText != null ? questionText : "").append('\n');
+
+                if (options != null) {
+                    for (int idx = 0; idx < options.size(); idx++) {
+                        char label = (char) ('A' + idx);
+                        sb.append("- ").append(label).append(". ").append(options.get(idx) != null ? options.get(idx) : "").append('\n');
+                    }
+                }
+
+                // 선택/정오 표시 한 줄
+                if (userIndex == null) {
+                    sb.append("❗ 미응답");
+                    if (correctAnswer != null && !correctAnswer.isBlank()) {
+                        sb.append("  |  정답: ").append(correctAnswer);
+                    }
+                } else if (Boolean.TRUE.equals(isCorrect)) {
+                    sb.append("✅ 내 답: ").append(userAnswer != null ? userAnswer : "");
+                } else {
+                    sb.append("❌ 내 답: ").append(userAnswer != null ? userAnswer : "");
+                    if (correctAnswer != null && !correctAnswer.isBlank()) {
+                        sb.append("  |  정답: ").append(correctAnswer);
+                    }
+                }
+
+                if (explanation != null && !explanation.isBlank()) {
+                    sb.append('\n').append("설명: ").append(explanation);
+                }
+            }
+        }
+
+        return Mono.just(sb.toString());
+    }
+
+    private String deriveUserSelectedAnswer(Map<String, Object> q, List<String> options, Integer userIndex) {
+        if (userIndex == null || options == null) return null;
+        if (userIndex < 0 || userIndex >= options.size()) return null;
+        String candidate = options.get(userIndex);
+        return candidate;
+    }
+
+    @SuppressWarnings("unchecked")
+    private Map<String, Object> asMap(Object o) {
+        if (o instanceof Map<?, ?> map) {
+            return (Map<String, Object>) map;
+        }
+        return null;
+    }
+
+    private List<?> asList(Object o) {
+        if (o instanceof List<?> list) return list;
+        return null;
+    }
+
+    private String asString(Object o) {
+        return o == null ? null : String.valueOf(o);
+    }
+
+    private Integer asInteger(Object o) {
+        if (o instanceof Number n) return n.intValue();
+        try {
+            return o != null ? Integer.parseInt(String.valueOf(o)) : null;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private Boolean asBoolean(Object o) {
+        if (o instanceof Boolean b) return b;
+        if (o instanceof String s) {
+            if ("true".equalsIgnoreCase(s)) return true;
+            if ("false".equalsIgnoreCase(s)) return false;
+        }
+        return null;
+    }
+
+    private List<String> asStringList(Object o) {
+        if (o instanceof List<?> list) {
+            List<String> out = new java.util.ArrayList<>();
+            for (Object it : list) out.add(it == null ? null : String.valueOf(it));
+            return out;
+        }
+        return null;
     }
 }

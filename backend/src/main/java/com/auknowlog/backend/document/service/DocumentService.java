@@ -28,6 +28,16 @@ public class DocumentService {
         return filePath.toString();
     }
 
+    public String saveMarkdownContent(String quizTitle, String markdownContent) throws IOException {
+        String safeTitle = (quizTitle == null || quizTitle.isBlank()) ? "퀴즈_결과" : quizTitle;
+        String fileName = generateFileName(safeTitle);
+        Path filePath = Paths.get(SAVE_DIR + fileName);
+
+        Files.createDirectories(filePath.getParent());
+        Files.writeString(filePath, markdownContent);
+        return filePath.toString();
+    }
+
     private String convertQuizToMarkdown(QuizResponse quizResponse) {
         StringBuilder sb = new StringBuilder();
         sb.append("# ").append(quizResponse.quizTitle()).append("\n\n");

@@ -21,8 +21,8 @@ async function generateQuiz() {
   saveMessage.value = null; // Clear save message on new quiz generation
 
   try {
-    const response = await axios.post('/api/quizzes/dummy', {
-    // const response = await axios.post('/api/quizzes/create', {
+    // const response = await axios.post('/api/quizzes/dummy', {
+    const response = await axios.post('/api/quizzes/create', {
       topic: topic.value,
       numberOfQuestions: numberOfQuestions.value
     });

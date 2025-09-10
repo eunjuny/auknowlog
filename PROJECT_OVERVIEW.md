@@ -28,7 +28,7 @@
     *   Google의 최신 AI 모델인 Gemini를 사용하여 퀴즈를 생성하는 데 사용됩니다.
 *   **설정 관리**: 
     *   `application.properties`: 애플리케이션의 기본 설정 파일입니다.
-    *   `application-gemini.properties`: 민감한 정보(API 키)를 별도로 관리하고 `.gitignore`에 추가하여 Git에 커밋되지 않도록 합니다.
+    *   `application-api.properties`: 민감한 정보(API 키)를 별도로 관리하고 `.gitignore`에 추가하여 Git에 커밋되지 않도록 합니다.
     *   `spring.config.import`: `application.properties`에서 다른 설정 파일을 로드하기 위해 사용됩니다.
 *   **로깅**: **SLF4J/Logback**
     *   Spring Boot의 기본 로깅 프레임워크로, 애플리케이션의 동작 상태를 기록합니다.

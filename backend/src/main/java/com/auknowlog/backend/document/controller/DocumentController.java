@@ -42,4 +42,17 @@ public class DocumentController {
             return ResponseEntity.internalServerError().body("Failed to save quiz: " + e.getMessage());
         }
     }
+
+    @PostMapping(value = "/save-quiz-notion", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public ResponseEntity<String> saveQuizToNotion(@RequestBody java.util.Map<String, Object> payload) {
+        try {
+            String title = String.valueOf(payload.getOrDefault("quizTitle", "퀴즈 결과"));
+            String markdown = geminiService.renderQuizMarkdownLocally(payload).block();
+            int length = (markdown == null) ? 0 : markdown.length();
+            // TODO: 실제 Notion API 저장은 향후 구현
+            return ResponseEntity.ok("노션 저장(임시) 완료: " + title + " (" + length + " chars)");
+        } catch (Exception e) {
+            return ResponseEntity.internalServerError().body("노션 저장 실패: " + e.getMessage());
+        }
+    }
 }

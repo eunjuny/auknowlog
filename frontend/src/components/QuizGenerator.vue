@@ -13,6 +13,8 @@ const nextQuizTopic = ref('');
 const nextQuizQuestions = ref(10);
 const saveMessage = ref(null);
 
+// 노션 저장은 서버 기본 설정을 사용합니다. (별도 입력 필드 제거)
+
 async function generateQuiz() {
   loading.value = true;
   quizResult.value = null;
@@ -96,6 +98,8 @@ async function saveQuizAsMarkdown() {
         wrong: questionsWithUser.length - numCorrect,
       },
     };
+
+    // 노션 관련 파라미터는 마크다운 저장에서는 사용하지 않습니다.
 
     const response = await axios.post('/api/documents/save-quiz-markdown-raw', payload);
     saveMessage.value = response.data;
@@ -224,9 +228,11 @@ function cancelNextQuiz() {
             {{ loading ? '저장 중...' : isAllQuestionsAnswered() ? 'Markdown으로 저장' : '모든 문제를 풀어주세요' }}
           </button>
           <button @click="saveQuizToNotion" :disabled="loading || !isAllQuestionsAnswered()" class="save-button" style="background-color:#222;">
-            {{ loading ? '저장 중...' : '노션에 저장(임시)' }}
+            {{ loading ? '저장 중...' : '노션에 저장' }}
           </button>
         </div>
+
+        
         
         <div v-if="saveMessage" class="save-message" :class="{ 'error-message': saveMessage.includes('실패') || saveMessage.includes('풀어야') }">
           {{ saveMessage }}

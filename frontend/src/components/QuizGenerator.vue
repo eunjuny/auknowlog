@@ -230,6 +230,9 @@ function cancelNextQuiz() {
           <button @click="saveQuizToNotion" :disabled="loading || !isAllQuestionsAnswered()" class="save-button" style="background-color:#222;">
             {{ loading ? '저장 중...' : '노션에 저장' }}
           </button>
+          <button @click="saveQuizAsMarkdown" :disabled="loading || !isAllQuestionsAnswered()" class="save-button" style="background-color:#f05033;">
+            {{ loading ? '저장 중...' : 'Git에 저장' }}
+          </button>
         </div>
 
         

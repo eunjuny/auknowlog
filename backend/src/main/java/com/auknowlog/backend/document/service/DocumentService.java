@@ -15,7 +15,7 @@ import java.util.List;
 @Service
 public class DocumentService {
 
-    private static final String SAVE_DIR = "./backend/src/main/resources/saved_quizzes/";
+    private static final String SAVE_DIR = "./src/main/resources/saved_quizzes/";
 
     public String saveQuizAsMarkdown(QuizResponse quizResponse) throws IOException {
         String markdownContent = convertQuizToMarkdown(quizResponse);
@@ -25,7 +25,7 @@ public class DocumentService {
         Files.createDirectories(filePath.getParent()); // Ensure directory exists
         Files.writeString(filePath, markdownContent);
 
-        return filePath.toString();
+        return filePath.toAbsolutePath().toString();
     }
 
     public String saveMarkdownContent(String quizTitle, String markdownContent) throws IOException {
@@ -35,7 +35,7 @@ public class DocumentService {
 
         Files.createDirectories(filePath.getParent());
         Files.writeString(filePath, markdownContent);
-        return filePath.toString();
+        return filePath.toAbsolutePath().toString();
     }
 
     private String convertQuizToMarkdown(QuizResponse quizResponse) {

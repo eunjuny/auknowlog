@@ -51,18 +51,6 @@ public class DocumentController {
                 .onErrorResume(e -> Mono.just(ResponseEntity.internalServerError().body("Failed to save quiz: " + e.getMessage())));
     }
 
-    @PostMapping(value = "/save-quiz-git", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public Mono<ResponseEntity<String>> saveQuizToGit(@RequestBody java.util.Map<String, Object> payload) {
-        String title = String.valueOf(payload.getOrDefault("quizTitle", "퀴즈 결과"));
-        return geminiService
-                .renderQuizMarkdownLocally(payload)
-                .flatMap(markdown -> Mono.fromCallable(() -> documentService.saveMarkdownContent(title, markdown))
-                        .subscribeOn(Schedulers.boundedElastic()))
-                .flatMap(filePath -> gitService.commitAndPush(filePath, "chore: save quiz markdown (" + title + ")")
-                        .map(msg -> ResponseEntity.ok("Git 저장 완료: " + msg + " | " + filePath)))
-                .onErrorResume(e -> Mono.just(ResponseEntity.internalServerError().body("Git 저장 실패: " + e.getMessage())));
-    }
-
     @PostMapping(value = "/save-quiz-notion", consumes = MediaType.APPLICATION_JSON_VALUE)
     public Mono<ResponseEntity<String>> saveQuizToNotion(@RequestBody java.util.Map<String, Object> payload) {
         String title = String.valueOf(payload.getOrDefault("quizTitle", "퀴즈 결과"));
@@ -77,20 +65,15 @@ public class DocumentController {
                 .onErrorResume(e -> Mono.just(ResponseEntity.internalServerError().body("노션 저장 실패: " + e.getMessage())));
     }
 
-    @PostMapping(value = "/save-quiz-notion/{pageId}", consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<String> saveQuizToNotionUnderPage(@PathVariable("pageId") String pageId,
-                                                            @RequestBody java.util.Map<String, Object> payload) {
-        try {
-            String title = String.valueOf(payload.getOrDefault("quizTitle", "퀴즈 결과"));
-            String markdown = geminiService.renderQuizMarkdownLocally(payload).block();
-
-            String result = notionService
-                    .createPageWithMarkdown(title, markdown, pageId, null, null)
-                    .block();
-
-            return ResponseEntity.ok("노션 저장 완료: " + (result == null ? "(no response)" : result));
-        } catch (Exception e) {
-            return ResponseEntity.internalServerError().body("노션 저장 실패: " + e.getMessage());
-        }
+    @PostMapping(value = "/save-quiz-git", consumes = MediaType.APPLICATION_JSON_VALUE)
+    public Mono<ResponseEntity<String>> saveQuizToGit(@RequestBody java.util.Map<String, Object> payload) {
+        String title = String.valueOf(payload.getOrDefault("quizTitle", "퀴즈 결과"));
+        return geminiService
+                .renderQuizMarkdownLocally(payload)
+                .flatMap(markdown -> Mono.fromCallable(() -> documentService.saveMarkdownContent(title, markdown))
+                        .subscribeOn(Schedulers.boundedElastic()))
+                .flatMap(filePath -> gitService.commitAndPush(filePath, "chore: save quiz markdown (" + title + ")", "notes", "main")
+                        .map(msg -> ResponseEntity.ok("Git 저장 완료: " + msg + " | " + filePath)))
+                .onErrorResume(e -> Mono.just(ResponseEntity.internalServerError().body("Git 저장 실패: " + e.getMessage())));
     }
 }

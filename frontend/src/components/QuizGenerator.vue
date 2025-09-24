@@ -156,6 +156,51 @@ async function saveQuizToNotion() {
   }
 }
 
+async function saveQuizToGit() {
+  if (!isAllQuestionsAnswered()) {
+    saveMessage.value = '모든 문제를 풀어야 저장할 수 있습니다.';
+    return;
+  }
+
+  loading.value = true;
+  saveMessage.value = null;
+  error.value = null;
+
+  try {
+    const questionsWithUser = quizResult.value.questions.map((question, index) => {
+      const selectedIndex = selectedAnswers.value[index];
+      const userSelectedAnswer = question.options[selectedIndex];
+      const isCorrect = userSelectedAnswer === question.correctAnswer;
+      return {
+        ...question,
+        userSelectedIndex: selectedIndex,
+        userSelectedAnswer,
+        isCorrect,
+      };
+    });
+
+    const numCorrect = questionsWithUser.filter(q => q.isCorrect).length;
+    const payload = {
+      ...quizResult.value,
+      userAnswers: selectedAnswers.value,
+      questions: questionsWithUser,
+      stats: {
+        total: questionsWithUser.length,
+        correct: numCorrect,
+        wrong: questionsWithUser.length - numCorrect,
+      },
+    };
+
+    const response = await axios.post('/api/documents/save-quiz-git', payload);
+    saveMessage.value = response.data;
+  } catch (err) {
+    console.error('Git Save API call failed:', err);
+    saveMessage.value = 'Git 저장 실패: ' + (err.response?.data || err.message);
+  } finally {
+    loading.value = false;
+  }
+}
+
 function cancelNextQuiz() {
   showNextQuizForm.value = false;
 }
@@ -230,7 +275,7 @@ function cancelNextQuiz() {
           <button @click="saveQuizToNotion" :disabled="loading || !isAllQuestionsAnswered()" class="save-button" style="background-color:#222;">
             {{ loading ? '저장 중...' : '노션에 저장' }}
           </button>
-          <button @click="saveQuizAsMarkdown" :disabled="loading || !isAllQuestionsAnswered()" class="save-button" style="background-color:#f05033;">
+          <button @click="saveQuizToGit" :disabled="loading || !isAllQuestionsAnswered()" class="save-button" style="background-color:#f05033;">
             {{ loading ? '저장 중...' : 'Git에 저장' }}
           </button>
         </div>

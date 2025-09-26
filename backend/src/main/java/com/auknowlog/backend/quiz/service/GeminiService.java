@@ -26,8 +26,14 @@ public class GeminiService {
     @Value("${auknowlog.gemini.api.key}")
     private String apiKey;
 
-    public GeminiService(WebClient.Builder webClientBuilder, @Value("${auknowlog.gemini.api.url}") String geminiApiUrl, ObjectMapper objectMapper) {
-        this.webClient = webClientBuilder.baseUrl(geminiApiUrl).build();
+    @Value("${auknowlog.gemini.api.url}")
+    private String apiUrlBase;
+
+    @Value("${auknowlog.gemini.model}")
+    private String modelName;
+
+    public GeminiService(WebClient.Builder webClientBuilder, ObjectMapper objectMapper) {
+        this.webClient = webClientBuilder.build();
         this.objectMapper = objectMapper;
     }
 
@@ -41,17 +47,52 @@ public class GeminiService {
             return Mono.error(new IllegalStateException("Gemini API key is not configured"));
         }
 
+        String primaryUrl = String.format("%s/%s:generateContent?key=%s", apiUrlBase, modelName, apiKey);
+        String fallbackUrl = buildFallbackUrl();
+
+        return callGemini(primaryUrl, request)
+                .onErrorResume(ex -> {
+                    String msg = ex.getMessage() == null ? "" : ex.getMessage();
+                    boolean is404 = msg.contains("404") || msg.contains("NOT_FOUND") || msg.contains("was not found");
+                    if (is404 && fallbackUrl != null && !fallbackUrl.equals(primaryUrl)) {
+                        log.warn("Gemini primary call 404, falling back to {}", fallbackUrl);
+                        return callGemini(fallbackUrl, request);
+                    }
+                    return Mono.error(ex);
+                })
+                .map(response -> parseToQuizResponse(response, numberOfQuestions, topic))
+                .doOnError(ex -> log.error("Gemini call failed", ex));
+    }
+
+    private Mono<GeminiResponse> callGemini(String url, GeminiRequest request) {
         return webClient.post()
-                .uri(uriBuilder -> uriBuilder.queryParam("key", apiKey).build())
+                .uri(url)
                 .bodyValue(request)
                 .retrieve()
                 .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
                         resp -> resp.bodyToMono(String.class)
                                 .defaultIfEmpty("")
                                 .map(body -> new RuntimeException("Gemini API error: " + resp.statusCode() + " body=" + body)))
-                .bodyToMono(GeminiResponse.class)
-                .map(response -> parseToQuizResponse(response, numberOfQuestions, topic))
-                .doOnError(ex -> log.error("Gemini call failed", ex));
+                .bodyToMono(GeminiResponse.class);
+    }
+
+    private String buildFallbackUrl() {
+        try {
+            boolean isV1 = apiUrlBase != null && apiUrlBase.contains("/v1/");
+            boolean isV1beta = apiUrlBase != null && apiUrlBase.contains("/v1beta/");
+            if (isV1) {
+                String fallbackModel = modelName != null && modelName.endsWith("-latest") ? modelName : modelName + "-latest";
+                return String.format("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", fallbackModel, apiKey);
+            } else if (isV1beta) {
+                String baseModel = modelName != null ? modelName.replace("-latest", "") : "gemini-1.5-flash";
+                return String.format("https://generativelanguage.googleapis.com/v1/models/%s:generateContent?key=%s", baseModel, apiKey);
+            }
+            // 기본적으로 v1beta latest로 폴백
+            String fallbackModel = modelName != null && modelName.endsWith("-latest") ? modelName : (modelName == null ? "gemini-1.5-flash-latest" : modelName + "-latest");
+            return String.format("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", fallbackModel, apiKey);
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private String createQuizPrompt(String topic, int numberOfQuestions) {

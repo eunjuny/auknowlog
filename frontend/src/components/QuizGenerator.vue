@@ -1,5 +1,5 @@
 <script setup>
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import axios from 'axios';
 
 const topic = ref('');
@@ -14,6 +14,21 @@ const nextQuizQuestions = ref(10);
 const saveMessage = ref(null);
 
 // 노션 저장은 서버 기본 설정을 사용합니다. (별도 입력 필드 제거)
+
+// 입력값을 1~20 범위로 강제 클램프
+watch(numberOfQuestions, (v) => {
+  const n = Number(v);
+  if (Number.isNaN(n)) return;
+  if (n > 20) numberOfQuestions.value = 20;
+  else if (n < 1) numberOfQuestions.value = 1;
+});
+
+watch(nextQuizQuestions, (v) => {
+  const n = Number(v);
+  if (Number.isNaN(n)) return;
+  if (n > 20) nextQuizQuestions.value = 20;
+  else if (n < 1) nextQuizQuestions.value = 1;
+});
 
 async function generateQuiz() {
   loading.value = true;
@@ -298,12 +313,12 @@ function cancelNextQuiz() {
             />
           </div>
           <div class="form-group">
-            <label for="nextQuestions">문제 수:</label>
+            <label for="nextQuestions">문제 수 (최대 20):</label>
             <input 
               type="number" 
               id="nextQuestions" 
               v-model.number="nextQuizQuestions" 
-              min="1" 
+              min="1" max="20"
             />
           </div>
           <div class="form-buttons">

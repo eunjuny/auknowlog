@@ -214,8 +214,8 @@ function cancelNextQuiz() {
         <input type="text" id="topic" v-model="topic" placeholder="예: 자바스크립트, 인공지능" />
       </div>
       <div class="quiz-input-group">
-        <label for="numQuestions">문제 수 (기본 10):</label>
-        <input type="number" id="numQuestions" v-model.number="numberOfQuestions" min="1" />
+        <label for="numQuestions">문제 수 (기본 10, 최대 20):</label>
+        <input type="number" id="numQuestions" v-model.number="numberOfQuestions" min="1" max="20" />
       </div>
       <button @click="generateQuiz" :disabled="loading || !topic">
         {{ loading ? '생성 중...' : '퀴즈 생성' }}

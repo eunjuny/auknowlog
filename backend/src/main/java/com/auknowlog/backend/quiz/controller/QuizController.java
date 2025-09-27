@@ -37,7 +37,8 @@ public class QuizController {
     public Mono<QuizResponse> createQuiz(
             @Parameter(description = "퀴즈 생성 요청 객체 (주제 및 문제 수 포함)", required = true)
             @RequestBody QuizRequest request) {
-        int questionsToGenerate = (request.numberOfQuestions() != null) ? request.numberOfQuestions() : 10;
+        int requested = (request.numberOfQuestions() != null) ? request.numberOfQuestions() : 10;
+        int questionsToGenerate = Math.max(1, Math.min(20, requested));
         return geminiService.generateQuiz(request.topic(), questionsToGenerate);
     }
 
@@ -48,7 +49,8 @@ public class QuizController {
     public Mono<QuizResponse> createDummyQuiz(
             @Parameter(description = "퀴즈 생성 요청 객체 (주제 및 문제 수 포함)", required = true)
             @RequestBody QuizRequest request) {
-        int questionsToGenerate = (request.numberOfQuestions() != null) ? request.numberOfQuestions() : 10;
+        int requested = (request.numberOfQuestions() != null) ? request.numberOfQuestions() : 10;
+        int questionsToGenerate = Math.max(1, Math.min(20, requested));
         return Mono.just(createDummyQuizResponse(request.topic(), questionsToGenerate));
     }
 

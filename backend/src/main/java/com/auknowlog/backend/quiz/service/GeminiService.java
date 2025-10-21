@@ -40,10 +40,8 @@ public class GeminiService {
     public Mono<QuizResponse> generateQuiz(String topic, int numberOfQuestions) {
         String prompt = createQuizPrompt(topic, numberOfQuestions);
         GeminiRequest request = new GeminiRequest(List.of(new Content(List.of(new Part(prompt)))));
-        System.out.println("DEBUG: Gemini API Key being used: " + apiKey); // TEMPORARY DEBUG LOG
 
         if (apiKey == null || apiKey.isBlank() || "YOUR_API_KEY_HERE".equals(apiKey)) {
-            System.out.println("DEBUG: Gemini API Key being used: " + apiKey); // TEMPORARY DEBUG LOG
             return Mono.error(new IllegalStateException("Gemini API key is not configured"));
         }
 

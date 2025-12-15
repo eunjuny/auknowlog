@@ -1,5 +1,6 @@
 package com.auknowlog.backend.quiz.controller;
 
+import com.auknowlog.backend.question.service.QuestionHistoryService;
 import com.auknowlog.backend.quiz.dto.Question;
 import com.auknowlog.backend.quiz.dto.QuizRequest;
 import com.auknowlog.backend.quiz.dto.QuizResponse;
@@ -10,6 +11,8 @@ import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Mono;
 
@@ -22,10 +25,14 @@ import java.util.Map;
 @RequestMapping("/api/quizzes")
 public class QuizController {
 
-    private final GeminiService geminiService;
+    private static final Logger log = LoggerFactory.getLogger(QuizController.class);
 
-    public QuizController(GeminiService geminiService) {
+    private final GeminiService geminiService;
+    private final QuestionHistoryService questionHistoryService;
+
+    public QuizController(GeminiService geminiService, QuestionHistoryService questionHistoryService) {
         this.geminiService = geminiService;
+        this.questionHistoryService = questionHistoryService;
     }
 
     @Operation(summary = "새로운 퀴즈 생성", description = "주제와 문제 수를 기반으로 Gemini AI를 통해 새로운 객관식 퀴즈를 생성합니다.")
@@ -39,7 +46,15 @@ public class QuizController {
             @RequestBody QuizRequest request) {
         int requested = (request.numberOfQuestions() != null) ? request.numberOfQuestions() : 10;
         int questionsToGenerate = Math.max(1, Math.min(20, requested));
-        return geminiService.generateQuiz(request.topic(), questionsToGenerate);
+        String topic = request.topic();
+
+        return geminiService.generateQuiz(topic, questionsToGenerate)
+                .flatMap(quizResponse -> 
+                    // 생성된 문제들을 DB에 저장 (중복은 자동 스킵)
+                    questionHistoryService.saveQuestions(topic, quizResponse.questions())
+                            .doOnNext(savedCount -> log.info("저장된 문제 수: {}/{}", savedCount, quizResponse.questions().size()))
+                            .thenReturn(quizResponse)
+                );
     }
 
     @Operation(summary = "개발용 더미 퀴즈 생성", description = "실제 AI 호출 없이 더미 데이터로 퀴즈를 생성합니다. 개발 및 테스트용으로 사용됩니다.")

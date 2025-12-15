@@ -10,8 +10,6 @@ import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
@@ -36,7 +34,6 @@ public class QuestionHistoryService {
      * 문제 텍스트를 정규화하고 SHA-256 해시 생성
      */
     public String generateHash(String questionText) {
-        // 정규화: 공백 제거, 소문자화, 특수문자 제거
         String normalized = questionText
                 .toLowerCase()
                 .replaceAll("\\s+", "")
@@ -52,27 +49,59 @@ public class QuestionHistoryService {
     }
 
     /**
-     * 중복 여부 확인 (리액티브)
+     * 중복 여부 확인
      */
-    public Mono<Boolean> isDuplicate(String questionText) {
-        return Mono.fromCallable(() -> {
-            String hash = generateHash(questionText);
-            return repository.existsByQuestionHash(hash);
-        }).subscribeOn(Schedulers.boundedElastic());
+    public boolean isDuplicate(String questionText) {
+        String hash = generateHash(questionText);
+        return repository.existsByQuestionHash(hash);
     }
 
     /**
      * 문제 저장 (중복이면 false 반환)
      */
     @Transactional
-    public Mono<Boolean> saveQuestion(String topic, Question question) {
-        return Mono.fromCallable(() -> {
+    public boolean saveQuestion(String topic, Question question) {
+        String hash = generateHash(question.questionText());
+
+        if (repository.existsByQuestionHash(hash)) {
+            log.info("중복 문제 감지 (저장 스킵): {}", question.questionText().substring(0, Math.min(50, question.questionText().length())));
+            return false;
+        }
+
+        try {
+            String optionsJson = objectMapper.writeValueAsString(question.options());
+            QuestionHistory history = new QuestionHistory(
+                    topic,
+                    question.questionText(),
+                    hash,
+                    optionsJson,
+                    question.correctAnswer(),
+                    question.explanation()
+            );
+            repository.save(history);
+            log.info("문제 저장 완료: {}", question.questionText().substring(0, Math.min(50, question.questionText().length())));
+            return true;
+        } catch (DataIntegrityViolationException e) {
+            log.warn("동시 요청으로 인한 중복 발생: {}", e.getMessage());
+            return false;
+        } catch (JsonProcessingException e) {
+            log.error("옵션 JSON 변환 실패", e);
+            return false;
+        }
+    }
+
+    /**
+     * 여러 문제 저장 (퀴즈 전체)
+     */
+    @Transactional
+    public int saveQuestions(String topic, List<Question> questions) {
+        int savedCount = 0;
+        for (Question question : questions) {
             String hash = generateHash(question.questionText());
 
-            // 이미 존재하면 저장하지 않음
             if (repository.existsByQuestionHash(hash)) {
-                log.info("중복 문제 감지 (저장 스킵): {}", question.questionText().substring(0, Math.min(50, question.questionText().length())));
-                return false;
+                log.debug("중복 문제 스킵: {}", question.questionText().substring(0, Math.min(30, question.questionText().length())));
+                continue;
             }
 
             try {
@@ -86,70 +115,28 @@ public class QuestionHistoryService {
                         question.explanation()
                 );
                 repository.save(history);
-                log.info("문제 저장 완료: {}", question.questionText().substring(0, Math.min(50, question.questionText().length())));
-                return true;
+                savedCount++;
             } catch (DataIntegrityViolationException e) {
-                // 동시 요청으로 인한 중복 (레이스 컨디션 방어)
-                log.warn("동시 요청으로 인한 중복 발생: {}", e.getMessage());
-                return false;
+                log.debug("동시 중복 스킵");
             } catch (JsonProcessingException e) {
                 log.error("옵션 JSON 변환 실패", e);
-                return false;
             }
-        }).subscribeOn(Schedulers.boundedElastic());
-    }
-
-    /**
-     * 여러 문제 저장 (퀴즈 전체)
-     */
-    public Mono<Integer> saveQuestions(String topic, List<Question> questions) {
-        return Mono.fromCallable(() -> {
-            int savedCount = 0;
-            for (Question question : questions) {
-                String hash = generateHash(question.questionText());
-
-                if (repository.existsByQuestionHash(hash)) {
-                    log.debug("중복 문제 스킵: {}", question.questionText().substring(0, Math.min(30, question.questionText().length())));
-                    continue;
-                }
-
-                try {
-                    String optionsJson = objectMapper.writeValueAsString(question.options());
-                    QuestionHistory history = new QuestionHistory(
-                            topic,
-                            question.questionText(),
-                            hash,
-                            optionsJson,
-                            question.correctAnswer(),
-                            question.explanation()
-                    );
-                    repository.save(history);
-                    savedCount++;
-                } catch (DataIntegrityViolationException e) {
-                    log.debug("동시 중복 스킵");
-                } catch (JsonProcessingException e) {
-                    log.error("옵션 JSON 변환 실패", e);
-                }
-            }
-            log.info("퀴즈 저장 완료: 총 {}문제 중 {}문제 저장됨 (중복 제외)", questions.size(), savedCount);
-            return savedCount;
-        }).subscribeOn(Schedulers.boundedElastic());
+        }
+        log.info("퀴즈 저장 완료: 총 {}문제 중 {}문제 저장됨 (중복 제외)", questions.size(), savedCount);
+        return savedCount;
     }
 
     /**
      * 주제별 저장된 문제 수 조회
      */
-    public Mono<Long> countByTopic(String topic) {
-        return Mono.fromCallable(() -> repository.countByTopic(topic))
-                .subscribeOn(Schedulers.boundedElastic());
+    public long countByTopic(String topic) {
+        return repository.countByTopic(topic);
     }
 
     /**
      * 전체 저장된 문제 수 조회
      */
-    public Mono<Long> countAll() {
-        return Mono.fromCallable(repository::count)
-                .subscribeOn(Schedulers.boundedElastic());
+    public long countAll() {
+        return repository.count();
     }
 }
-

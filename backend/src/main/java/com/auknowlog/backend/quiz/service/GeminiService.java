@@ -8,8 +8,8 @@ import com.auknowlog.backend.quiz.dto.QuizResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
-import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
+import org.springframework.web.client.RestClient;
+import org.springframework.http.MediaType;
 
 import java.util.List;
 import java.util.Map;
@@ -19,7 +19,7 @@ import org.slf4j.LoggerFactory;
 @Service
 public class GeminiService {
 
-    private final WebClient webClient;
+    private final RestClient restClient;
     private final ObjectMapper objectMapper;
     private static final Logger log = LoggerFactory.getLogger(GeminiService.class);
 
@@ -32,46 +32,45 @@ public class GeminiService {
     @Value("${auknowlog.gemini.model}")
     private String modelName;
 
-    public GeminiService(WebClient.Builder webClientBuilder, ObjectMapper objectMapper) {
-        this.webClient = webClientBuilder.build();
+    public GeminiService(RestClient.Builder restClientBuilder, ObjectMapper objectMapper) {
+        this.restClient = restClientBuilder.build();
         this.objectMapper = objectMapper;
     }
 
-    public Mono<QuizResponse> generateQuiz(String topic, int numberOfQuestions) {
+    public QuizResponse generateQuiz(String topic, int numberOfQuestions) {
         String prompt = createQuizPrompt(topic, numberOfQuestions);
         GeminiRequest request = new GeminiRequest(List.of(new Content(List.of(new Part(prompt)))));
 
         if (apiKey == null || apiKey.isBlank() || "YOUR_API_KEY_HERE".equals(apiKey)) {
-            return Mono.error(new IllegalStateException("Gemini API key is not configured"));
+            throw new IllegalStateException("Gemini API key is not configured");
         }
 
         String primaryUrl = String.format("%s/%s:generateContent?key=%s", apiUrlBase, modelName, apiKey);
         String fallbackUrl = buildFallbackUrl();
 
-        return callGemini(primaryUrl, request)
-                .onErrorResume(ex -> {
-                    String msg = ex.getMessage() == null ? "" : ex.getMessage();
-                    boolean is404 = msg.contains("404") || msg.contains("NOT_FOUND") || msg.contains("was not found");
-                    if (is404 && fallbackUrl != null && !fallbackUrl.equals(primaryUrl)) {
-                        log.warn("Gemini primary call 404, falling back to {}", fallbackUrl);
-                        return callGemini(fallbackUrl, request);
-                    }
-                    return Mono.error(ex);
-                })
-                .map(response -> parseToQuizResponse(response, numberOfQuestions, topic))
-                .doOnError(ex -> log.error("Gemini call failed", ex));
+        try {
+            GeminiResponse response = callGemini(primaryUrl, request);
+            return parseToQuizResponse(response, numberOfQuestions, topic);
+        } catch (Exception ex) {
+            String msg = ex.getMessage() == null ? "" : ex.getMessage();
+            boolean is404 = msg.contains("404") || msg.contains("NOT_FOUND") || msg.contains("was not found");
+            if (is404 && fallbackUrl != null && !fallbackUrl.equals(primaryUrl)) {
+                log.warn("Gemini primary call 404, falling back to {}", fallbackUrl);
+                GeminiResponse response = callGemini(fallbackUrl, request);
+                return parseToQuizResponse(response, numberOfQuestions, topic);
+            }
+            log.error("Gemini call failed", ex);
+            throw ex;
+        }
     }
 
-    private Mono<GeminiResponse> callGemini(String url, GeminiRequest request) {
-        return webClient.post()
+    private GeminiResponse callGemini(String url, GeminiRequest request) {
+        return restClient.post()
                 .uri(url)
-                .bodyValue(request)
+                .contentType(MediaType.APPLICATION_JSON)
+                .body(request)
                 .retrieve()
-                .onStatus(status -> status.is4xxClientError() || status.is5xxServerError(),
-                        resp -> resp.bodyToMono(String.class)
-                                .defaultIfEmpty("")
-                                .map(body -> new RuntimeException("Gemini API error: " + resp.statusCode() + " body=" + body)))
-                .bodyToMono(GeminiResponse.class);
+                .body(GeminiResponse.class);
     }
 
     private String buildFallbackUrl() {
@@ -85,7 +84,6 @@ public class GeminiService {
                 String baseModel = modelName != null ? modelName.replace("-latest", "") : "gemini-1.5-flash";
                 return String.format("https://generativelanguage.googleapis.com/v1/models/%s:generateContent?key=%s", baseModel, apiKey);
             }
-            // 기본적으로 v1beta latest로 폴백
             String fallbackModel = modelName != null && modelName.endsWith("-latest") ? modelName : (modelName == null ? "gemini-1.5-flash-latest" : modelName + "-latest");
             return String.format("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", fallbackModel, apiKey);
         } catch (Exception e) {
@@ -105,21 +103,16 @@ public class GeminiService {
     }
 
     private QuizResponse parseToQuizResponse(GeminiResponse geminiResponse, int numberOfQuestions, String topic) {
-        // This is a simplified parser. In a real application, you'd use a robust JSON library
-        // to parse the text content from the Gemini response into your QuizResponse DTO.
-        // For now, we assume the response text is a well-formatted JSON string.
         try {
             String jsonResponse = geminiResponse.candidates().get(0).content().parts().get(0).text();
             String sanitized = sanitizeModelJson(jsonResponse);
             String extracted = extractFirstJsonObject(sanitized);
             return objectMapper.readValue(extracted, QuizResponse.class);
-
         } catch (Exception e) {
             throw new IllegalStateException("Failed to parse Gemini JSON response", e);
         }
     }
 
-    // Attempts to extract the first top-level JSON object from a text blob.
     private String extractFirstJsonObject(String text) {
         int start = -1;
         int depth = 0;
@@ -135,13 +128,12 @@ public class GeminiService {
                 }
             }
         }
-        return text; // fallback to original
+        return text;
     }
 
     private String sanitizeModelJson(String text) {
         if (text == null) return "{}";
         String trimmed = text.trim();
-        // Remove Markdown fences
         if (trimmed.startsWith("```") && trimmed.endsWith("```")) {
             trimmed = trimmed.substring(3, trimmed.length() - 3).trim();
         }
@@ -151,10 +143,7 @@ public class GeminiService {
         return trimmed;
     }
 
-    // LLM 호출 없이 로컬 렌더링만 사용합니다. (renderQuizMarkdownLocally 참고)
-
-
-    public Mono<String> renderQuizMarkdownLocally(Map<String, Object> payload) {
+    public String renderQuizMarkdownLocally(Map<String, Object> payload) {
         String title = asString(payload.get("quizTitle"));
         if (title == null || title.isBlank()) {
             title = "퀴즈 결과";
@@ -207,12 +196,7 @@ public class GeminiService {
         StringBuilder sb = new StringBuilder();
         sb.append("# ").append(title).append('\n');
         sb.append("총 ").append(headerTotal).append("문항 · 정답 ").append(headerCorrect).append(" · 오답 ").append(headerWrong);
-        int unansweredToShow;
-        if (statsMap == null) {
-            unansweredToShow = computedUnanswered;
-        } else {
-            unansweredToShow = 0; // stats가 있으면 별도 표기 지침이 없으므로 생략
-        }
+        int unansweredToShow = statsMap == null ? computedUnanswered : 0;
         if (unansweredToShow > 0) {
             sb.append(" · 미응답 ").append(unansweredToShow);
         }
@@ -246,7 +230,6 @@ public class GeminiService {
                     }
                 }
 
-                // 선택/정오 표시 한 줄
                 if (userIndex == null) {
                     sb.append("❗ 미응답");
                     if (correctAnswer != null && !correctAnswer.isBlank()) {
@@ -267,14 +250,13 @@ public class GeminiService {
             }
         }
 
-        return Mono.just(sb.toString());
+        return sb.toString();
     }
 
     private String deriveUserSelectedAnswer(Map<String, Object> q, List<String> options, Integer userIndex) {
         if (userIndex == null || options == null) return null;
         if (userIndex < 0 || userIndex >= options.size()) return null;
-        String candidate = options.get(userIndex);
-        return candidate;
+        return options.get(userIndex);
     }
 
     @SuppressWarnings("unchecked")

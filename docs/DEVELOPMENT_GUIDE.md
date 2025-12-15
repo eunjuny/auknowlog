@@ -24,9 +24,9 @@ AI 기반 퀴즈 자동 생성 및 학습 기록 관리 애플리케이션입니
 ### Backend
 | 기술 | 버전 | 용도 |
 |------|------|------|
-| Java | 17 | 언어 |
+| Java | 21 | 언어 (Virtual Threads) |
 | Spring Boot | 3.5.5 | 웹 프레임워크 |
-| Spring WebFlux | - | 비동기/논블로킹 처리 |
+| Spring MVC | - | 동기 처리 + Virtual Threads |
 | Spring Data JPA | - | PostgreSQL ORM |
 | Spring Data Elasticsearch | - | ES 연동 |
 | Gradle | 8.x | 빌드 도구 |

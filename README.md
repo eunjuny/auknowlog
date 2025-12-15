@@ -12,7 +12,7 @@ AI를 활용하여 원하는 주제에 대한 객관식 문제를 자동으로 �
 
 | 구분 | 기술 |
 |------|------|
-| **Backend** | Java 17, Spring Boot 3.5, Spring WebFlux |
+| **Backend** | Java 21, Spring Boot 3.5, Virtual Threads |
 | **Frontend** | Vue.js 3, Vite |
 | **AI** | Google Gemini 1.5 Flash |
 | **Database** | PostgreSQL 16 (이력 저장) |

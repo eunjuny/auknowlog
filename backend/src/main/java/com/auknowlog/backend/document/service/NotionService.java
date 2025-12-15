@@ -6,8 +6,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
-import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
+import org.springframework.web.client.RestClient;
 
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -17,13 +16,12 @@ import java.util.Map;
 @Service
 public class NotionService {
 
-    private final WebClient notionClient;
+    private final RestClient notionClient;
     private final ObjectMapper objectMapper;
-
     private final String defaultParentPageId;
 
     public NotionService(
-            WebClient.Builder builder,
+            RestClient.Builder builder,
             ObjectMapper objectMapper,
             @Value("${auknowlog.notion.api.key}") String notionApiKey,
             @Value("${auknowlog.notion.version:2022-06-28}") String notionVersion,
@@ -39,13 +37,8 @@ public class NotionService {
                 .build();
     }
 
-    public Mono<String> createPageWithMarkdown(
-            String title,
-            String markdown,
-            String parentPageId,
-            String databaseId,
-            String databaseTitleProperty
-    ) {
+    public String createPageWithMarkdown(String title, String markdown, String parentPageId,
+                                         String databaseId, String databaseTitleProperty) {
         String effectiveTitle = (title == null || title.isBlank()) ? "퀴즈 결과" : title.trim();
         String effectiveDbTitleProp = (databaseTitleProperty == null || databaseTitleProperty.isBlank()) ? "Name" : databaseTitleProperty.trim();
 
@@ -59,7 +52,7 @@ public class NotionService {
         } else {
             String effectiveParent = StringUtils.hasText(parentPageId) ? parentPageId : this.defaultParentPageId;
             if (!StringUtils.hasText(effectiveParent)) {
-                return Mono.error(new IllegalStateException("Notion parentPageId가 설정되어 있지 않습니다. 요청 또는 설정으로 제공해주세요."));
+                throw new IllegalStateException("Notion parentPageId가 설정되어 있지 않습니다.");
             }
             parent.put("type", "page_id");
             parent.put("page_id", effectiveParent);
@@ -79,35 +72,32 @@ public class NotionService {
             body.put("children", children);
         }
 
-        return notionClient.post()
+        String json = notionClient.post()
                 .uri("/pages")
                 .contentType(MediaType.APPLICATION_JSON)
-                .bodyValue(body)
+                .body(body)
                 .retrieve()
-                .bodyToMono(String.class)
-                .flatMap(json -> {
-                    try {
-                        JsonNode root = objectMapper.readTree(json);
-                        JsonNode urlNode = root.get("url");
-                        if (urlNode != null && urlNode.isTextual()) {
-                            return Mono.just(urlNode.asText());
-                        }
-                        JsonNode idNode = root.get("id");
-                        if (idNode != null && idNode.isTextual()) {
-                            return Mono.just(idNode.asText());
-                        }
-                        return Mono.just("(created, but no url in response)");
-                    } catch (Exception e) {
-                        return Mono.error(e);
-                    }
-                });
+                .body(String.class);
+
+        try {
+            JsonNode root = objectMapper.readTree(json);
+            JsonNode urlNode = root.get("url");
+            if (urlNode != null && urlNode.isTextual()) {
+                return urlNode.asText();
+            }
+            JsonNode idNode = root.get("id");
+            if (idNode != null && idNode.isTextual()) {
+                return idNode.asText();
+            }
+            return "(created, but no url in response)";
+        } catch (Exception e) {
+            throw new RuntimeException("Notion 응답 파싱 실패", e);
+        }
     }
 
     private Map<String, Object> titleProperty(String title) {
-        Map<String, Object> text = new HashMap<>();
         Map<String, Object> textObj = new HashMap<>();
         textObj.put("content", title);
-        text.put("text", textObj);
 
         Map<String, Object> titleContent = new HashMap<>();
         titleContent.put("type", "text");
@@ -183,8 +173,7 @@ public class NotionService {
     private List<Map<String, Object>> richTextArray(String text) {
         List<Map<String, Object>> arr = new ArrayList<>();
         if (text == null) text = "";
-        // Notion single text content is limited (approx 2000 chars). Chunk defensively.
-        final int limit = 1800; // use safe margin
+        final int limit = 1800;
         List<String> chunks = chunkText(text, limit);
         for (String chunk : chunks) {
             Map<String, Object> t = new HashMap<>();
@@ -212,7 +201,6 @@ public class NotionService {
             list.add(text);
             return list;
         }
-        // Split on UTF-8 byte-safe boundaries by chars (simple, safe for BMP).
         int start = 0;
         while (start < text.length()) {
             int end = Math.min(text.length(), start + maxChars);
@@ -222,5 +210,3 @@ public class NotionService {
         return list;
     }
 }
-
-

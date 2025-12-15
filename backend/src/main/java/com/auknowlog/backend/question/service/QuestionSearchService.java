@@ -11,14 +11,10 @@ import org.springframework.data.elasticsearch.core.query.Criteria;
 import org.springframework.data.elasticsearch.core.query.CriteriaQuery;
 import org.springframework.data.elasticsearch.core.query.Query;
 import org.springframework.stereotype.Service;
-import reactor.core.publisher.Flux;
-import reactor.core.publisher.Mono;
-import reactor.core.scheduler.Schedulers;
 
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
@@ -38,49 +34,43 @@ public class QuestionSearchService {
         this.mapper = mapper;
     }
 
-    public Mono<List<SimilarQuestion>> findSimilar(String questionText, double threshold) {
-        return Mono.fromCallable(() -> {
-            Query query = new CriteriaQuery(Criteria.where("questionText").matches(questionText));
-            SearchHits<QuestionDocument> hits = esOps.search(query, QuestionDocument.class);
-            return hits.getSearchHits().stream()
-                    .filter(h -> normalize(h.getScore()) >= threshold)
-                    .map(h -> new SimilarQuestion(h.getContent(), normalize(h.getScore())))
-                    .collect(Collectors.toList());
-        }).subscribeOn(Schedulers.boundedElastic());
+    public List<SimilarQuestion> findSimilar(String questionText, double threshold) {
+        Query query = new CriteriaQuery(Criteria.where("questionText").matches(questionText));
+        SearchHits<QuestionDocument> hits = esOps.search(query, QuestionDocument.class);
+        return hits.getSearchHits().stream()
+                .filter(h -> normalize(h.getScore()) >= threshold)
+                .map(h -> new SimilarQuestion(h.getContent(), normalize(h.getScore())))
+                .collect(Collectors.toList());
     }
 
-    public Mono<DuplicateCheckResult> checkDuplicate(String questionText) {
+    public DuplicateCheckResult checkDuplicate(String questionText) {
         String hash = hash(questionText);
-        return Mono.fromCallable(() -> repository.existsByQuestionHash(hash))
-                .subscribeOn(Schedulers.boundedElastic())
-                .flatMap(exact -> {
-                    if (exact) return Mono.just(new DuplicateCheckResult(true, 1.0, "동일 질문 존재", null));
-                    return findSimilar(questionText, DEFAULT_THRESHOLD).map(list -> {
-                        if (list.isEmpty()) return new DuplicateCheckResult(false, 0, null, null);
-                        SimilarQuestion top = list.get(0);
-                        return top.score >= DEFAULT_THRESHOLD
-                                ? new DuplicateCheckResult(true, top.score, "유사 질문 발견", top.doc)
-                                : new DuplicateCheckResult(false, top.score, null, null);
-                    });
-                });
+        
+        // 정확히 동일한 질문 체크
+        if (repository.existsByQuestionHash(hash)) {
+            return new DuplicateCheckResult(true, 1.0, "동일 질문 존재", null);
+        }
+        
+        // 유사도 검색
+        List<SimilarQuestion> list = findSimilar(questionText, DEFAULT_THRESHOLD);
+        if (list.isEmpty()) {
+            return new DuplicateCheckResult(false, 0, null, null);
+        }
+        
+        SimilarQuestion top = list.get(0);
+        return top.score >= DEFAULT_THRESHOLD
+                ? new DuplicateCheckResult(true, top.score, "유사 질문 발견", top.doc)
+                : new DuplicateCheckResult(false, top.score, null, null);
     }
 
-    public Mono<QuestionDocument> index(String topic, String qText, List<String> opts, String ans, String expl) {
-        return Mono.fromCallable(() -> {
+    public QuestionDocument index(String topic, String qText, List<String> opts, String ans, String expl) {
+        try {
             QuestionDocument doc = new QuestionDocument(UUID.randomUUID().toString(), topic, qText,
                     hash(qText), mapper.writeValueAsString(opts), ans, expl);
             return repository.save(doc);
-        }).subscribeOn(Schedulers.boundedElastic());
-    }
-
-    @SuppressWarnings("unchecked")
-    public Mono<List<QuestionDocument>> indexQuestions(String topic, List<Map<String, Object>> questions) {
-        return Flux.fromIterable(questions)
-                .flatMap(q -> checkDuplicate((String) q.get("questionText"))
-                        .flatMap(r -> r.dup ? Mono.empty()
-                                : index(topic, (String) q.get("questionText"), (List<String>) q.get("options"),
-                                        (String) q.get("correctAnswer"), (String) q.getOrDefault("explanation", ""))))
-                .collectList();
+        } catch (Exception e) {
+            throw new RuntimeException("ES 인덱싱 실패", e);
+        }
     }
 
     private String hash(String text) {
@@ -89,12 +79,15 @@ public class QuestionSearchService {
             StringBuilder sb = new StringBuilder();
             for (byte b : h) sb.append(String.format("%02x", b));
             return sb.toString();
-        } catch (Exception e) { throw new RuntimeException(e); }
+        } catch (Exception e) { 
+            throw new RuntimeException(e); 
+        }
     }
 
-    private double normalize(float score) { return 1.0 / (1.0 + Math.exp(-score + 5)); }
+    private double normalize(float score) { 
+        return 1.0 / (1.0 + Math.exp(-score + 5)); 
+    }
 
     public record SimilarQuestion(QuestionDocument doc, double score) {}
     public record DuplicateCheckResult(boolean dup, double score, String msg, QuestionDocument similar) {}
 }
-

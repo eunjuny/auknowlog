@@ -38,6 +38,18 @@ services:
       timeout: 10s
       retries: 5
 
+  # Kibana (Elasticsearch 시각화)
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.11.0
+    container_name: auknowlog-kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+
 volumes:
   postgres_data:
   elasticsearch_data:

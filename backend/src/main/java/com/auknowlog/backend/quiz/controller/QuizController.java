@@ -1,6 +1,7 @@
 package com.auknowlog.backend.quiz.controller;
 
 import com.auknowlog.backend.question.service.QuestionHistoryService;
+import com.auknowlog.backend.question.service.QuestionSearchService;
 import com.auknowlog.backend.quiz.dto.Question;
 import com.auknowlog.backend.quiz.dto.QuizRequest;
 import com.auknowlog.backend.quiz.dto.QuizResponse;
@@ -29,10 +30,14 @@ public class QuizController {
 
     private final GeminiService geminiService;
     private final QuestionHistoryService questionHistoryService;
+    private final QuestionSearchService questionSearchService;
 
-    public QuizController(GeminiService geminiService, QuestionHistoryService questionHistoryService) {
+    public QuizController(GeminiService geminiService, 
+                         QuestionHistoryService questionHistoryService,
+                         QuestionSearchService questionSearchService) {
         this.geminiService = geminiService;
         this.questionHistoryService = questionHistoryService;
+        this.questionSearchService = questionSearchService;
     }
 
     @Operation(summary = "새로운 퀴즈 생성", description = "주제와 문제 수를 기반으로 Gemini AI를 통해 새로운 객관식 퀴즈를 생성합니다.")
@@ -50,11 +55,44 @@ public class QuizController {
 
         return geminiService.generateQuiz(topic, questionsToGenerate)
                 .flatMap(quizResponse -> 
-                    // 생성된 문제들을 DB에 저장 (중복은 자동 스킵)
-                    questionHistoryService.saveQuestions(topic, quizResponse.questions())
-                            .doOnNext(savedCount -> log.info("저장된 문제 수: {}/{}", savedCount, quizResponse.questions().size()))
-                            .thenReturn(quizResponse)
+                    // 1. ES 유사도 기반 중복 체크 후 필터링
+                    filterDuplicateQuestions(quizResponse.questions())
+                        .flatMap(filteredQuestions -> {
+                            log.info("유사도 필터링 후 문제 수: {}/{}", filteredQuestions.size(), quizResponse.questions().size());
+                            
+                            // 2. 필터링된 문제만 PostgreSQL에 저장
+                            return questionHistoryService.saveQuestions(topic, filteredQuestions)
+                                    .doOnNext(savedCount -> log.info("PostgreSQL 저장 문제 수: {}", savedCount))
+                                    // 3. Elasticsearch에도 인덱싱
+                                    .then(indexQuestionsToES(topic, filteredQuestions))
+                                    .thenReturn(new QuizResponse(quizResponse.quizTitle(), filteredQuestions));
+                        })
                 );
+    }
+
+    /**
+     * ES 유사도 기반으로 중복 질문 필터링
+     */
+    private Mono<List<Question>> filterDuplicateQuestions(List<Question> questions) {
+        return reactor.core.publisher.Flux.fromIterable(questions)
+                .filterWhen(q -> questionSearchService.checkDuplicate(q.questionText())
+                        .map(result -> !result.dup())
+                        .onErrorReturn(true)) // ES 연결 실패시 통과
+                .collectList();
+    }
+
+    /**
+     * Elasticsearch에 질문 인덱싱
+     */
+    private Mono<Void> indexQuestionsToES(String topic, List<Question> questions) {
+        return reactor.core.publisher.Flux.fromIterable(questions)
+                .flatMap(q -> questionSearchService.index(topic, q.questionText(), 
+                        q.options(), q.correctAnswer(), q.explanation())
+                        .onErrorResume(e -> {
+                            log.warn("ES 인덱싱 실패: {}", e.getMessage());
+                            return Mono.empty();
+                        }))
+                .then();
     }
 
     @Operation(summary = "개발용 더미 퀴즈 생성", description = "실제 AI 호출 없이 더미 데이터로 퀴즈를 생성합니다. 개발 및 테스트용으로 사용됩니다.")

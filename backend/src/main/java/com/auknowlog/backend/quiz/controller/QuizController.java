@@ -26,6 +26,7 @@ import java.util.Map;
 public class QuizController {
 
     private static final Logger log = LoggerFactory.getLogger(QuizController.class);
+    private static final int MAX_RETRY_ATTEMPTS = 3;  // 최대 재시도 횟수
 
     private final GeminiService geminiService;
     private final QuestionHistoryService questionHistoryService;
@@ -48,25 +49,72 @@ public class QuizController {
     public QuizResponse createQuiz(
             @Parameter(description = "퀴즈 생성 요청 객체 (주제 및 문제 수 포함)", required = true)
             @RequestBody QuizRequest request) {
-        int requested = (request.numberOfQuestions() != null) ? request.numberOfQuestions() : 10;
-        int questionsToGenerate = Math.max(1, Math.min(20, requested));
+        int targetCount = (request.numberOfQuestions() != null) ? request.numberOfQuestions() : 10;
+        targetCount = Math.max(1, Math.min(20, targetCount));
         String topic = request.topic();
 
-        // 1. AI로 퀴즈 생성
-        QuizResponse quizResponse = geminiService.generateQuiz(topic, questionsToGenerate);
+        List<Question> collectedQuestions = new ArrayList<>();
+        String quizTitle = topic + " 퀴즈";
+        int attempts = 0;
 
-        // 2. ES 유사도 기반 중복 체크 후 필터링
-        List<Question> filteredQuestions = filterDuplicateQuestions(quizResponse.questions());
-        log.info("유사도 필터링 후 문제 수: {}/{}", filteredQuestions.size(), quizResponse.questions().size());
+        // 원하는 개수가 될 때까지 반복 생성 (최대 MAX_RETRY_ATTEMPTS번)
+        while (collectedQuestions.size() < targetCount && attempts < MAX_RETRY_ATTEMPTS) {
+            int remaining = targetCount - collectedQuestions.size();
+            // 중복 필터링을 고려해서 여유있게 요청 (첫 시도는 그대로, 재시도는 2배)
+            int toGenerate = (attempts == 0) ? remaining : Math.min(remaining * 2, 20);
+            
+            log.info("🔄 퀴즈 생성 시도 {}/{}: 필요 {}개, 요청 {}개", 
+                    attempts + 1, MAX_RETRY_ATTEMPTS, remaining, toGenerate);
 
-        // 3. 필터링된 문제만 PostgreSQL에 저장
-        int savedCount = questionHistoryService.saveQuestions(topic, filteredQuestions);
-        log.info("PostgreSQL 저장 문제 수: {}", savedCount);
+            try {
+                // 첫 시도에만 기존 문제 목록 조회 (토큰 절약)
+                List<String> existingQuestions = (attempts == 0) 
+                        ? questionHistoryService.getRecentQuestionPreviews(topic, 30)
+                        : List.of();
+                
+                QuizResponse response = geminiService.generateQuiz(topic, toGenerate, existingQuestions);
+                if (attempts == 0) {
+                    quizTitle = response.quizTitle();
+                }
 
-        // 4. Elasticsearch에도 인덱싱
-        indexQuestionsToES(topic, filteredQuestions);
+                // 중복 체크 후 필터링
+                List<Question> filtered = filterDuplicateQuestions(response.questions());
+                log.info("📊 생성 {}개 → 필터링 후 {}개", response.questions().size(), filtered.size());
 
-        return new QuizResponse(quizResponse.quizTitle(), filteredQuestions);
+                // 새 문제들을 즉시 저장 (다음 루프에서 중복 체크에 반영되도록)
+                for (Question q : filtered) {
+                    if (collectedQuestions.size() >= targetCount) break;
+                    
+                    // PostgreSQL 저장
+                    questionHistoryService.saveQuestion(topic, q);
+                    // ES 인덱싱
+                    indexQuestionToES(topic, q);
+                    
+                    collectedQuestions.add(q);
+                }
+            } catch (Exception e) {
+                log.warn("⚠️ 퀴즈 생성 실패 (시도 {}): {}", attempts + 1, e.getMessage());
+            }
+
+            attempts++;
+        }
+
+        log.info("✅ 최종 퀴즈: 요청 {}개 → 생성 {}개 (시도 {}회)", 
+                targetCount, collectedQuestions.size(), attempts);
+
+        return new QuizResponse(quizTitle, collectedQuestions);
+    }
+
+    /**
+     * 단일 문제 ES 인덱싱
+     */
+    private void indexQuestionToES(String topic, Question q) {
+        try {
+            questionSearchService.index(topic, q.questionText(), 
+                    q.options(), q.correctAnswer(), q.explanation());
+        } catch (Exception e) {
+            log.warn("ES 인덱싱 실패: {}", e.getMessage());
+        }
     }
 
     /**
@@ -77,11 +125,16 @@ public class QuizController {
         for (Question q : questions) {
             try {
                 var checkResult = questionSearchService.checkDuplicate(q.questionText());
-                if (!checkResult.dup()) {
+                if (checkResult.dup()) {
+                    log.info("🚫 중복 문제 필터링: score={}, msg={}, question={}", 
+                            checkResult.score(), checkResult.msg(), 
+                            q.questionText().substring(0, Math.min(50, q.questionText().length())));
+                } else {
+                    log.debug("✅ 새 문제: {}", q.questionText().substring(0, Math.min(50, q.questionText().length())));
                     result.add(q);
                 }
             } catch (Exception e) {
-                // ES 연결 실패시 통과
+                log.warn("⚠️ ES 체크 실패, 문제 통과: {} - {}", e.getClass().getSimpleName(), e.getMessage());
                 result.add(q);
             }
         }

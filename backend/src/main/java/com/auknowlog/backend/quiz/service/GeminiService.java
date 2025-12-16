@@ -43,7 +43,11 @@ public class GeminiService {
     }
 
     public QuizResponse generateQuiz(String topic, int numberOfQuestions) {
-        String prompt = createQuizPrompt(topic, numberOfQuestions);
+        return generateQuiz(topic, numberOfQuestions, List.of());
+    }
+
+    public QuizResponse generateQuiz(String topic, int numberOfQuestions, List<String> existingQuestions) {
+        String prompt = createQuizPrompt(topic, numberOfQuestions, existingQuestions);
         GeminiRequest request = new GeminiRequest(List.of(new Content(List.of(new Part(prompt)))));
 
         if (apiKey == null || apiKey.isBlank() || "YOUR_API_KEY_HERE".equals(apiKey)) {
@@ -164,14 +168,28 @@ public class GeminiService {
     }
 
     private String createQuizPrompt(String topic, int numberOfQuestions) {
-        String template = """
-            You are a JSON API. Respond with ONLY JSON with no markdown or comments.
-            Create a multiple-choice quiz about '%s'.
-            The quiz must have a title and exactly %d questions.
-            Each question must have exactly 4 options, one correctAnswer (must be one of the options), and a brief explanation.
-            Respond strictly in this JSON schema: {"quizTitle":"...","questions":[{"questionText":"...","options":["...","...","...","..."],"correctAnswer":"...","explanation":"..."}]}
-            """;
-        return template.formatted(topic, numberOfQuestions);
+        return createQuizPrompt(topic, numberOfQuestions, List.of());
+    }
+
+    private String createQuizPrompt(String topic, int numberOfQuestions, List<String> existingQuestions) {
+        StringBuilder prompt = new StringBuilder();
+        prompt.append("You are a JSON API. Respond with ONLY JSON with no markdown or comments.\n");
+        prompt.append("Create a multiple-choice quiz about '").append(topic).append("'.\n");
+        prompt.append("The quiz must have a title and exactly ").append(numberOfQuestions).append(" questions.\n");
+        prompt.append("Each question must have exactly 4 options, one correctAnswer (must be one of the options), and a brief explanation.\n");
+        
+        // 기존 문제 목록이 있으면 포함 (토큰 최소화)
+        if (!existingQuestions.isEmpty()) {
+            prompt.append("\nIMPORTANT: Do NOT create questions similar to these existing ones:\n");
+            for (int i = 0; i < existingQuestions.size(); i++) {
+                prompt.append("- ").append(existingQuestions.get(i)).append("\n");
+            }
+            prompt.append("Create completely different and new questions.\n");
+        }
+        
+        prompt.append("Respond strictly in this JSON schema: {\"quizTitle\":\"...\",\"questions\":[{\"questionText\":\"...\",\"options\":[\"...\",\"...\",\"...\",\"...\"],\"correctAnswer\":\"...\",\"explanation\":\"...\"}]}");
+        
+        return prompt.toString();
     }
 
     private QuizResponse parseToQuizResponse(GeminiResponse geminiResponse, int numberOfQuestions, String topic) {

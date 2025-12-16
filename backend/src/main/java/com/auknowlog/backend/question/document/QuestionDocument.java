@@ -1,12 +1,13 @@
 package com.auknowlog.backend.question.document;
 
 import org.springframework.data.annotation.Id;
+import org.springframework.data.elasticsearch.annotations.DateFormat;
 import org.springframework.data.elasticsearch.annotations.Document;
 import org.springframework.data.elasticsearch.annotations.Field;
 import org.springframework.data.elasticsearch.annotations.FieldType;
 import org.springframework.data.elasticsearch.annotations.Setting;
 
-import java.time.LocalDateTime;
+import java.time.LocalDate;
 
 @Document(indexName = "questions")
 @Setting(settingPath = "/elasticsearch/settings.json")
@@ -33,8 +34,8 @@ public class QuestionDocument {
     @Field(type = FieldType.Text, analyzer = "korean")
     private String explanation;
 
-    @Field(type = FieldType.Date)
-    private LocalDateTime createdAt;
+    @Field(type = FieldType.Date, format = DateFormat.date)
+    private LocalDate createdAt;
 
     // 기본 생성자
     public QuestionDocument() {}
@@ -49,7 +50,7 @@ public class QuestionDocument {
         this.options = options;
         this.correctAnswer = correctAnswer;
         this.explanation = explanation;
-        this.createdAt = LocalDateTime.now();
+        this.createdAt = LocalDate.now();
     }
 
     // Getters and Setters
@@ -74,7 +75,7 @@ public class QuestionDocument {
     public String getExplanation() { return explanation; }
     public void setExplanation(String explanation) { this.explanation = explanation; }
 
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    public LocalDate getCreatedAt() { return createdAt; }
+    public void setCreatedAt(LocalDate createdAt) { this.createdAt = createdAt; }
 }
 

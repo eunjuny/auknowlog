@@ -139,4 +139,21 @@ public class QuestionHistoryService {
     public long countAll() {
         return repository.count();
     }
+
+    /**
+     * 주제별 최근 문제 목록 조회 (토큰 최소화: 앞 50자만, 최대 30개)
+     * 프롬프트에 포함하여 중복 방지용
+     */
+    public List<String> getRecentQuestionPreviews(String topic, int limit) {
+        List<QuestionHistory> recent = repository.findByTopic(topic);
+        return recent.stream()
+                .sorted((a, b) -> b.getCreatedAt().compareTo(a.getCreatedAt())) // 최신순
+                .limit(limit)
+                .map(q -> {
+                    String text = q.getQuestionText();
+                    // 토큰 최소화: 앞 50자만 추출
+                    return text.length() > 50 ? text.substring(0, 50) + "..." : text;
+                })
+                .toList();
+    }
 }

@@ -7,12 +7,17 @@ import com.auknowlog.backend.quiz.dto.Part;
 import com.auknowlog.backend.quiz.dto.QuizResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.http.MediaType;
+import org.springframework.web.client.HttpStatusCodeException;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ThreadLocalRandom;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -49,14 +54,14 @@ public class GeminiService {
         String fallbackUrl = buildFallbackUrl();
 
         try {
-            GeminiResponse response = callGemini(primaryUrl, request);
+            GeminiResponse response = callGeminiWithRetry(primaryUrl, request);
             return parseToQuizResponse(response, numberOfQuestions, topic);
         } catch (Exception ex) {
             String msg = ex.getMessage() == null ? "" : ex.getMessage();
             boolean is404 = msg.contains("404") || msg.contains("NOT_FOUND") || msg.contains("was not found");
             if (is404 && fallbackUrl != null && !fallbackUrl.equals(primaryUrl)) {
                 log.warn("Gemini primary call 404, falling back to {}", fallbackUrl);
-                GeminiResponse response = callGemini(fallbackUrl, request);
+                GeminiResponse response = callGeminiWithRetry(fallbackUrl, request);
                 return parseToQuizResponse(response, numberOfQuestions, topic);
             }
             log.error("Gemini call failed", ex);
@@ -71,6 +76,73 @@ public class GeminiService {
                 .body(request)
                 .retrieve()
                 .body(GeminiResponse.class);
+    }
+
+    /**
+     * Gemini API가 503(과부하), 429(레이트리밋) 등 일시 장애를 반환할 수 있어
+     * 지수 백오프 + Retry-After 헤더를 존중하여 재시도합니다.
+     * (Virtual Threads 환경이므로 Thread.sleep이 부담이 적습니다.)
+     */
+    private GeminiResponse callGeminiWithRetry(String url, GeminiRequest request) {
+        final int maxAttempts = 5;
+        final long baseDelayMs = 500;
+        final long maxDelayMs = 10_000;
+
+        for (int attempt = 1; attempt <= maxAttempts; attempt++) {
+            try {
+                return callGemini(url, request);
+            } catch (HttpStatusCodeException e) {
+                HttpStatus status = HttpStatus.resolve(e.getStatusCode().value());
+                boolean retryable = status == HttpStatus.SERVICE_UNAVAILABLE
+                        || status == HttpStatus.TOO_MANY_REQUESTS
+                        || status == HttpStatus.BAD_GATEWAY
+                        || status == HttpStatus.GATEWAY_TIMEOUT;
+
+                if (retryable && attempt < maxAttempts) {
+                    long delay = computeRetryDelayMs(e.getResponseHeaders(), attempt, baseDelayMs, maxDelayMs);
+                    log.warn("Gemini 일시 오류({})로 재시도합니다. attempt {}/{} (sleep {}ms)",
+                            e.getStatusCode(), attempt, maxAttempts, delay);
+                    sleepQuietly(delay);
+                    continue;
+                }
+
+                // 마지막 시도에서도 503이면, 사용자에게 명확히 보이도록 별도 예외로 변환
+                if (status == HttpStatus.SERVICE_UNAVAILABLE) {
+                    throw new com.auknowlog.backend.common.exception.GeminiOverloadedException(
+                            "Gemini 모델이 혼잡합니다. 잠시 후 다시 시도해주세요.", e);
+                }
+                throw e;
+            }
+        }
+
+        throw new com.auknowlog.backend.common.exception.GeminiOverloadedException(
+                "Gemini 모델이 혼잡합니다. 잠시 후 다시 시도해주세요.");
+    }
+
+    private long computeRetryDelayMs(HttpHeaders headers, int attempt, long baseDelayMs, long maxDelayMs) {
+        // Retry-After: seconds (간단 케이스만 처리)
+        if (headers != null) {
+            String retryAfter = headers.getFirst(HttpHeaders.RETRY_AFTER);
+            if (retryAfter != null) {
+                try {
+                    long sec = Long.parseLong(retryAfter.trim());
+                    return Math.min(maxDelayMs, Math.max(0, Duration.ofSeconds(sec).toMillis()));
+                } catch (Exception ignored) { }
+            }
+        }
+
+        // 지수 백오프 + 지터
+        long exp = baseDelayMs * (1L << Math.max(0, attempt - 1));
+        long jitter = ThreadLocalRandom.current().nextLong(0, 250);
+        return Math.min(maxDelayMs, exp + jitter);
+    }
+
+    private void sleepQuietly(long ms) {
+        try {
+            Thread.sleep(ms);
+        } catch (InterruptedException ie) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private String buildFallbackUrl() {

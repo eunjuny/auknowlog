@@ -44,7 +44,7 @@ AI 기반 퀴즈 자동 생성 및 학습 기록 관리 애플리케이션입니
 | **PostgreSQL** | 16 | 퀴즈 이력 저장 (정확한 중복 체크) |
 | **Elasticsearch** | 8.11.0 | 유사도 기반 중복 검색 |
 | **Kibana** | 8.11.0 | ES 데이터 시각화/관리 |
-| **Google Gemini** | 1.5-flash | AI 퀴즈 생성 |
+| **OpenAI Responses API** | GPT-5.6 | 구조화된 AI 퀴즈 생성 |
 | **Notion API** | - | 퀴즈 결과 노션 저장 |
 | **Docker Compose** | - | 컨테이너 오케스트레이션 |
 
@@ -55,14 +55,14 @@ AI 기반 퀴즈 자동 생성 및 학습 기록 관리 애플리케이션입니
 ```
 ┌─────────────┐     ┌──────────────────────────────────────┐
 │   Frontend  │────▶│              Backend                 │
-│   (Vue.js)  │◀────│         (Spring WebFlux)             │
+│   (Vue.js)  │◀────│       (Spring MVC + Virtual Threads) │
 └─────────────┘     └──────────────────────────────────────┘
                               │         │         │
                     ┌─────────┴─────────┴─────────┴─────────┐
                     ▼                   ▼                   ▼
              ┌──────────┐        ┌──────────┐        ┌──────────┐
-             │PostgreSQL│        │Elastics- │        │ Gemini   │
-             │ (중복체크)│        │  earch   │        │   API    │
+             │PostgreSQL│        │Elastics- │        │ OpenAI   │
+             │ (중복체크)│        │  earch   │        │ Responses│
              └──────────┘        │(유사도)  │        └──────────┘
                                  └──────────┘
                                       │
@@ -73,7 +73,7 @@ AI 기반 퀴즈 자동 생성 및 학습 기록 관리 애플리케이션입니
 ```
 
 ### 중복 체크 흐름
-1. **Gemini AI**가 퀴즈 생성
+1. **OpenAI**가 구조화된 퀴즈 생성
 2. **Elasticsearch**에서 유사도 검색 (70% 이상이면 중복)
 3. 중복 질문 필터링
 4. 새 질문을 **PostgreSQL**에 해시 기반 저장
@@ -84,7 +84,7 @@ AI 기반 퀴즈 자동 생성 및 학습 기록 관리 애플리케이션입니
 ## 주요 기능
 
 ### 1. AI 퀴즈 생성
-- 주제 입력 → Gemini API가 객관식 퀴즈 생성
+- 주제 입력 → OpenAI Responses API가 객관식 퀴즈 생성
 - 문제당 4개 선택지 + 정답 + 해설 제공
 - 최대 20문제까지 생성 가능
 
@@ -109,8 +109,8 @@ AI 기반 퀴즈 자동 생성 및 학습 기록 관리 애플리케이션입니
 ## 설치 및 실행
 
 ### 사전 요구사항
-- Java 17+
-- Node.js 18+
+- Java 21+
+- Node.js 20.19+ 또는 22.12+
 - Docker & Docker Compose
 
 ### 1. 인프라 실행 (PostgreSQL + Elasticsearch + Kibana)
@@ -128,8 +128,8 @@ docker-compose ps
 ```bash
 cd backend
 
-# API 키 설정 (application-api.properties)
-# auknowlog.gemini.api.key=YOUR_GEMINI_API_KEY
+# API 키 설정
+export OPENAI_API_KEY="your_api_key"
 
 ./gradlew bootRun
 ```
@@ -243,10 +243,11 @@ GET questions/_search
 
 ### application-api.properties (민감 정보)
 ```properties
-# Gemini API
-auknowlog.gemini.api.key=YOUR_API_KEY
-auknowlog.gemini.api.url=https://generativelanguage.googleapis.com/v1
-auknowlog.gemini.model=gemini-1.5-flash
+# OpenAI Responses API
+auknowlog.openai.api.key=YOUR_API_KEY
+auknowlog.openai.api.url=https://api.openai.com/v1/responses
+auknowlog.openai.model=gpt-5.6-terra
+auknowlog.openai.reasoning-effort=low
 
 # Notion API (선택)
 auknowlog.notion.api.key=YOUR_NOTION_SECRET
@@ -273,7 +274,7 @@ docker-compose logs elasticsearch
 - ES가 healthy 상태가 될 때까지 대기 (1~2분)
 - `docker-compose ps`로 상태 확인
 
-### 퀴즈 생성 실패 (404)
-- `application-api.properties`의 모델명 확인
-- `gemini-1.5-flash` 또는 `gemini-1.5-flash-latest` 사용
-
+### 퀴즈 생성 실패
+- `OPENAI_API_KEY` 또는 `application-api.properties`의 키 설정을 확인
+- 429/502/503/504는 제한된 재시도 후 503으로 반환되므로 잠시 후 재시도
+- 모델명과 추론 수준은 `auknowlog.openai.*` 설정으로 조정

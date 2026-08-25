@@ -4,7 +4,7 @@ import com.auknowlog.backend.document.service.DocumentService;
 import com.auknowlog.backend.document.service.NotionService;
 import com.auknowlog.backend.document.service.GitService;
 import com.auknowlog.backend.quiz.dto.QuizResponse;
-import com.auknowlog.backend.quiz.service.GeminiService;
+import com.auknowlog.backend.quiz.service.OpenAiQuizService;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -16,14 +16,14 @@ import java.io.IOException;
 public class DocumentController {
 
     private final DocumentService documentService;
-    private final GeminiService geminiService;
+    private final OpenAiQuizService openAiQuizService;
     private final NotionService notionService;
     private final GitService gitService;
 
-    public DocumentController(DocumentService documentService, GeminiService geminiService, 
+    public DocumentController(DocumentService documentService, OpenAiQuizService openAiQuizService,
                              NotionService notionService, GitService gitService) {
         this.documentService = documentService;
-        this.geminiService = geminiService;
+        this.openAiQuizService = openAiQuizService;
         this.notionService = notionService;
         this.gitService = gitService;
     }
@@ -42,7 +42,7 @@ public class DocumentController {
     public ResponseEntity<String> saveQuizMarkdownRaw(@RequestBody java.util.Map<String, Object> payload) {
         try {
             String title = String.valueOf(payload.getOrDefault("quizTitle", "퀴즈 결과"));
-            String markdown = geminiService.renderQuizMarkdownLocally(payload);
+            String markdown = openAiQuizService.renderQuizMarkdownLocally(payload);
             String filePath = documentService.saveMarkdownContent(title, markdown);
             return ResponseEntity.ok("Quiz saved successfully to: " + filePath);
         } catch (Exception e) {
@@ -58,7 +58,7 @@ public class DocumentController {
             String databaseId = payload.get("databaseId") != null ? String.valueOf(payload.get("databaseId")) : null;
             String databaseTitleProperty = payload.get("databaseTitleProperty") != null ? String.valueOf(payload.get("databaseTitleProperty")) : null;
 
-            String markdown = geminiService.renderQuizMarkdownLocally(payload);
+            String markdown = openAiQuizService.renderQuizMarkdownLocally(payload);
             String result = notionService.createPageWithMarkdown(title, markdown, parentPageId, databaseId, databaseTitleProperty);
             return ResponseEntity.ok("노션 저장 완료: " + (result == null ? "(no response)" : result));
         } catch (Exception e) {
@@ -70,7 +70,7 @@ public class DocumentController {
     public ResponseEntity<String> saveQuizToGit(@RequestBody java.util.Map<String, Object> payload) {
         try {
             String title = String.valueOf(payload.getOrDefault("quizTitle", "퀴즈 결과"));
-            String markdown = geminiService.renderQuizMarkdownLocally(payload);
+            String markdown = openAiQuizService.renderQuizMarkdownLocally(payload);
             String filePath = documentService.saveMarkdownContent(title, markdown);
             String msg = gitService.commitAndPush(filePath, "chore: save quiz markdown (" + title + ")", "notes", "main");
             return ResponseEntity.ok("Git 저장 완료: " + msg + " | " + filePath);

@@ -3,7 +3,7 @@
 ## ✅ 해결된 이슈
 
 ### 1. Elasticsearch 연결 실패로 인한 앱 시작 실패
-**상태**: ✅ 해결  
+**상태**: ✅ 해결
 **발생 시기**: 2025-12-17  
 **문제**: ES가 실행되지 않아도 앱이 시작되어야 함  
 **해결**: `QuestionSearchService`에서 ES 연결 실패 시 graceful degradation 처리
@@ -26,20 +26,20 @@
 
 ---
 
-### 4. Gemini API 503 Service Unavailable
+### 4. AI API 일시 장애(429/502/503/504)
 **상태**: ✅ 해결  
 **발생 시기**: 2025-12-17  
-**문제**: Gemini 모델 과부하 시 503 오류 발생  
+**문제**: AI 제공자 일시 장애나 요청 제한 시 퀴즈 생성 실패
 **해결**: 
-- 자동 재시도 로직 추가 (최대 5회, 지수 백오프)
+- 자동 재시도 로직 추가 (최대 4회, 지수 백오프)
 - `Retry-After` 헤더 존중
-- `GeminiOverloadedException` 커스텀 예외 생성
+- `OpenAiUnavailableException` 커스텀 예외 생성
 - HTTP 503으로 응답 반환
 
 ---
 
 ### 5. 토큰 비용 최적화 - 기존 문제 프롬프트 포함
-**상태**: ✅ 해결  
+**상태**: ✅ 해결
 **발생 시기**: 2025-12-17  
 **문제**: 중복 방지를 위해 재시도 시 API 호출이 과도하게 증가  
 **해결**: 
@@ -60,10 +60,10 @@
 ---
 
 ### 2. Bean Validation Provider 없음
-**상태**: ⚠️ 경고 (기능 영향 없음)  
-**메시지**: `jakarta.validation.NoProviderFoundException: Unable to create a Configuration`  
-**원인**: Hibernate Validator 의존성 없음  
-**조치**: 필요 시 `build.gradle`에 `spring-boot-starter-validation` 추가 (현재 불필요)
+**상태**: ✅ 해결
+**메시지**: `jakarta.validation.NoProviderFoundException: Unable to create a Configuration`
+**원인**: Hibernate Validator 의존성이 없었음
+**조치**: `spring-boot-starter-validation`을 추가하고 주제·문항 수 요청값을 검증
 
 ---
 
@@ -121,4 +121,3 @@
 - **토큰 최적화**: 현재 같은 주제의 최근 30개 문제만 프롬프트에 포함 (각 문제 앞 50자)
 - **재시도 로직**: 최대 3회 재시도, 각 시도마다 부족한 개수 × 2만큼 생성 요청
 - **중복 체크**: PostgreSQL 해시(정확 일치) + Elasticsearch 유사도(70% 이상) 이중 체크
-

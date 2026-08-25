@@ -6,7 +6,7 @@ AI를 활용하여 원하는 주제에 대한 객관식 문제를 자동으로 �
 
 `auknowlog`는 **auto(자동)** + **knowledge(지식)** + **log(기록)**의 합성어입니다.
 
-사용자가 학습하고 싶은 주제를 입력하면, Gemini AI가 해당 주제에 대한 객관식 퀴즈와 설명을 생성합니다. 생성된 퀴즈는 Git 또는 Notion에 자동 저장되며, **유사도 기반 중복 방지** 기능으로 매번 새로운 문제를 받을 수 있습니다.
+사용자가 학습하고 싶은 주제를 입력하면, OpenAI GPT가 해당 주제에 대한 객관식 퀴즈와 설명을 생성합니다. 생성된 퀴즈는 Git 또는 Notion에 자동 저장되며, **유사도 기반 중복 방지** 기능으로 매번 새로운 문제를 받을 수 있습니다.
 
 ## 🛠️ 기술 스택
 
@@ -14,7 +14,7 @@ AI를 활용하여 원하는 주제에 대한 객관식 문제를 자동으로 �
 |------|------|
 | **Backend** | Java 21, Spring Boot 3.5, Virtual Threads |
 | **Frontend** | Vue.js 3, Vite |
-| **AI** | Google Gemini 1.5 Flash |
+| **AI** | OpenAI GPT-5.6 Terra (`Responses API`, Structured Outputs) |
 | **Database** | PostgreSQL 16 (이력 저장) |
 | **Search** | Elasticsearch 8.11 (유사도 검색) |
 | **Visualization** | Kibana 8.11 |
@@ -70,10 +70,16 @@ npm run dev
 
 ## ⚙️ 환경 설정
 
-`backend/application-api.properties` 파일 생성:
+환경 변수로 API 키를 설정합니다:
+
+```bash
+export OPENAI_API_KEY="your_api_key"
+```
+
+또는 Git에 포함되지 않는 `backend/application-api.properties`에 아래와 같이 설정할 수 있습니다.
 
 ```properties
-auknowlog.gemini.api.key=YOUR_GEMINI_API_KEY
+auknowlog.openai.api.key=your_api_key
 ```
 
 ## 📁 프로젝트 구조

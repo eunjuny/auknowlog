@@ -1,8 +1,8 @@
 package com.auknowlog.backend.quiz.controller;
 
-import com.auknowlog.backend.question.service.QuestionHistoryService;
-import com.auknowlog.backend.question.service.QuestionSearchService;
+import com.auknowlog.backend.learning.service.LearningService;
 import com.auknowlog.backend.quiz.service.OpenAiQuizService;
+import com.auknowlog.backend.quiz.service.QuizGenerationService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -24,10 +24,10 @@ class QuizControllerValidationTest {
     private OpenAiQuizService openAiQuizService;
 
     @MockitoBean
-    private QuestionHistoryService questionHistoryService;
+    private QuizGenerationService quizGenerationService;
 
     @MockitoBean
-    private QuestionSearchService questionSearchService;
+    private LearningService learningService;
 
     @Test
     void rejectsBlankTopicsBeforeCallingTheModel() throws Exception {

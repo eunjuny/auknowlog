@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 import java.util.Map;
+import java.util.NoSuchElementException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -30,5 +31,14 @@ public class GlobalExceptionHandler {
                 .orElse("요청값을 확인해주세요.");
         return ResponseEntity.badRequest().body(Map.of("message", message, "code", 400));
     }
-}
 
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<Map<String, Object>> handleBadRequest(IllegalArgumentException e) {
+        return ResponseEntity.badRequest().body(Map.of("message", e.getMessage(), "code", 400));
+    }
+
+    @ExceptionHandler(NoSuchElementException.class)
+    public ResponseEntity<Map<String, Object>> handleNotFound(NoSuchElementException e) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(Map.of("message", e.getMessage(), "code", 404));
+    }
+}

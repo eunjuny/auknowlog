@@ -1,20 +1,17 @@
 package com.auknowlog.backend.quiz.controller;
 
-import com.auknowlog.backend.question.service.QuestionHistoryService;
-import com.auknowlog.backend.question.service.QuestionSearchService;
+import com.auknowlog.backend.learning.service.LearningService;
 import com.auknowlog.backend.quiz.dto.Question;
 import com.auknowlog.backend.quiz.dto.QuizRequest;
 import com.auknowlog.backend.quiz.dto.QuizResponse;
-import com.auknowlog.backend.common.exception.OpenAiUnavailableException;
 import com.auknowlog.backend.quiz.service.OpenAiQuizService;
+import com.auknowlog.backend.quiz.service.QuizGenerationService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.web.bind.annotation.*;
 
 import jakarta.validation.Valid;
@@ -28,19 +25,16 @@ import java.util.Map;
 @RequestMapping("/api/quizzes")
 public class QuizController {
 
-    private static final Logger log = LoggerFactory.getLogger(QuizController.class);
-    private static final int MAX_RETRY_ATTEMPTS = 3;  // 최대 재시도 횟수
-
     private final OpenAiQuizService openAiQuizService;
-    private final QuestionHistoryService questionHistoryService;
-    private final QuestionSearchService questionSearchService;
+    private final QuizGenerationService quizGenerationService;
+    private final LearningService learningService;
 
     public QuizController(OpenAiQuizService openAiQuizService,
-                         QuestionHistoryService questionHistoryService,
-                         QuestionSearchService questionSearchService) {
+                          QuizGenerationService quizGenerationService,
+                          LearningService learningService) {
         this.openAiQuizService = openAiQuizService;
-        this.questionHistoryService = questionHistoryService;
-        this.questionSearchService = questionSearchService;
+        this.quizGenerationService = quizGenerationService;
+        this.learningService = learningService;
     }
 
     @Operation(summary = "새로운 퀴즈 생성", description = "주제와 문제 수를 기반으로 OpenAI를 통해 새로운 객관식 퀴즈를 생성합니다.")
@@ -52,97 +46,7 @@ public class QuizController {
     public QuizResponse createQuiz(
             @Parameter(description = "퀴즈 생성 요청 객체 (주제 및 문제 수 포함)", required = true)
             @Valid @RequestBody QuizRequest request) {
-        int targetCount = (request.numberOfQuestions() != null) ? request.numberOfQuestions() : 10;
-        targetCount = Math.max(1, Math.min(20, targetCount));
-        String topic = request.topic().trim();
-
-        List<Question> collectedQuestions = new ArrayList<>();
-        String quizTitle = topic + " 퀴즈";
-        int attempts = 0;
-
-        // 원하는 개수가 될 때까지 반복 생성 (최대 MAX_RETRY_ATTEMPTS번)
-        while (collectedQuestions.size() < targetCount && attempts < MAX_RETRY_ATTEMPTS) {
-            int remaining = targetCount - collectedQuestions.size();
-            // 중복 필터링을 고려해서 여유있게 요청 (첫 시도는 그대로, 재시도는 2배)
-            int toGenerate = (attempts == 0) ? remaining : Math.min(remaining * 2, 20);
-            
-            log.info("🔄 퀴즈 생성 시도 {}/{}: 필요 {}개, 요청 {}개", 
-                    attempts + 1, MAX_RETRY_ATTEMPTS, remaining, toGenerate);
-
-            try {
-                // 첫 시도에만 기존 문제 목록 조회 (토큰 절약)
-                List<String> existingQuestions = (attempts == 0) 
-                        ? questionHistoryService.getRecentQuestionPreviews(topic, 30)
-                        : List.of();
-                
-                QuizResponse response = openAiQuizService.generateQuiz(topic, toGenerate, existingQuestions);
-                if (attempts == 0) {
-                    quizTitle = response.quizTitle();
-                }
-
-                // 중복 체크 후 필터링
-                List<Question> filtered = filterDuplicateQuestions(response.questions());
-                log.info("📊 생성 {}개 → 필터링 후 {}개", response.questions().size(), filtered.size());
-
-                // 새 문제들을 즉시 저장 (다음 루프에서 중복 체크에 반영되도록)
-                for (Question q : filtered) {
-                    if (collectedQuestions.size() >= targetCount) break;
-                    
-                    // PostgreSQL 저장
-                    if (questionHistoryService.saveQuestion(topic, q)) {
-                        indexQuestionToES(topic, q);
-                        collectedQuestions.add(q);
-                    }
-                }
-            } catch (OpenAiUnavailableException | IllegalStateException e) {
-                throw e;
-            } catch (Exception e) {
-                log.warn("⚠️ 퀴즈 생성 실패 (시도 {}): {}", attempts + 1, e.getMessage());
-            }
-
-            attempts++;
-        }
-
-        log.info("✅ 최종 퀴즈: 요청 {}개 → 생성 {}개 (시도 {}회)", 
-                targetCount, collectedQuestions.size(), attempts);
-
-        return new QuizResponse(quizTitle, collectedQuestions);
-    }
-
-    /**
-     * 단일 문제 ES 인덱싱
-     */
-    private void indexQuestionToES(String topic, Question q) {
-        try {
-            questionSearchService.index(topic, q.questionText(), 
-                    q.options(), q.correctAnswer(), q.explanation());
-        } catch (Exception e) {
-            log.warn("ES 인덱싱 실패: {}", e.getMessage());
-        }
-    }
-
-    /**
-     * ES 유사도 기반으로 중복 질문 필터링
-     */
-    private List<Question> filterDuplicateQuestions(List<Question> questions) {
-        List<Question> result = new ArrayList<>();
-        for (Question q : questions) {
-            try {
-                var checkResult = questionSearchService.checkDuplicate(q.questionText());
-                if (checkResult.dup()) {
-                    log.info("🚫 중복 문제 필터링: score={}, msg={}, question={}", 
-                            checkResult.score(), checkResult.msg(), 
-                            q.questionText().substring(0, Math.min(50, q.questionText().length())));
-                } else {
-                    log.debug("✅ 새 문제: {}", q.questionText().substring(0, Math.min(50, q.questionText().length())));
-                    result.add(q);
-                }
-            } catch (Exception e) {
-                log.warn("⚠️ ES 체크 실패, 문제 통과: {} - {}", e.getClass().getSimpleName(), e.getMessage());
-                result.add(q);
-            }
-        }
-        return result;
+        return quizGenerationService.createQuiz(request);
     }
 
     @Operation(summary = "개발용 더미 퀴즈 생성", description = "실제 AI 호출 없이 더미 데이터로 퀴즈를 생성합니다.")
@@ -151,10 +55,11 @@ public class QuizController {
     @PostMapping("/dummy")
     public QuizResponse createDummyQuiz(
             @Parameter(description = "퀴즈 생성 요청 객체 (주제 및 문제 수 포함)", required = true)
-            @RequestBody QuizRequest request) {
+            @Valid @RequestBody QuizRequest request) {
         int requested = (request.numberOfQuestions() != null) ? request.numberOfQuestions() : 10;
         int questionsToGenerate = Math.max(1, Math.min(20, requested));
-        return createDummyQuizResponse(request.topic(), questionsToGenerate);
+        QuizResponse response = createDummyQuizResponse(request.topic(), questionsToGenerate);
+        return learningService.storeGeneratedQuiz(request.topic().trim(), request.sourceId(), response);
     }
 
     private QuizResponse createDummyQuizResponse(String topic, int numberOfQuestions) {

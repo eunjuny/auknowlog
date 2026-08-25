@@ -12,6 +12,12 @@ const showNextQuizForm = ref(false);
 const nextQuizTopic = ref('');
 const nextQuizQuestions = ref(10);
 const saveMessage = ref(null);
+const sourceTitle = ref('');
+const sourceContent = ref('');
+const sourceMessage = ref(null);
+const demoMode = ref(true);
+const attemptMessage = ref(null);
+const attemptSaved = ref(false);
 
 // 노션 저장은 서버 기본 설정을 사용합니다. (별도 입력 필드 제거)
 
@@ -36,17 +42,59 @@ async function generateQuiz() {
   error.value = null;
   selectedAnswers.value = {}; // Reset selected answers
   saveMessage.value = null; // Clear save message on new quiz generation
+  attemptMessage.value = null;
+  attemptSaved.value = false;
+  sourceMessage.value = null;
 
   try {
-    // const response = await axios.post('/api/quizzes/dummy', {
-    const response = await axios.post('/api/quizzes/create', {
+    let sourceId = null;
+    if (sourceContent.value.trim()) {
+      const sourceResponse = await axios.post('/api/sources', {
+        title: sourceTitle.value.trim() || `${topic.value} 학습 자료`,
+        content: sourceContent.value.trim()
+      });
+      sourceId = sourceResponse.data.sourceId;
+      sourceMessage.value = `학습 자료를 ${sourceResponse.data.chunkCount}개 청크로 저장했습니다.`;
+    }
+
+    const endpoint = demoMode.value ? '/api/quizzes/dummy' : '/api/quizzes/create';
+    const response = await axios.post(endpoint, {
       topic: topic.value,
-      numberOfQuestions: numberOfQuestions.value
+      numberOfQuestions: numberOfQuestions.value,
+      sourceId
     });
     quizResult.value = response.data;
   } catch (err) {
     console.error('API call failed:', err);
     error.value = '퀴즈 생성에 실패했습니다: ' + (err.response?.data?.message || err.message);
+  } finally {
+    loading.value = false;
+  }
+}
+
+async function saveLearningAttempt() {
+  if (!isAllQuestionsAnswered() || !quizResult.value?.quizId) {
+    attemptMessage.value = '저장할 풀이 결과가 없습니다.';
+    return;
+  }
+
+  loading.value = true;
+  attemptMessage.value = null;
+  try {
+    const answers = quizResult.value.questions.map((question, index) => ({
+      questionOrder: index + 1,
+      selectedAnswer: question.options[selectedAnswers.value[index]]
+    }));
+    const response = await axios.post('/api/learning-attempts', {
+      quizId: quizResult.value.quizId,
+      answers
+    });
+    const result = response.data;
+    attemptSaved.value = true;
+    attemptMessage.value = `풀이 기록 저장 완료 · ${result.correctAnswers}/${result.totalQuestions} 정답` +
+      (result.reviewScheduledCount > 0 ? ` · 오답 ${result.reviewScheduledCount}개는 내일 복습으로 예약됐습니다.` : '');
+  } catch (err) {
+    attemptMessage.value = '풀이 기록 저장 실패: ' + (err.response?.data?.message || err.message);
   } finally {
     loading.value = false;
   }
@@ -232,9 +280,23 @@ function cancelNextQuiz() {
         <label for="numQuestions">문제 수 (기본 10, 최대 20):</label>
         <input type="number" id="numQuestions" v-model.number="numberOfQuestions" min="1" max="20" />
       </div>
+      <div class="quiz-input-group">
+        <label for="sourceTitle">학습 자료 제목 (선택):</label>
+        <input type="text" id="sourceTitle" v-model="sourceTitle" placeholder="예: JVM 실행 구조" />
+      </div>
+      <div class="quiz-input-group">
+        <label for="sourceContent">학습 자료 내용 (선택):</label>
+        <textarea id="sourceContent" v-model="sourceContent" rows="6"
+          placeholder="Markdown 또는 기술 문서 내용을 붙여넣으면 퀴즈와 함께 저장합니다."></textarea>
+      </div>
+      <label class="demo-mode-toggle">
+        <input type="checkbox" v-model="demoMode" />
+        비용 없는 데모 퀴즈로 생성 (해제 시 OpenAI API 호출)
+      </label>
       <button @click="generateQuiz" :disabled="loading || !topic">
-        {{ loading ? '생성 중...' : '퀴즈 생성' }}
+        {{ loading ? '생성 중...' : demoMode ? '데모 퀴즈 생성' : 'AI 퀴즈 생성' }}
       </button>
+      <p v-if="sourceMessage" class="source-message">{{ sourceMessage }}</p>
     </div>
 
     <div v-if="error" class="error-message">
@@ -262,7 +324,7 @@ function cancelNextQuiz() {
           </div>
         </div>
         
-        <div v-if="selectedAnswers[index] !== null && selectedAnswers[index] !== undefined" 
+          <div v-if="selectedAnswers[index] !== null && selectedAnswers[index] !== undefined"
              class="answer-section"
              :class="{
                'correct-result': question.options[selectedAnswers[index]] === question.correctAnswer,
@@ -275,8 +337,11 @@ function cancelNextQuiz() {
             <strong v-else>틀렸습니다.</strong>
           </div>
           <p><strong>정답:</strong> {{ question.correctAnswer }}</p>
-          <p><strong>설명:</strong> {{ question.explanation }}</p>
-        </div>
+            <p><strong>설명:</strong> {{ question.explanation }}</p>
+          </div>
+          <p v-if="question.sourceReferences?.length" class="source-reference">
+            <strong>근거:</strong> {{ question.sourceReferences.join(', ') }}
+          </p>
       </div>
       
       <div class="next-quiz-section">
@@ -284,21 +349,13 @@ function cancelNextQuiz() {
           <button @click="showNextQuizOptions" class="next-quiz-button">
             다음 문제 생성
           </button>
-          <button @click="saveQuizAsMarkdown" :disabled="loading || !isAllQuestionsAnswered()" class="save-button">
-            {{ loading ? '저장 중...' : isAllQuestionsAnswered() ? 'Markdown으로 저장' : '모든 문제를 풀어주세요' }}
-          </button>
-          <button @click="saveQuizToNotion" :disabled="loading || !isAllQuestionsAnswered()" class="save-button" style="background-color:#222;">
-            {{ loading ? '저장 중...' : '노션에 저장' }}
-          </button>
-          <button @click="saveQuizToGit" :disabled="loading || !isAllQuestionsAnswered()" class="save-button" style="background-color:#f05033;">
-            {{ loading ? '저장 중...' : 'Git에 저장' }}
+          <button @click="saveLearningAttempt" :disabled="loading || attemptSaved || !isAllQuestionsAnswered() || !quizResult.quizId" class="save-button">
+            {{ attemptSaved ? '풀이 기록 저장됨' : loading ? '저장 중...' : isAllQuestionsAnswered() ? '풀이 기록 저장' : '모든 문제를 풀어주세요' }}
           </button>
         </div>
 
-        
-        
-        <div v-if="saveMessage" class="save-message" :class="{ 'error-message': saveMessage.includes('실패') || saveMessage.includes('풀어야') }">
-          {{ saveMessage }}
+        <div v-if="attemptMessage" class="save-message" :class="{ 'error-message': attemptMessage.includes('실패') || attemptMessage.includes('없습니다') }">
+          {{ attemptMessage }}
         </div>
         
         <div v-if="showNextQuizForm" class="next-quiz-form">
@@ -365,7 +422,8 @@ function cancelNextQuiz() {
 }
 
 .quiz-input-group input[type="text"],
-.quiz-input-group input[type="number"] {
+.quiz-input-group input[type="number"],
+.quiz-input-group textarea {
   width: 100%;
   max-width: 900px;
   padding: 15px 20px;
@@ -377,9 +435,29 @@ function cancelNextQuiz() {
 }
 
 .quiz-input-group input[type="text"]:focus,
-.quiz-input-group input[type="number"]:focus {
+.quiz-input-group input[type="number"]:focus,
+.quiz-input-group textarea:focus {
   border-color: #667eea;
   outline: none;
+}
+
+.quiz-input-group textarea {
+  resize: vertical;
+  font-family: inherit;
+}
+
+.demo-mode-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #444;
+  font-size: 14px;
+}
+
+.source-message,
+.source-reference {
+  color: #356a48;
+  font-size: 14px;
 }
 
 button {

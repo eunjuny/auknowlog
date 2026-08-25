@@ -1,5 +1,7 @@
 # 잔존 이슈 및 해결 내역
 
+> Elasticsearch 항목은 pgvector 전환 이전의 이력입니다. 현재 구조와 다음 개선 계획은 `STACK_TRANSITION.md`와 `TECHNOLOGY_DECISIONS.md`를 기준으로 합니다.
+
 ## ✅ 해결된 이슈
 
 ### 1. Elasticsearch 연결 실패로 인한 앱 시작 실패

@@ -3,6 +3,7 @@ package com.auknowlog.backend.quiz.dto;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 
 public record QuizRequest(
@@ -11,6 +12,11 @@ public record QuizRequest(
         String topic,
         @Min(value = 1, message = "문제 수는 1개 이상이어야 합니다.")
         @Max(value = 20, message = "문제 수는 20개 이하여야 합니다.")
-        Integer numberOfQuestions
-) {}
-
+        Integer numberOfQuestions,
+        @Positive(message = "학습 자료 식별자는 양수여야 합니다.")
+        Long sourceId
+) {
+    public QuizRequest(String topic, Integer numberOfQuestions) {
+        this(topic, numberOfQuestions, null);
+    }
+}

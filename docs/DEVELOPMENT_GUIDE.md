@@ -1,280 +1,113 @@
 # Auknowlog 개발 가이드
 
-## 📋 목차
-1. [프로젝트 개요](#프로젝트-개요)
-2. [기술 스택 및 OSS](#기술-스택-및-oss)
-3. [아키텍처](#아키텍처)
-4. [주요 기능](#주요-기능)
-5. [설치 및 실행](#설치-및-실행)
-6. [API 명세](#api-명세)
-7. [데이터베이스 스키마](#데이터베이스-스키마)
+## 서비스 흐름
 
----
-
-## 프로젝트 개요
-
-**auknowlog** = auto(자동) + knowledge(지식) + log(기록)
-
-AI 기반 퀴즈 자동 생성 및 학습 기록 관리 애플리케이션입니다.
-
----
-
-## 기술 스택 및 OSS
-
-### Backend
-| 기술 | 버전 | 용도 |
-|------|------|------|
-| Java | 21 | 언어 (Virtual Threads) |
-| Spring Boot | 3.5.5 | 웹 프레임워크 |
-| Spring MVC | - | 동기 처리 + Virtual Threads |
-| Spring Data JPA | - | PostgreSQL ORM |
-| Spring Data Elasticsearch | - | ES 연동 |
-| Gradle | 8.x | 빌드 도구 |
-
-### Frontend
-| 기술 | 용도 |
-|------|------|
-| Vue.js 3 | 프론트엔드 프레임워크 |
-| Vite | 빌드 도구 |
-| Axios | HTTP 클라이언트 |
-
-### 외부 서비스 & OSS
-| OSS | 버전 | 용도 |
-|-----|------|------|
-| **PostgreSQL** | 16 | 퀴즈 이력 저장 (정확한 중복 체크) |
-| **Elasticsearch** | 8.11.0 | 유사도 기반 중복 검색 |
-| **Kibana** | 8.11.0 | ES 데이터 시각화/관리 |
-| **OpenAI Responses API** | GPT-5.6 | 구조화된 AI 퀴즈 생성 |
-| **Notion API** | - | 퀴즈 결과 노션 저장 |
-| **Docker Compose** | - | 컨테이너 오케스트레이션 |
-
----
-
-## 아키텍처
-
-```
-┌─────────────┐     ┌──────────────────────────────────────┐
-│   Frontend  │────▶│              Backend                 │
-│   (Vue.js)  │◀────│       (Spring MVC + Virtual Threads) │
-└─────────────┘     └──────────────────────────────────────┘
-                              │         │         │
-                    ┌─────────┴─────────┴─────────┴─────────┐
-                    ▼                   ▼                   ▼
-             ┌──────────┐        ┌──────────┐        ┌──────────┐
-             │PostgreSQL│        │Elastics- │        │ OpenAI   │
-             │ (중복체크)│        │  earch   │        │ Responses│
-             └──────────┘        │(유사도)  │        └──────────┘
-                                 └──────────┘
-                                      │
-                                 ┌──────────┐
-                                 │  Kibana  │
-                                 │ (시각화) │
-                                 └──────────┘
+```text
+학습 자료 저장 → 청크 생성 → 퀴즈 생성 → 풀이 제출 → 오답 복습 예약
+                      ↘ 선택 시 OpenAI 임베딩 → pgvector 의미 중복 검사
 ```
 
-### 중복 체크 흐름
-1. **OpenAI**가 구조화된 퀴즈 생성
-2. **Elasticsearch**에서 유사도 검색 (70% 이상이면 중복)
-3. 중복 질문 필터링
-4. 새 질문을 **PostgreSQL**에 해시 기반 저장
-5. 새 질문을 **Elasticsearch**에 인덱싱
+기본 화면은 비용 없는 더미 퀴즈를 생성한다. AI 모델과 임베딩 호출은 사용자가 설정과 화면에서 명시적으로 활성화할 때만 발생한다.
 
----
+## 기술 구성
 
-## 주요 기능
+| 구분 | 구성 | 역할 |
+| --- | --- | --- |
+| Backend | Java 21, Spring Boot 3.5, Spring MVC, JPA | API, 트랜잭션, 입력 검증 |
+| Database | PostgreSQL 16 + pgvector | 학습 이력의 원본 데이터와 선택적 의미 검색 |
+| Migration | Flyway | 리뷰 가능한 DB 스키마 버전 관리 |
+| AI | OpenAI Responses API, Embeddings API | 구조화 퀴즈 생성, 선택적 의미 중복 검사 |
+| Observability | Actuator, Micrometer | AI 지연·결과·토큰 메트릭 |
+| Frontend | Vue 3, Vite | 자료 입력, 풀이, 결과 저장 |
+| Local Infra | Docker Compose | 개발 환경 재현 |
 
-### 1. AI 퀴즈 생성
-- 주제 입력 → OpenAI Responses API가 객관식 퀴즈 생성
-- 문제당 4개 선택지 + 정답 + 해설 제공
-- 최대 20문제까지 생성 가능
+전환의 상세 근거는 [스택 전환 비교](STACK_TRANSITION.md)를 참고한다.
 
-### 2. 중복 문제 방지 (이중 체크)
-| 방식 | 도구 | 설명 |
-|------|------|------|
-| 정확한 중복 | PostgreSQL | SHA-256 해시 비교 |
-| 유사도 중복 | Elasticsearch | match 쿼리로 70% 이상 유사도 필터링 |
-
-### 3. 퀴즈 저장
-- **로컬 파일**: Markdown 형식으로 저장
-- **Git**: 별도 레포지토리에 자동 커밋/푸시
-- **Notion**: 페이지 또는 데이터베이스에 저장
-
-### 4. Kibana 시각화
-- 저장된 질문 조회/검색
-- 주제별 통계 확인
-- 쿼리 직접 실행 (Dev Tools)
-
----
-
-## 설치 및 실행
-
-### 사전 요구사항
-- Java 21+
-- Node.js 20.19+ 또는 22.12+
-- Docker & Docker Compose
-
-### 1. 인프라 실행 (PostgreSQL + Elasticsearch + Kibana)
+## 실행
 
 ```bash
-cd /Users/yeob-eunjun/eunjuny/project/auknowlog
 docker-compose up -d
 
-# 상태 확인
-docker-compose ps
-```
-
-### 2. 백엔드 실행
-
-```bash
 cd backend
-
-# API 키 설정
-export OPENAI_API_KEY="your_api_key"
-
 ./gradlew bootRun
-```
 
-### 3. 프론트엔드 실행
-
-```bash
-cd frontend
+cd ../frontend
 npm install
 npm run dev
 ```
 
-### 4. 접속 URL
-| 서비스 | URL |
-|--------|-----|
-| 프론트엔드 | http://localhost:5173 |
-| 백엔드 API | http://localhost:8080 |
-| Swagger UI | http://localhost:8080/swagger-ui.html |
-| Kibana | http://localhost:5601 |
-| Elasticsearch | http://localhost:9200 |
+| 서비스 | 주소 |
+| --- | --- |
+| 프런트엔드 | http://localhost:5173 |
+| API/Swagger | http://localhost:8080/swagger-ui.html |
+| Health | http://localhost:8080/actuator/health |
+| AI 지연 메트릭 | http://localhost:8080/actuator/metrics/auknowlog.ai.quiz.request.duration |
 
----
+## 비용이 발생하는 설정
 
-## API 명세
+아래 설정을 하지 않으면 로컬 개발·자동 테스트에서 OpenAI API를 호출하지 않는다.
 
-### 퀴즈 API
+```bash
+export OPENAI_API_KEY="your-api-key"
 
-| Method | Endpoint | 설명 |
-|--------|----------|------|
-| POST | `/api/quizzes/create` | AI 퀴즈 생성 |
-| POST | `/api/quizzes/dummy` | 더미 퀴즈 생성 (테스트용) |
-| POST | `/api/quizzes/markdown` | 마크다운 렌더링 |
+# 의미 중복 검사까지 실제로 사용하려는 경우에만 활성화
+export AUKNOWLOG_EMBEDDINGS_ENABLED=true
+```
 
-### 문서 저장 API
+- 화면의 `비용 없는 데모 퀴즈로 생성`을 해제하면 Responses API 호출이 발생한다.
+- `AUKNOWLOG_EMBEDDINGS_ENABLED=true`이면 새 문제 후보마다 Embeddings API 호출이 발생할 수 있다.
+- API 오류·한도 초과 시 무료 모델로 자동 전환하지 않는다.
 
-| Method | Endpoint | 설명 |
-|--------|----------|------|
-| POST | `/api/documents/save-markdown-raw` | 로컬 파일 저장 |
-| POST | `/api/documents/save-quiz-notion` | 노션 저장 |
-| POST | `/api/documents/save-quiz-git` | Git 저장 |
+## API
 
-### 요청 예시
+| Method | Endpoint | 설명 | 외부 비용 |
+| --- | --- | --- | --- |
+| POST | `/api/sources` | 학습 자료와 청크 저장 | 없음 |
+| POST | `/api/quizzes/dummy` | 비용 없는 더미 퀴즈와 학습 퀴즈 저장 | 없음 |
+| POST | `/api/quizzes/create` | OpenAI로 퀴즈 생성 후 저장 | 발생 가능 |
+| POST | `/api/learning-attempts` | 풀이 기록 저장, 오답 복습 예약 | 없음 |
+
+### 학습 자료 저장
 
 ```json
-// POST /api/quizzes/create
+POST /api/sources
 {
-  "topic": "쿠버네티스 기초",
-  "numberOfQuestions": 10
+  "title": "JVM 실행 구조",
+  "content": "JVM은 Java 바이트코드를 실행합니다. JIT 컴파일러는 ..."
 }
 ```
 
----
+### 비용 없는 샘플 퀴즈와 풀이 저장
 
-## 데이터베이스 스키마
-
-### PostgreSQL - question_history
-| 컬럼 | 타입 | 설명 |
-|------|------|------|
-| id | BIGSERIAL | PK |
-| topic | VARCHAR | 주제 |
-| question_text | TEXT | 질문 내용 |
-| question_hash | VARCHAR(64) | SHA-256 해시 (UNIQUE) |
-| options | TEXT | 선택지 (JSON) |
-| correct_answer | VARCHAR | 정답 |
-| explanation | TEXT | 해설 |
-| created_at | TIMESTAMP | 생성일시 |
-
-### Elasticsearch - questions 인덱스
-| 필드 | 타입 | 설명 |
-|------|------|------|
-| id | keyword | 문서 ID |
-| topic | keyword | 주제 |
-| questionText | text (korean) | 질문 (유사도 검색용) |
-| questionHash | keyword | 해시 |
-| options | text | 선택지 JSON |
-| correctAnswer | text | 정답 |
-| explanation | text (korean) | 해설 |
-| createdAt | date | 생성일시 |
-
----
-
-## Kibana 사용법
-
-### 1. 접속
-http://localhost:5601 (ES 시작 후 1~2분 대기)
-
-### 2. Data View 생성
-1. 좌측 메뉴 → **Management** → **Stack Management**
-2. **Data Views** → **Create data view**
-3. Index pattern: `questions*` 입력 → 생성
-
-### 3. 데이터 조회
-- **Discover**: 저장된 질문 테이블 조회
-- **Dev Tools**: 직접 쿼리 실행
-
-```
-GET questions/_search
+```json
+POST /api/quizzes/dummy
 {
-  "query": { "match_all": {} }
-}
-
-GET questions/_search
-{
-  "query": { "match": { "topic": "쿠버네티스" } }
+  "topic": "Java",
+  "numberOfQuestions": 2,
+  "sourceId": 1
 }
 ```
 
----
-
-## 환경 설정 파일
-
-### application-api.properties (민감 정보)
-```properties
-# OpenAI Responses API
-auknowlog.openai.api.key=YOUR_API_KEY
-auknowlog.openai.api.url=https://api.openai.com/v1/responses
-auknowlog.openai.model=gpt-5.6-terra
-auknowlog.openai.reasoning-effort=low
-
-# Notion API (선택)
-auknowlog.notion.api.key=YOUR_NOTION_SECRET
-auknowlog.notion.parent.page-id=YOUR_PAGE_ID
-
-# Git (선택)
-auknowlog.git.repo-root=/path/to/repo
+```json
+POST /api/learning-attempts
+{
+  "quizId": 1,
+  "answers": [
+    { "questionOrder": 1, "selectedAnswer": "선택지 B" },
+    { "questionOrder": 2, "selectedAnswer": "선택지 A" }
+  ]
+}
 ```
 
----
+오답 문항은 다음 날 `review_schedule`에 `PENDING` 상태로 저장된다.
 
-## 트러블슈팅
+## 테스트
 
-### Elasticsearch 연결 실패
 ```bash
-# ES 상태 확인
-curl http://localhost:9200/_cluster/health?pretty
-
-# 로그 확인
-docker-compose logs elasticsearch
+cd backend
+./gradlew test
 ```
 
-### Kibana 접속 안됨
-- ES가 healthy 상태가 될 때까지 대기 (1~2분)
-- `docker-compose ps`로 상태 확인
-
-### 퀴즈 생성 실패
-- `OPENAI_API_KEY` 또는 `application-api.properties`의 키 설정을 확인
-- 429/502/503/504는 제한된 재시도 후 503으로 반환되므로 잠시 후 재시도
-- 모델명과 추론 수준은 `auknowlog.openai.*` 설정으로 조정
+- Responses API 요청·응답 및 사용량은 MockRestServiceServer로 검증한다.
+- H2 통합 테스트는 자료 저장 → 더미 퀴즈 → 풀이 → 복습 예약을 실제 HTTP와 JPA로 검증한다.
+- pgvector가 필요한 V3 마이그레이션 및 코사인 검색은 Docker 가능 환경에서 Testcontainers로 추가한다. 현재 자동 테스트는 라이브 OpenAI API를 호출하지 않는다.

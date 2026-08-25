@@ -2,6 +2,14 @@ package com.auknowlog.backend.quiz.dto;
 
 import java.util.List;
 
-public record Question(String questionText, List<String> options, String correctAnswer, String explanation) {}
+public record Question(String questionText,
+                       List<String> options,
+                       String correctAnswer,
+                       String explanation,
+                       List<String> sourceReferences) {
 
+    public Question(String questionText, List<String> options, String correctAnswer, String explanation) {
+        this(questionText, options, correctAnswer, explanation, List.of());
+    }
+}
 

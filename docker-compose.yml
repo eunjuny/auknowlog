@@ -1,9 +1,7 @@
-version: '3.8'
-
 services:
-  # PostgreSQL 데이터베이스
+  # pgvector를 포함한 PostgreSQL: 원본 데이터와 의미 검색 벡터를 함께 관리합니다.
   postgres:
-    image: postgres:16-alpine
+    image: pgvector/pgvector:0.8.6-pg16-bookworm
     container_name: auknowlog-postgres
     environment:
       POSTGRES_DB: auknowlog
@@ -19,37 +17,5 @@ services:
       timeout: 5s
       retries: 5
 
-  # Elasticsearch 검색 엔진
-  elasticsearch:
-    image: docker.elastic.co/elasticsearch/elasticsearch:8.11.0
-    container_name: auknowlog-elasticsearch
-    environment:
-      - discovery.type=single-node
-      - xpack.security.enabled=false
-      - "ES_JAVA_OPTS=-Xms512m -Xmx512m"
-    ports:
-      - "9200:9200"
-      - "9300:9300"
-    volumes:
-      - elasticsearch_data:/usr/share/elasticsearch/data
-    healthcheck:
-      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -q 'green\\|yellow'"]
-      interval: 30s
-      timeout: 10s
-      retries: 5
-
-  # Kibana (Elasticsearch 시각화)
-  kibana:
-    image: docker.elastic.co/kibana/kibana:8.11.0
-    container_name: auknowlog-kibana
-    environment:
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-    ports:
-      - "5601:5601"
-    depends_on:
-      elasticsearch:
-        condition: service_healthy
-
 volumes:
   postgres_data:
-  elasticsearch_data:

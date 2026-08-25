@@ -6,7 +6,7 @@ AI를 활용하여 원하는 주제에 대한 객관식 문제를 자동으로 �
 
 `auknowlog`는 **auto(자동)** + **knowledge(지식)** + **log(기록)**의 합성어입니다.
 
-사용자가 학습하고 싶은 주제를 입력하면, OpenAI GPT가 해당 주제에 대한 객관식 퀴즈와 설명을 생성합니다. 생성된 퀴즈는 Git 또는 Notion에 자동 저장되며, **유사도 기반 중복 방지** 기능으로 매번 새로운 문제를 받을 수 있습니다.
+사용자가 학습 자료와 주제를 입력하면, OpenAI GPT가 자료 근거를 함께 남길 수 있는 객관식 퀴즈를 생성합니다. 풀이 결과와 오답 복습 일정을 저장하며, 정확 해시와 선택적 의미 유사도 검사로 중복 문제를 줄입니다.
 
 ## 🛠️ 기술 스택
 
@@ -16,23 +16,24 @@ AI를 활용하여 원하는 주제에 대한 객관식 문제를 자동으로 �
 | **Frontend** | Vue.js 3, Vite |
 | **AI** | OpenAI GPT-5.6 Terra (`Responses API`, Structured Outputs) |
 | **Database** | PostgreSQL 16 (이력 저장) |
-| **Search** | Elasticsearch 8.11 (유사도 검색) |
-| **Visualization** | Kibana 8.11 |
+| **Semantic Search** | PostgreSQL 16 + pgvector 0.8 (선택적 임베딩 유사도 검사) |
+| **Observability** | Spring Boot Actuator + Micrometer |
 | **Infra** | Docker Compose |
 
 ## ✨ 주요 기능
 
 - 🤖 **AI 퀴즈 자동 생성** - 주제 입력만으로 객관식 퀴즈 생성
-- 🔍 **유사도 기반 중복 방지** - Elasticsearch로 비슷한 문제 필터링
-- 💾 **다중 저장소 지원** - 로컬 파일, Git, Notion에 저장
-- 📊 **Kibana 시각화** - 저장된 문제 조회 및 분석
+- 📚 **학습 자료 기반 생성** - Markdown·문서 텍스트를 청크로 저장해 생성 요청의 근거로 사용
+- 🧠 **학습 기록과 복습 예약** - 풀이 결과를 저장하고 오답은 다음 날 복습 대상으로 예약
+- 🔍 **의미 기반 중복 방지** - pgvector 코사인 유사도와 PostgreSQL 정확 해시를 조합
+- 📊 **AI 운영 관측** - 호출 모델·지연·성공/실패·토큰 사용량을 기록
 
 ## 🚀 빠른 시작
 
 ### 1. 인프라 실행
 
 ```bash
-# PostgreSQL + Elasticsearch + Kibana 시작
+# PostgreSQL + pgvector 시작
 docker-compose up -d
 ```
 
@@ -57,7 +58,6 @@ npm run dev
 |--------|-----|
 | 프론트엔드 | http://localhost:5173 |
 | Swagger API | http://localhost:8080/swagger-ui.html |
-| Kibana | http://localhost:5601 |
 
 ## 📚 문서
 
@@ -65,8 +65,17 @@ npm run dev
 
 - API 명세
 - 데이터베이스 스키마
-- Kibana 사용법
+- pgvector 기반 의미 중복 검사
 - 트러블슈팅
+
+이전 구조와 새 구조의 문제·대안·선택 근거·검증 방법은 [스택 전환 비교](docs/STACK_TRANSITION.md)에 정리했습니다. 다음 도입 기준은 [기술 의사결정 기록](docs/TECHNOLOGY_DECISIONS.md)을 참고하세요.
+
+## 🔎 운영 확인
+
+- 스키마는 Flyway 마이그레이션으로 관리하며 애플리케이션 시작 시 검증합니다.
+- AI 호출 지연·결과·토큰 사용량은 `/actuator/metrics`에서 확인합니다. 예: `/actuator/metrics/auknowlog.ai.quiz.request.duration`
+- 화면은 기본적으로 비용 없는 더미 퀴즈 모드입니다. 실제 GPT 생성은 화면에서 해제하고 `OPENAI_API_KEY`를 설정한 경우에만 실행됩니다.
+- 의미 중복 검사용 임베딩은 기본 비활성입니다. 실제 API 비용을 허용할 때만 `AUKNOWLOG_EMBEDDINGS_ENABLED=true`를 설정하세요.
 
 ## ⚙️ 환경 설정
 
@@ -89,8 +98,10 @@ auknowlog/
 ├── backend/                 # Spring Boot 백엔드
 │   └── src/main/java/com/auknowlog/backend/
 │       ├── quiz/           # 퀴즈 생성 (Controller, Service)
-│       ├── question/       # 중복 체크 (PostgreSQL, ES)
-│       └── document/       # 저장 (Git, Notion)
+│       ├── learning/       # 퀴즈·풀이·오답 복습 도메인
+│       ├── source/         # 학습 자료·청크 관리
+│       ├── embedding/      # pgvector 의미 중복 검사
+│       └── document/       # 레거시 Markdown·외부 저장 연동
 ├── frontend/               # Vue.js 프론트엔드
 ├── docs/                   # 문서
 └── docker-compose.yml      # 인프라 설정

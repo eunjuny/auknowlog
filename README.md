@@ -14,7 +14,7 @@ AI를 활용하여 원하는 주제에 대한 객관식 문제를 자동으로 �
 |------|------|
 | **Backend** | Java 21, Spring Boot 3.5, Virtual Threads |
 | **Frontend** | Vue.js 3, Vite |
-| **AI** | OpenAI GPT-5.6 Terra (`Responses API`, Structured Outputs) |
+| **AI** | OpenAI GPT-5.4 mini (`Responses API`, Structured Outputs) |
 | **Database** | PostgreSQL 16 (이력 저장) |
 | **Semantic Search** | PostgreSQL 16 + pgvector 0.8 (선택적 임베딩 유사도 검사) |
 | **Observability** | Spring Boot Actuator + Micrometer |

@@ -16,6 +16,7 @@
 | 생성 뒤의 사용자가 남기는 학습 가치가 없음 | 학습 도메인 분리 | `learning_quiz`, `learning_question`, `learning_attempt`, `review_schedule`을 추가하고 오답을 다음 날 복습으로 예약 | H2 기반 실제 HTTP 샘플에서 자료 저장 → 더미 퀴즈 → 풀이 → 복습 예약까지 실행 |
 | 자료를 넣어도 생성 근거가 남지 않음 | 자료·청크 저장 | 입력 자료를 최대 1,200자 청크로 나누고 생성 요청의 컨텍스트로 전달. 문항은 `sourceReferences`를 반환 | OpenAI 요청은 MockRestServiceServer로 스키마와 프롬프트를 검증 |
 | AI 호출 비용·실패 원인을 운영에서 알 수 없음 | Actuator/Micrometer + AI 사용량 원장 | 지연·결과·토큰은 메트릭으로, 생성 호출은 `ai_generation_log`로 저장 | Responses API 사용량을 모킹해 토큰 메트릭과 원장 호출을 단위 테스트 |
+| 정형화된 객관식 퀴즈에 고성능 모델 비용이 과도할 수 있음 | GPT-5.4 mini + `reasoning-effort=low` | 기본 모델을 설정으로 분리하고, 구조화 출력·서버 검증·제한 재시도로 품질 하한을 유지 | Responses 요청의 모델·추론 수준, 사용량 메트릭과 원장 기록을 모킹 테스트 |
 | DDL 자동 변경은 환경별 결과가 달라짐 | Flyway | 스키마를 V1~V3 마이그레이션으로 관리하고 Hibernate는 `validate`만 수행 | H2에서 V1~V2를 실행해 스키마·유니크 제약을 검증 |
 
 ## 비용 안전 장치
@@ -24,6 +25,10 @@
 - 임베딩은 `AUKNOWLOG_EMBEDDINGS_ENABLED=false`가 기본값이다. API 키가 있어도 자동으로 임베딩 비용이 발생하지 않는다.
 - 테스트는 모든 Responses API·Embeddings API를 MockRestServiceServer 또는 Mockito로 대체한다. 라이브 OpenAI API 호출을 테스트에 포함하지 않는다.
 - API 한도·키 오류 시 무료 모델로 자동 전환하지 않는다. 호출은 오류로 종료하고 사용자가 모델/결제 설정을 선택한다.
+
+### 퀴즈 모델 기본값
+
+기본값은 `gpt-5.4-mini`와 `reasoning-effort=low`다. 이 서비스의 기본 작업은 문서 근거를 가진 소수의 객관식 문항 생성으로, 장시간 추론보다 일정한 JSON 형식·지연·비용 관리가 중요하다. GPT-5.4 mini는 고빈도 작업에 적합한 경량 모델이며 Responses API와 Structured Outputs를 지원한다. 더 높은 난도의 서술형 평가나 품질 평가셋에서 실패가 확인되면, 환경 설정만으로 상위 모델을 비교한다. 자동 폴백은 결과 품질과 비용을 예측하기 어렵게 하므로 사용하지 않는다. 계정의 데이터 공유 기반 무료 사용량은 별도 동의·한도 조건에 따른 것이므로 애플리케이션의 비용 보장 수단으로 가정하지 않는다. [OpenAI GPT-5.4 mini 문서](https://developers.openai.com/api/docs/models/gpt-5.4-mini)
 
 ## 다음 도입 기준
 

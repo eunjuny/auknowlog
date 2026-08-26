@@ -7,6 +7,7 @@
 | 이전 | 현재 | 바꾼 이유 | 사용 방법 | 검증 방법 |
 | --- | --- | --- | --- | --- |
 | Gemini 전용 생성 요청 | OpenAI Responses API + Structured Outputs | JSON 후처리보다 서버가 기대하는 퀴즈 스키마를 먼저 강제하기 위해 | JSON Schema, 응답 검증, 제한 재시도 | HTTP 요청·응답을 모킹한 단위 테스트 |
+| GPT-5.6 Terra 기본값 | GPT-5.4 mini + 낮은 추론 수준 | 객관식 퀴즈는 고난도 장문 추론보다 형식 안정성·지연·비용이 중요한 고빈도 작업이기 때문 | `auknowlog.openai.model`과 `reasoning-effort`를 환경 설정으로 분리하고, 기본값을 `gpt-5.4-mini`/`low`로 둠 | Responses 요청, 모델별 사용량 메트릭, 생성 원장을 모킹 테스트 |
 | GPT 생성 결과를 Markdown·Git·Notion으로 외부 저장 | PostgreSQL 학습 도메인 | 저장 자체보다 풀이·오답·재학습이라는 사용자 상태를 남기기 위해 | 퀴즈, 문항, 풀이, 답안, 복습 일정을 관계형 데이터로 저장 | 자료 저장 → 더미 퀴즈 → 풀이 → 오답 복습 예약 통합 테스트 |
 | PostgreSQL 해시 + Elasticsearch `match` | PostgreSQL 해시 + pgvector 코사인 유사도 | ES 점수는 어휘 일치 중심이고 DB/ES 이중 쓰기 불일치가 발생할 수 있기 때문 | `question_embedding`에 512차원 벡터를 저장하고 pgvector `<=>` 연산자로 가장 유사한 문항을 찾음 | 임베딩은 모킹. 실제 pgvector SQL은 Docker/Testcontainers CI에서 검증 예정 |
 | Elasticsearch + Kibana 2개 컨테이너 | PostgreSQL + pgvector 1개 데이터 서비스 | 원본 이력과 의미 검색 데이터를 함께 트랜잭션으로 관리하고 로컬 운영 부담을 낮추기 위해 | `pgvector/pgvector` PostgreSQL 16 이미지와 Flyway V3 확장 | Compose 이미지·마이그레이션 구성 점검 |

@@ -47,7 +47,7 @@ public class OpenAiQuizService {
     @Value("${auknowlog.openai.api.url:https://api.openai.com/v1/responses}")
     private String apiUrl;
 
-    @Value("${auknowlog.openai.model:gpt-5.6-terra}")
+    @Value("${auknowlog.openai.model:gpt-5.4-mini}")
     private String modelName;
 
     @Value("${auknowlog.openai.reasoning-effort:low}")

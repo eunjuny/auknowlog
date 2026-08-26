@@ -47,7 +47,7 @@ class OpenAiQuizServiceTest {
         service = new OpenAiQuizService(builder, objectMapper, new AiGenerationMetrics(meterRegistry), aiGenerationLedgerService);
         ReflectionTestUtils.setField(service, "apiKey", "test-key");
         ReflectionTestUtils.setField(service, "apiUrl", "https://api.openai.com/v1/responses");
-        ReflectionTestUtils.setField(service, "modelName", "gpt-5.6-terra");
+        ReflectionTestUtils.setField(service, "modelName", "gpt-5.4-mini");
         ReflectionTestUtils.setField(service, "reasoningEffort", "low");
     }
 
@@ -58,7 +58,7 @@ class OpenAiQuizServiceTest {
         )));
         String responseBody = objectMapper.writeValueAsString(Map.of(
                 "status", "completed",
-                "model", "gpt-5.6-terra",
+                "model", "gpt-5.4-mini",
                 "usage", Map.of(
                         "input_tokens", 120,
                         "output_tokens", 80,
@@ -75,7 +75,7 @@ class OpenAiQuizServiceTest {
         server.expect(requestTo("https://api.openai.com/v1/responses"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer test-key"))
-                .andExpect(jsonPath("$.model").value("gpt-5.6-terra"))
+                .andExpect(jsonPath("$.model").value("gpt-5.4-mini"))
                 .andExpect(jsonPath("$.store").value(false))
                 .andExpect(jsonPath("$.reasoning.effort").value("low"))
                 .andExpect(jsonPath("$.text.format.type").value("json_schema"))
@@ -89,11 +89,11 @@ class OpenAiQuizServiceTest {
         assertThat(quiz.questions()).hasSize(1);
         assertThat(quiz.questions().getFirst().correctAnswer()).isEqualTo("객체지향");
         assertThat(meterRegistry.find("auknowlog.ai.quiz.request.duration")
-                .tags("model", "gpt-5.6-terra", "outcome", "success").timer().count()).isEqualTo(1);
+                .tags("model", "gpt-5.4-mini", "outcome", "success").timer().count()).isEqualTo(1);
         assertThat(meterRegistry.find("auknowlog.ai.quiz.tokens")
-                .tags("model", "gpt-5.6-terra", "type", "total").summary().totalAmount()).isEqualTo(200);
+                .tags("model", "gpt-5.4-mini", "type", "total").summary().totalAmount()).isEqualTo(200);
         verify(aiGenerationLedgerService).recordQuizSuccess(
-                org.mockito.ArgumentMatchers.eq("gpt-5.6-terra"), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+                org.mockito.ArgumentMatchers.eq("gpt-5.4-mini"), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         server.verify();
     }
 
@@ -129,7 +129,7 @@ class OpenAiQuizServiceTest {
         )));
         String responseBody = objectMapper.writeValueAsString(Map.of(
                 "status", "completed",
-                "model", "gpt-5.6-terra",
+                "model", "gpt-5.4-mini",
                 "usage", Map.of("input_tokens", 20, "output_tokens", 10, "total_tokens", 30),
                 "output", List.of(Map.of(
                         "type", "message",

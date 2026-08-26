@@ -37,11 +37,22 @@ AI를 활용하여 원하는 주제에 대한 객관식 문제를 자동으로 �
 docker-compose up -d
 ```
 
+로컬 PostgreSQL이 이미 `5432` 포트를 사용 중이면 다음처럼 프로젝트 DB를 `5433`으로 실행하고, 백엔드 실행 시 같은 포트를 지정합니다.
+
+```bash
+POSTGRES_PORT=5433 docker-compose up -d
+```
+
 ### 2. 백엔드 실행
 
 ```bash
 cd backend
 ./gradlew bootRun
+```
+
+```bash
+# Docker DB를 5433으로 실행한 경우
+SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5433/auknowlog ./gradlew bootRun
 ```
 
 ### 3. 프론트엔드 실행

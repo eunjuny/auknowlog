@@ -352,10 +352,16 @@ function cancelNextQuiz() {
           <button @click="saveLearningAttempt" :disabled="loading || attemptSaved || !isAllQuestionsAnswered() || !quizResult.quizId" class="save-button">
             {{ attemptSaved ? '풀이 기록 저장됨' : loading ? '저장 중...' : isAllQuestionsAnswered() ? '풀이 기록 저장' : '모든 문제를 풀어주세요' }}
           </button>
+          <button @click="saveQuizToGit" :disabled="loading || !isAllQuestionsAnswered()" class="save-button" style="background-color:#f05033;" title="풀이 결과를 Markdown으로 저장한 뒤 notes 원격 저장소에 commit·push합니다.">
+            {{ loading ? '저장 중...' : isAllQuestionsAnswered() ? 'Git에 저장' : '모든 문제를 풀어주세요' }}
+          </button>
         </div>
 
         <div v-if="attemptMessage" class="save-message" :class="{ 'error-message': attemptMessage.includes('실패') || attemptMessage.includes('없습니다') }">
           {{ attemptMessage }}
+        </div>
+        <div v-if="saveMessage" class="save-message" :class="{ 'error-message': saveMessage.includes('실패') || saveMessage.includes('풀어야') }">
+          {{ saveMessage }}
         </div>
         
         <div v-if="showNextQuizForm" class="next-quiz-form">

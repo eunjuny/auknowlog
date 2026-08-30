@@ -45,7 +45,7 @@ public class QuizGenerationService {
     }
 
     public QuizResponse createQuiz(QuizRequest request) {
-        int targetCount = request.numberOfQuestions() == null ? 10 : request.numberOfQuestions();
+        int targetCount = request.numberOfQuestions() == null ? 5 : request.numberOfQuestions();
         String topic = request.topic().trim();
 
         List<Question> collectedQuestions = new ArrayList<>();

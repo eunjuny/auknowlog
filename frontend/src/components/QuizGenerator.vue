@@ -3,14 +3,14 @@ import { ref, watch } from 'vue';
 import axios from 'axios';
 
 const topic = ref('');
-const numberOfQuestions = ref(10); // Default value
+const numberOfQuestions = ref(5); // Default value
 const quizResult = ref(null);
 const error = ref(null);
 const loading = ref(false);
 const selectedAnswers = ref({});
 const showNextQuizForm = ref(false);
 const nextQuizTopic = ref('');
-const nextQuizQuestions = ref(10);
+const nextQuizQuestions = ref(5);
 const saveMessage = ref(null);
 const sourceTitle = ref('');
 const sourceContent = ref('');
@@ -277,7 +277,7 @@ function cancelNextQuiz() {
         <input type="text" id="topic" v-model="topic" placeholder="예: 자바스크립트, 인공지능" />
       </div>
       <div class="quiz-input-group">
-        <label for="numQuestions">문제 수 (기본 10, 최대 20):</label>
+        <label for="numQuestions">문제 수 (기본 5, 최대 20):</label>
         <input type="number" id="numQuestions" v-model.number="numberOfQuestions" min="1" max="20" />
       </div>
       <div class="quiz-input-group">

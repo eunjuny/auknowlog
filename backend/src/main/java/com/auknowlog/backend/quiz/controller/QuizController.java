@@ -56,7 +56,7 @@ public class QuizController {
     public QuizResponse createDummyQuiz(
             @Parameter(description = "퀴즈 생성 요청 객체 (주제 및 문제 수 포함)", required = true)
             @Valid @RequestBody QuizRequest request) {
-        int requested = (request.numberOfQuestions() != null) ? request.numberOfQuestions() : 10;
+        int requested = (request.numberOfQuestions() != null) ? request.numberOfQuestions() : 5;
         int questionsToGenerate = Math.max(1, Math.min(20, requested));
         QuizResponse response = createDummyQuizResponse(request.topic(), questionsToGenerate);
         return learningService.storeGeneratedQuiz(request.topic().trim(), request.sourceId(), response);

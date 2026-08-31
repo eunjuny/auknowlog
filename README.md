@@ -74,6 +74,8 @@ npm run dev
 
 자세한 설명은 [개발 가이드](docs/DEVELOPMENT_GUIDE.md)를 참고하세요.
 
+- [개선 로드맵](docs/IMPROVEMENT_ROADMAP.md)
+
 - API 명세
 - 데이터베이스 스키마
 - pgvector 기반 의미 중복 검사

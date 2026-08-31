@@ -18,6 +18,8 @@ const sourceMessage = ref(null);
 const demoMode = ref(true);
 const attemptMessage = ref(null);
 const attemptSaved = ref(false);
+const quizSubmitted = ref(false);
+const submissionMessage = ref(null);
 
 // 노션 저장은 서버 기본 설정을 사용합니다. (별도 입력 필드 제거)
 
@@ -44,6 +46,8 @@ async function generateQuiz() {
   saveMessage.value = null; // Clear save message on new quiz generation
   attemptMessage.value = null;
   attemptSaved.value = false;
+  quizSubmitted.value = false;
+  submissionMessage.value = null;
   sourceMessage.value = null;
 
   try {
@@ -73,7 +77,7 @@ async function generateQuiz() {
 }
 
 async function saveLearningAttempt() {
-  if (!isAllQuestionsAnswered() || !quizResult.value?.quizId) {
+  if (!quizSubmitted.value || !quizResult.value?.quizId) {
     attemptMessage.value = '저장할 풀이 결과가 없습니다.';
     return;
   }
@@ -101,6 +105,10 @@ async function saveLearningAttempt() {
 }
 
 function selectOption(questionIndex, optionIndex) {
+  if (quizSubmitted.value) {
+    return;
+  }
+
   // 이미 같은 옵션을 선택했다면 선택 해제, 아니면 새로 선택
   if (selectedAnswers.value[questionIndex] === optionIndex) {
     selectedAnswers.value[questionIndex] = null;
@@ -127,9 +135,32 @@ function isAllQuestionsAnswered() {
   return quizResult.value.questions.every((_, index) => selectedAnswers.value[index] !== null && selectedAnswers.value[index] !== undefined);
 }
 
-async function saveQuizAsMarkdown() {
+function getUnansweredQuestionCount() {
+  if (!quizResult.value?.questions) return 0;
+  return quizResult.value.questions.filter((_, index) => selectedAnswers.value[index] === null || selectedAnswers.value[index] === undefined).length;
+}
+
+function getCorrectAnswerCount() {
+  if (!quizResult.value?.questions) return 0;
+  return quizResult.value.questions.filter((question, index) =>
+    question.options[selectedAnswers.value[index]] === question.correctAnswer
+  ).length;
+}
+
+function submitQuiz() {
   if (!isAllQuestionsAnswered()) {
-    saveMessage.value = '모든 문제를 풀어야 저장할 수 있습니다.';
+    submissionMessage.value = `미응답 문제가 ${getUnansweredQuestionCount()}개 남아 있습니다.`;
+    return;
+  }
+
+  quizSubmitted.value = true;
+  const correctAnswers = getCorrectAnswerCount();
+  submissionMessage.value = `채점 완료 · ${correctAnswers}/${quizResult.value.questions.length} 정답`;
+}
+
+async function saveQuizAsMarkdown() {
+  if (!quizSubmitted.value) {
+    saveMessage.value = '답안을 제출한 후 저장할 수 있습니다.';
     return;
   }
 
@@ -175,8 +206,8 @@ async function saveQuizAsMarkdown() {
 }
 
 async function saveQuizToNotion() {
-  if (!isAllQuestionsAnswered()) {
-    saveMessage.value = '모든 문제를 풀어야 저장할 수 있습니다.';
+  if (!quizSubmitted.value) {
+    saveMessage.value = '답안을 제출한 후 저장할 수 있습니다.';
     return;
   }
 
@@ -220,8 +251,8 @@ async function saveQuizToNotion() {
 }
 
 async function saveQuizToGit() {
-  if (!isAllQuestionsAnswered()) {
-    saveMessage.value = '모든 문제를 풀어야 저장할 수 있습니다.';
+  if (!quizSubmitted.value) {
+    saveMessage.value = '답안을 제출한 후 저장할 수 있습니다.';
     return;
   }
 
@@ -308,23 +339,26 @@ function cancelNextQuiz() {
       <div v-for="(question, index) in quizResult.questions" :key="index" class="question-item">
         <h3>{{ index + 1 }}. {{ question.questionText }}</h3>
         <div class="options-container">
-          <div 
+          <button
             v-for="(option, optIndex) in question.options" 
             :key="optIndex"
+            type="button"
             class="option-item"
+            :disabled="quizSubmitted"
+            :aria-pressed="selectedAnswers[index] === optIndex"
             :class="{
-              'selected': selectedAnswers[index] === optIndex,
-              'correct-answer': selectedAnswers[index] !== null && selectedAnswers[index] === optIndex && option === question.correctAnswer,
-              'wrong-answer': selectedAnswers[index] !== null && selectedAnswers[index] === optIndex && option !== question.correctAnswer,
-              'not-selected': selectedAnswers[index] !== null && selectedAnswers[index] !== optIndex
+              'selected': !quizSubmitted && selectedAnswers[index] === optIndex,
+              'correct-answer': quizSubmitted && option === question.correctAnswer,
+              'wrong-answer': quizSubmitted && selectedAnswers[index] === optIndex && option !== question.correctAnswer,
+              'not-selected': quizSubmitted && selectedAnswers[index] !== optIndex && option !== question.correctAnswer
             }"
             @click="selectOption(index, optIndex)"
           >
             {{ String.fromCharCode(65 + optIndex) }}. {{ option }}
-          </div>
+          </button>
         </div>
         
-          <div v-if="selectedAnswers[index] !== null && selectedAnswers[index] !== undefined"
+          <div v-if="quizSubmitted"
              class="answer-section"
              :class="{
                'correct-result': question.options[selectedAnswers[index]] === question.correctAnswer,
@@ -339,21 +373,27 @@ function cancelNextQuiz() {
           <p><strong>정답:</strong> {{ question.correctAnswer }}</p>
             <p><strong>설명:</strong> {{ question.explanation }}</p>
           </div>
-          <p v-if="question.sourceReferences?.length" class="source-reference">
+          <p v-if="quizSubmitted && question.sourceReferences?.length" class="source-reference">
             <strong>근거:</strong> {{ question.sourceReferences.join(', ') }}
           </p>
       </div>
       
       <div class="next-quiz-section">
+        <div v-if="submissionMessage" class="result-summary">
+          {{ submissionMessage }}
+        </div>
         <div class="quiz-actions">
+          <button @click="submitQuiz" :disabled="loading || quizSubmitted || !isAllQuestionsAnswered()" class="submit-button">
+            {{ quizSubmitted ? '채점 완료' : isAllQuestionsAnswered() ? '답안 제출' : `미응답 ${getUnansweredQuestionCount()}개` }}
+          </button>
           <button @click="showNextQuizOptions" class="next-quiz-button">
             다음 문제 생성
           </button>
-          <button @click="saveLearningAttempt" :disabled="loading || attemptSaved || !isAllQuestionsAnswered() || !quizResult.quizId" class="save-button">
-            {{ attemptSaved ? '풀이 기록 저장됨' : loading ? '저장 중...' : isAllQuestionsAnswered() ? '풀이 기록 저장' : '모든 문제를 풀어주세요' }}
+          <button @click="saveLearningAttempt" :disabled="loading || attemptSaved || !quizSubmitted || !quizResult.quizId" class="save-button">
+            {{ attemptSaved ? '풀이 기록 저장됨' : loading ? '저장 중...' : quizSubmitted ? '풀이 기록 저장' : '채점 후 기록 저장' }}
           </button>
-          <button @click="saveQuizToGit" :disabled="loading || !isAllQuestionsAnswered()" class="save-button" style="background-color:#f05033;" title="풀이 결과를 Markdown으로 저장한 뒤 notes 원격 저장소에 commit·push합니다.">
-            {{ loading ? '저장 중...' : isAllQuestionsAnswered() ? 'Git에 저장' : '모든 문제를 풀어주세요' }}
+          <button @click="saveQuizToGit" :disabled="loading || !quizSubmitted" class="save-button" style="background-color:#f05033;" title="풀이 결과를 Markdown으로 저장한 뒤 notes 원격 저장소에 commit·push합니다.">
+            {{ loading ? '저장 중...' : quizSubmitted ? 'Git에 저장' : '채점 후 Git 저장' }}
           </button>
         </div>
 
@@ -545,13 +585,20 @@ button:disabled {
   border: 2px solid transparent;
   width: 100%;
   box-sizing: border-box;
+  text-align: left;
+  font-family: inherit;
 }
 
-.option-item:hover {
+.option-item:hover:not(:disabled) {
   background-color: #e8f0fe;
   border-color: #667eea;
   transform: translateY(-1px);
   box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
+}
+
+.option-item:disabled {
+  cursor: default;
+  opacity: 1;
 }
 
 .option-item.selected {
@@ -646,11 +693,48 @@ button:disabled {
   border-top: 2px solid #e0e0e0;
 }
 
+.result-summary {
+  max-width: 560px;
+  margin: 0 auto 20px;
+  padding: 16px 20px;
+  border: 1px solid #b8c2ff;
+  border-radius: 8px;
+  background-color: #eef0ff;
+  color: #3f4a9a;
+  font-size: 18px;
+  font-weight: 700;
+}
+
 .quiz-actions {
   display: flex;
+  flex-wrap: wrap;
   gap: 15px;
   justify-content: center;
   margin-bottom: 20px;
+}
+
+.submit-button {
+  background-color: #5a67d8;
+  color: white;
+  padding: 15px 30px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(90, 103, 216, 0.3);
+}
+
+.submit-button:hover:not(:disabled) {
+  background-color: #4c51bf;
+  transform: translateY(-2px);
+}
+
+.submit-button:disabled {
+  background-color: #6c757d;
+  cursor: not-allowed;
+  box-shadow: none;
 }
 
 .save-button {

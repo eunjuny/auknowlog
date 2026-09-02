@@ -45,17 +45,17 @@ npm run dev
 
 ## 비용이 발생하는 설정
 
-아래 설정을 하지 않으면 로컬 개발·자동 테스트에서 OpenAI API를 호출하지 않는다.
+OpenAI API 키를 설정하고 화면의 데모 모드를 해제하면 실제 API를 호출한다. 의미 중복 검사는 기본 활성이고, 필요하면 환경 변수로 끌 수 있다.
 
 ```bash
 export OPENAI_API_KEY="your-api-key"
 
-# 의미 중복 검사까지 실제로 사용하려는 경우에만 활성화
-export AUKNOWLOG_EMBEDDINGS_ENABLED=true
+# 의미 중복 검사를 끄고 SHA-256 검사만 사용하려는 경우
+export AUKNOWLOG_EMBEDDINGS_ENABLED=false
 ```
 
 - 화면의 `비용 없는 데모 퀴즈로 생성`을 해제하면 Responses API 호출이 발생한다.
-- `AUKNOWLOG_EMBEDDINGS_ENABLED=true`이면 새 문제 후보마다 Embeddings API 호출이 발생할 수 있다.
+- 기본 설정에서는 새 문제 후보마다 Embeddings API 호출이 발생할 수 있다.
 - API 오류·한도 초과 시 무료 모델로 자동 전환하지 않는다.
 
 ## API
@@ -106,8 +106,12 @@ POST /api/learning-attempts
 ```bash
 cd backend
 ./gradlew test
+./gradlew integrationTest
+# 단위 테스트와 Docker 통합 테스트를 모두 실행
+./gradlew check
 ```
 
 - Responses API 요청·응답 및 사용량은 MockRestServiceServer로 검증한다.
 - H2 통합 테스트는 자료 저장 → 더미 퀴즈 → 풀이 → 복습 예약을 실제 HTTP와 JPA로 검증한다.
-- pgvector가 필요한 V3 마이그레이션 및 코사인 검색은 Docker 가능 환경에서 Testcontainers로 추가한다. 현재 자동 테스트는 라이브 OpenAI API를 호출하지 않는다.
+- Testcontainers 통합 테스트는 실제 PostgreSQL 16 + pgvector에서 V3 마이그레이션, HNSW 인덱스와 코사인 검색을 검증한다.
+- 현재 자동 테스트는 라이브 OpenAI API를 호출하지 않는다.

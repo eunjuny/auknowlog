@@ -75,6 +75,9 @@ npm run dev
 자세한 설명은 [개발 가이드](docs/DEVELOPMENT_GUIDE.md)를 참고하세요.
 
 - [개선 로드맵](docs/IMPROVEMENT_ROADMAP.md)
+- [pgvector·Testcontainers 통합 테스트](docs/PGVECTOR_INTEGRATION_TEST.md)
+- [pgvector·Testcontainers 3회차 학습 문서 (HTML)](docs/PGVECTOR_STUDY_CURRICULUM.html)
+- [퀴즈 생성·중복 필터링 전체 흐름 (HTML)](docs/QUIZ_GENERATION_DUPLICATE_FILTER_FLOW.html)
 
 - API 명세
 - 데이터베이스 스키마
@@ -88,7 +91,24 @@ npm run dev
 - 스키마는 Flyway 마이그레이션으로 관리하며 애플리케이션 시작 시 검증합니다.
 - AI 호출 지연·결과·토큰 사용량은 `/actuator/metrics`에서 확인합니다. 예: `/actuator/metrics/auknowlog.ai.quiz.request.duration`
 - 화면은 기본적으로 비용 없는 더미 퀴즈 모드입니다. 실제 GPT 생성은 화면에서 해제하고 `OPENAI_API_KEY`를 설정한 경우에만 실행됩니다.
-- 의미 중복 검사용 임베딩은 기본 비활성입니다. 실제 API 비용을 허용할 때만 `AUKNOWLOG_EMBEDDINGS_ENABLED=true`를 설정하세요.
+- 의미 중복 검사용 임베딩은 기본 활성입니다. 실제 AI 퀴즈 생성 시 Embeddings API가 함께 호출되며, 비활성화하려면 `AUKNOWLOG_EMBEDDINGS_ENABLED=false`를 설정하세요.
+
+## ✅ 테스트
+
+```bash
+cd backend
+
+# 빠른 단위·H2 테스트
+./gradlew test
+
+# Docker의 실제 PostgreSQL 16 + pgvector 통합 테스트
+./gradlew integrationTest
+
+# 위 두 종류를 모두 실행(CI와 동일)
+./gradlew check
+```
+
+`integrationTest`는 Testcontainers가 격리된 임시 DB를 만들고 Flyway V1~V3, `vector(512)`, HNSW 인덱스와 코사인 유사도 검색을 검증한 뒤 컨테이너를 제거합니다. OpenAI API는 호출하지 않습니다.
 
 ## ⚙️ 환경 설정
 
@@ -102,6 +122,7 @@ export OPENAI_API_KEY="your_api_key"
 
 ```properties
 auknowlog.openai.api.key=your_api_key
+auknowlog.openai.embedding.enabled=true
 ```
 
 ## 📁 프로젝트 구조

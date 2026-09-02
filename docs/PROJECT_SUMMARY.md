@@ -38,12 +38,12 @@ export OPENAI_API_KEY="your_api_key"
 - 형식이 잘못된 모델 응답은 컨트롤러 전에 거부합니다.
 - 빈 주제는 400으로 반환하는 웹 계층 테스트를 둡니다.
 - Flyway 마이그레이션으로 스키마와 정확 중복 제약을 검증합니다.
+- Testcontainers의 실제 PostgreSQL + pgvector에서 V3·HNSW·코사인 검색을 검증합니다.
 - AI 호출의 지연·결과·토큰 사용량을 Actuator/Micrometer로 기록합니다.
 - 자료 저장 → 더미 퀴즈 → 풀이 → 복습 예약을 H2 기반 HTTP 통합 테스트로 검증합니다.
 
 ### 다음 개선 우선순위
 
 1. 사용자 인증과 학습 이력·정답률 대시보드
-2. 실제 pgvector 통합 테스트(Testcontainers)와 GitHub Actions
-3. 문항별 출처 검증 평가셋과 유사도 임계값 보정
-4. Git/Notion 외부 저장의 사용자 승인·권한·감사 이력
+2. 문항별 출처 검증 평가셋과 유사도 임계값 보정
+3. Git/Notion 외부 저장의 사용자 승인·권한·감사 이력

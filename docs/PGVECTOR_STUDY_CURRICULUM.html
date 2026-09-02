@@ -1,0 +1,1277 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Auknowlog의 임베딩, pgvector, HNSW, Testcontainers 통합 테스트를 3회차로 학습하는 커리큘럼">
+  <title>pgvector + Testcontainers 단계별 학습 커리큘럼</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --paper: #f5f7f3;
+      --surface: #ffffff;
+      --surface-soft: #eef3ec;
+      --ink: #17221b;
+      --muted: #5d6b61;
+      --line: #d7dfd7;
+      --brand: #176b4d;
+      --brand-strong: #0f4f39;
+      --accent: #d9f26a;
+      --blue: #245f83;
+      --orange: #9c4b1c;
+      --danger: #9b2c2c;
+      --shadow: 0 18px 50px rgba(27, 54, 37, 0.09);
+      --radius: 22px;
+      --content: 1120px;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background:
+        radial-gradient(circle at 12% 5%, rgba(217, 242, 106, 0.28), transparent 23rem),
+        radial-gradient(circle at 92% 10%, rgba(36, 95, 131, 0.10), transparent 28rem),
+        var(--paper);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Segoe UI", sans-serif;
+      line-height: 1.72;
+      word-break: keep-all;
+    }
+
+    a {
+      color: var(--brand-strong);
+      text-underline-offset: 0.2em;
+    }
+
+    a:hover {
+      color: var(--brand);
+    }
+
+    .skip-link {
+      position: fixed;
+      top: 12px;
+      left: 12px;
+      z-index: 100;
+      padding: 10px 14px;
+      border-radius: 10px;
+      background: var(--ink);
+      color: white;
+      transform: translateY(-160%);
+    }
+
+    .skip-link:focus {
+      transform: translateY(0);
+    }
+
+    .wrap {
+      width: min(calc(100% - 40px), var(--content));
+      margin: 0 auto;
+    }
+
+    .hero {
+      padding: 72px 0 38px;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.7fr);
+      gap: 28px;
+      align-items: stretch;
+    }
+
+    .hero-main,
+    .hero-side,
+    .panel,
+    .session,
+    .glossary {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.93);
+      box-shadow: var(--shadow);
+    }
+
+    .hero-main {
+      padding: clamp(30px, 5vw, 60px);
+      overflow: hidden;
+      position: relative;
+    }
+
+    .hero-main::after {
+      position: absolute;
+      right: -70px;
+      bottom: -95px;
+      width: 250px;
+      height: 250px;
+      border: 38px solid rgba(23, 107, 77, 0.08);
+      border-radius: 50%;
+      content: "";
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 16px;
+      color: var(--brand-strong);
+      font-size: 0.84rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .eyebrow::before {
+      width: 9px;
+      height: 9px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 0 5px rgba(217, 242, 106, 0.23);
+      content: "";
+    }
+
+    h1,
+    h2,
+    h3,
+    h4 {
+      margin-top: 0;
+      line-height: 1.25;
+      letter-spacing: -0.025em;
+    }
+
+    h1 {
+      max-width: 780px;
+      margin-bottom: 20px;
+      font-size: clamp(2.35rem, 6vw, 5rem);
+      letter-spacing: -0.06em;
+    }
+
+    h2 {
+      margin-bottom: 18px;
+      font-size: clamp(1.75rem, 3vw, 2.45rem);
+    }
+
+    h3 {
+      margin-bottom: 12px;
+      font-size: 1.3rem;
+    }
+
+    h4 {
+      margin-bottom: 8px;
+      font-size: 1rem;
+    }
+
+    p {
+      margin: 0 0 16px;
+    }
+
+    .lead {
+      max-width: 720px;
+      color: var(--muted);
+      font-size: clamp(1.02rem, 2vw, 1.2rem);
+    }
+
+    .hero-side {
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: 30px;
+      background: var(--ink);
+      color: white;
+    }
+
+    .hero-side strong {
+      display: block;
+      margin-bottom: 12px;
+      color: var(--accent);
+      font-size: 0.8rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    .hero-side .big {
+      font-size: 2.1rem;
+      font-weight: 850;
+      line-height: 1.2;
+    }
+
+    .hero-side dl {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      gap: 8px 16px;
+      margin: 30px 0 0;
+      font-size: 0.91rem;
+    }
+
+    .hero-side dt {
+      color: #b6c4ba;
+    }
+
+    .hero-side dd {
+      margin: 0;
+      font-weight: 700;
+    }
+
+    .nav-shell {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      border-top: 1px solid rgba(215, 223, 215, 0.8);
+      border-bottom: 1px solid rgba(215, 223, 215, 0.8);
+      background: rgba(245, 247, 243, 0.91);
+      backdrop-filter: blur(14px);
+    }
+
+    .nav {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      padding: 12px 0;
+      scrollbar-width: thin;
+    }
+
+    .nav a {
+      flex: 0 0 auto;
+      padding: 8px 13px;
+      border-radius: 999px;
+      color: var(--muted);
+      font-size: 0.88rem;
+      font-weight: 750;
+      text-decoration: none;
+    }
+
+    .nav a:hover,
+    .nav a:focus-visible {
+      background: var(--surface);
+      color: var(--brand-strong);
+      outline: 1px solid var(--line);
+    }
+
+    main {
+      padding: 52px 0 90px;
+    }
+
+    section {
+      scroll-margin-top: 80px;
+    }
+
+    .section-head {
+      display: grid;
+      grid-template-columns: 90px minmax(0, 1fr);
+      gap: 18px;
+      align-items: start;
+      margin: 0 0 24px;
+    }
+
+    .section-index {
+      color: var(--brand);
+      font-size: 0.8rem;
+      font-weight: 850;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    .section-head p {
+      color: var(--muted);
+    }
+
+    .panel {
+      margin-bottom: 46px;
+      padding: clamp(24px, 4vw, 42px);
+    }
+
+    .summary-grid,
+    .three-grid,
+    .two-grid,
+    .metric-grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .summary-grid,
+    .three-grid {
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+
+    .two-grid {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .metric-grid {
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+    }
+
+    .card,
+    .metric,
+    .note,
+    .question {
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--surface);
+    }
+
+    .card {
+      padding: 22px;
+    }
+
+    .card .label {
+      display: inline-flex;
+      margin-bottom: 20px;
+      padding: 5px 9px;
+      border-radius: 8px;
+      background: var(--surface-soft);
+      color: var(--brand-strong);
+      font-size: 0.75rem;
+      font-weight: 800;
+    }
+
+    .card p,
+    .card li {
+      color: var(--muted);
+      font-size: 0.94rem;
+    }
+
+    .metric {
+      padding: 18px;
+      text-align: center;
+    }
+
+    .metric strong {
+      display: block;
+      color: var(--brand-strong);
+      font-size: 1.6rem;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 0.82rem;
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(0, auto));
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-top: 24px;
+      padding: 24px;
+      border-radius: 18px;
+      background: var(--ink);
+      color: white;
+      overflow-x: auto;
+    }
+
+    .flow-step {
+      min-width: 120px;
+      padding: 14px;
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      border-radius: 12px;
+      background: rgba(255, 255, 255, 0.07);
+      font-size: 0.84rem;
+      font-weight: 750;
+      text-align: center;
+    }
+
+    .flow-step.optional {
+      border-color: rgba(217, 242, 106, 0.55);
+      color: var(--accent);
+    }
+
+    .arrow {
+      color: var(--accent);
+      font-weight: 900;
+    }
+
+    .session {
+      margin-bottom: 40px;
+      overflow: hidden;
+    }
+
+    .session-header {
+      display: grid;
+      grid-template-columns: 98px minmax(0, 1fr);
+      background: var(--ink);
+      color: white;
+    }
+
+    .session-number {
+      display: grid;
+      place-items: center;
+      min-height: 150px;
+      border-right: 1px solid rgba(255, 255, 255, 0.16);
+      color: var(--accent);
+      font-size: 3.25rem;
+      font-weight: 900;
+    }
+
+    .session-title {
+      padding: 30px;
+    }
+
+    .session-title small {
+      color: #b9c8be;
+      font-weight: 750;
+    }
+
+    .session-title h2 {
+      margin: 7px 0 8px;
+    }
+
+    .session-title p {
+      margin: 0;
+      color: #cfdbd2;
+    }
+
+    .session-body {
+      padding: clamp(24px, 4vw, 42px);
+    }
+
+    .concept {
+      margin-top: 28px;
+      padding-top: 28px;
+      border-top: 1px solid var(--line);
+    }
+
+    .concept:first-child {
+      margin-top: 0;
+      padding-top: 0;
+      border-top: 0;
+    }
+
+    .concept-kicker {
+      margin-bottom: 8px;
+      color: var(--brand);
+      font-size: 0.78rem;
+      font-weight: 850;
+      letter-spacing: 0.09em;
+      text-transform: uppercase;
+    }
+
+    code,
+    pre {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+    }
+
+    code {
+      padding: 0.16em 0.4em;
+      border-radius: 6px;
+      background: #e9eee9;
+      color: var(--brand-strong);
+      font-size: 0.9em;
+    }
+
+    pre {
+      margin: 18px 0;
+      padding: 20px;
+      border-radius: 15px;
+      background: #101b15;
+      color: #eaf5ed;
+      font-size: 0.86rem;
+      line-height: 1.65;
+      overflow-x: auto;
+    }
+
+    pre code {
+      padding: 0;
+      background: transparent;
+      color: inherit;
+    }
+
+    .formula {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 96px;
+      margin: 18px 0;
+      padding: 20px;
+      border: 1px dashed #9db1a3;
+      border-radius: 15px;
+      background: var(--surface-soft);
+      color: var(--brand-strong);
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: clamp(1rem, 2.4vw, 1.35rem);
+      font-weight: 700;
+      text-align: center;
+    }
+
+    table {
+      width: 100%;
+      margin: 18px 0;
+      border-collapse: collapse;
+      font-size: 0.92rem;
+    }
+
+    th,
+    td {
+      padding: 13px 14px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: var(--surface-soft);
+      color: var(--brand-strong);
+      font-size: 0.8rem;
+      letter-spacing: 0.02em;
+    }
+
+    ul,
+    ol {
+      margin: 12px 0 18px;
+      padding-left: 1.25rem;
+    }
+
+    li + li {
+      margin-top: 7px;
+    }
+
+    .note {
+      margin: 20px 0;
+      padding: 18px 20px;
+      border-left: 5px solid var(--accent);
+      background: #f7fadf;
+    }
+
+    .note.warning {
+      border-left-color: #df8a3a;
+      background: #fff4e8;
+    }
+
+    .note strong {
+      color: var(--brand-strong);
+    }
+
+    .road-map {
+      display: grid;
+      gap: 0;
+      margin-top: 18px;
+      counter-reset: road;
+    }
+
+    .road-item {
+      display: grid;
+      grid-template-columns: 54px minmax(0, 1fr);
+      min-height: 78px;
+      counter-increment: road;
+    }
+
+    .road-item::before {
+      display: grid;
+      place-items: center;
+      align-self: start;
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      background: var(--brand);
+      color: white;
+      content: counter(road);
+      font-weight: 850;
+      box-shadow: 0 12px 20px rgba(23, 107, 77, 0.18);
+    }
+
+    .road-item:not(:last-child)::after {
+      grid-column: 1;
+      grid-row: 1;
+      justify-self: center;
+      width: 2px;
+      height: calc(100% - 30px);
+      margin-top: 38px;
+      background: var(--line);
+      content: "";
+    }
+
+    .road-item > div {
+      grid-column: 2;
+      grid-row: 1;
+      padding: 2px 0 24px;
+    }
+
+    .question {
+      padding: 20px;
+    }
+
+    .question strong {
+      display: block;
+      margin-bottom: 8px;
+      color: var(--brand-strong);
+    }
+
+    .question p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.93rem;
+    }
+
+    .glossary {
+      padding: clamp(24px, 4vw, 42px);
+    }
+
+    .glossary dl {
+      display: grid;
+      grid-template-columns: 160px minmax(0, 1fr);
+      gap: 0;
+      margin: 0;
+    }
+
+    .glossary dt,
+    .glossary dd {
+      padding: 15px 0;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .glossary dt {
+      color: var(--brand-strong);
+      font-weight: 850;
+    }
+
+    .glossary dd {
+      margin: 0;
+      color: var(--muted);
+    }
+
+    footer {
+      padding: 34px 0 50px;
+      border-top: 1px solid var(--line);
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+
+    .footer-grid {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      align-items: flex-start;
+    }
+
+    .sources {
+      max-width: 700px;
+    }
+
+    @media (max-width: 860px) {
+      .hero-grid,
+      .summary-grid,
+      .three-grid,
+      .metric-grid {
+        grid-template-columns: 1fr 1fr;
+      }
+
+      .hero-main {
+        grid-column: 1 / -1;
+      }
+
+      .hero-side {
+        grid-column: 1 / -1;
+      }
+
+      .flow {
+        justify-content: start;
+      }
+    }
+
+    @media (max-width: 620px) {
+      .wrap {
+        width: min(calc(100% - 24px), var(--content));
+      }
+
+      .hero {
+        padding-top: 28px;
+      }
+
+      .hero-grid,
+      .summary-grid,
+      .three-grid,
+      .two-grid,
+      .metric-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .section-head {
+        grid-template-columns: 1fr;
+        gap: 4px;
+      }
+
+      .session-header {
+        grid-template-columns: 68px minmax(0, 1fr);
+      }
+
+      .session-number {
+        min-height: 130px;
+        font-size: 2.3rem;
+      }
+
+      .session-title {
+        padding: 22px;
+      }
+
+      .glossary dl {
+        grid-template-columns: 1fr;
+      }
+
+      .glossary dt {
+        padding-bottom: 2px;
+        border-bottom: 0;
+      }
+
+      .glossary dd {
+        padding-top: 2px;
+      }
+
+      .footer-grid {
+        display: block;
+      }
+    }
+
+    @media print {
+      :root {
+        --paper: white;
+        --shadow: none;
+      }
+
+      body {
+        background: white;
+        font-size: 10.5pt;
+      }
+
+      .hero {
+        padding-top: 0;
+      }
+
+      .nav-shell {
+        display: none;
+      }
+
+      .hero-main,
+      .hero-side,
+      .panel,
+      .session,
+      .glossary {
+        box-shadow: none;
+      }
+
+      .session,
+      .panel,
+      .question,
+      pre,
+      table {
+        break-inside: avoid;
+      }
+
+      a {
+        color: inherit;
+        text-decoration: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">본문으로 이동</a>
+
+  <header class="hero">
+    <div class="wrap hero-grid">
+      <div class="hero-main">
+        <p class="eyebrow">Auknowlog Engineering Study</p>
+        <h1>pgvector +<br>Testcontainers</h1>
+        <p class="lead">
+          임베딩의 숫자 표현부터 HNSW의 탐색 구조, 실제 PostgreSQL 통합 테스트와 장애 폴백까지
+          한 흐름으로 이해하는 3회차 백엔드 학습 커리큘럼입니다.
+        </p>
+      </div>
+      <aside class="hero-side" aria-label="문서 요약">
+        <div>
+          <strong>Learning Path</strong>
+          <div class="big">개념 → 검색 → 검증</div>
+        </div>
+        <dl>
+          <dt>대상</dt><dd>Java/Spring 백엔드 개발자</dd>
+          <dt>구성</dt><dd>3회차 참고 지식</dd>
+          <dt>프로젝트</dt><dd>Auknowlog</dd>
+          <dt>작성 기준</dt><dd>2026-09-02</dd>
+          <dt>API 호출</dt><dd>없음</dd>
+        </dl>
+      </aside>
+    </div>
+  </header>
+
+  <div class="nav-shell">
+    <nav class="wrap nav" aria-label="문서 목차">
+      <a href="#overview">전체 구조</a>
+      <a href="#session-1">1. 임베딩</a>
+      <a href="#session-2">2. pgvector·HNSW</a>
+      <a href="#session-3">3. Testcontainers</a>
+      <a href="#interview">면접 정리</a>
+      <a href="#next">다음 단계</a>
+      <a href="#glossary">용어집</a>
+    </nav>
+  </div>
+
+  <main id="main" class="wrap">
+    <section id="overview" class="panel">
+      <div class="section-head">
+        <div class="section-index">Overview</div>
+        <div>
+          <h2>무엇을 해결하는 구조인가</h2>
+          <p>표현은 다르지만 의미가 같은 퀴즈가 반복 생성되는 문제를 저비용의 정확 검사와 선택적 의미 검사로 나누어 해결합니다.</p>
+        </div>
+      </div>
+
+      <div class="summary-grid">
+        <article class="card">
+          <span class="label">1회차 · 표현</span>
+          <h3>텍스트를 숫자로 바꾸기</h3>
+          <p>문장이 512개 실수로 표현되는 이유와 코사인 유사도가 문장 의미를 비교하는 방식을 이해합니다.</p>
+        </article>
+        <article class="card">
+          <span class="label">2회차 · 검색</span>
+          <h3>가까운 벡터 찾기</h3>
+          <p>PostgreSQL의 pgvector와 HNSW가 많은 문제 벡터에서 유사 후보를 찾는 원리와 비용을 학습합니다.</p>
+        </article>
+        <article class="card">
+          <span class="label">3회차 · 검증</span>
+          <h3>실제 DB에서 증명하기</h3>
+          <p>H2가 검증하지 못하는 확장 타입과 인덱스를 Testcontainers의 실제 PostgreSQL에서 자동 검증합니다.</p>
+        </article>
+      </div>
+
+      <div class="flow" aria-label="중복 방지 처리 흐름">
+        <div class="flow-step">GPT 후보 문항</div>
+        <div class="arrow">→</div>
+        <div class="flow-step">SHA-256<br>정확 중복 검사</div>
+        <div class="arrow">→</div>
+        <div class="flow-step optional">임베딩 +<br>pgvector 검사</div>
+        <div class="arrow">→</div>
+        <div class="flow-step">문항·벡터 저장</div>
+      </div>
+
+      <div class="note">
+        <strong>중요한 구분:</strong> pgvector 확장과 HNSW 인덱스는 DB 마이그레이션으로 항상 구성되고,
+        OpenAI 임베딩 API 호출은 현재 기본 활성입니다. 다만 화면의 기본 모드는 비용 없는 더미 생성이며,
+        운영자는 환경 변수로 임베딩만 별도 차단할 수 있습니다.
+      </div>
+    </section>
+
+    <section id="session-1" class="session">
+      <header class="session-header">
+        <div class="session-number">01</div>
+        <div class="session-title">
+          <small>Representation</small>
+          <h2>임베딩과 512차원 벡터</h2>
+          <p>텍스트가 비교 가능한 숫자 공간으로 바뀌는 과정과 정확 중복·의미 중복의 역할을 구분합니다.</p>
+        </div>
+      </header>
+
+      <div class="session-body">
+        <article class="concept">
+          <p class="concept-kicker">Learning goal</p>
+          <h3>이번 회차가 끝나면 설명할 수 있어야 하는 것</h3>
+          <ul>
+            <li>임베딩이 생성형 답변이 아니라 텍스트의 수치 표현이라는 점</li>
+            <li>512차원이 숫자 512개라는 의미와 차원 축소의 trade-off</li>
+            <li>코사인 유사도·내적·유클리드 거리의 차이</li>
+            <li>SHA-256 검사와 의미 검사를 한 계층으로 합치지 않은 이유</li>
+            <li>기본 활성 정책과 환경 변수 차단 스위치가 각각 필요한 이유</li>
+          </ul>
+        </article>
+
+        <article class="concept">
+          <p class="concept-kicker">Vector basics</p>
+          <h3>512차원 벡터는 숫자 512개의 좌표다</h3>
+          <p>
+            임베딩 모델은 문장을 사람이 읽는 문자열이 아니라, 의미가 가까운 문장끼리 가까운 위치에 놓이도록 숫자 배열로 변환합니다.
+            각 차원을 “Java 정도”처럼 단독으로 해석하기보다 512개 값 전체의 방향과 상대적 위치를 봅니다.
+          </p>
+          <pre><code>"JVM의 역할은 무엇인가요?"
+→ [0.012, -0.037, 0.081, 0.004, ..., -0.022]  // 총 512개
+
+"JVM이 Java에서 하는 일은?"
+→ [0.010, -0.034, 0.079, 0.008, ..., -0.019]</code></pre>
+          <div class="two-grid">
+            <div class="card">
+              <h4>차원이 커질 때</h4>
+              <ul>
+                <li>의미 정보를 더 보존할 가능성</li>
+                <li>저장·전송·검색 비용 증가</li>
+                <li>인덱스 메모리 증가</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4>차원이 작아질 때</h4>
+              <ul>
+                <li>벡터 저장 공간 감소</li>
+                <li>거리 계산량 감소</li>
+                <li>구분 정보 손실 가능성</li>
+              </ul>
+            </div>
+          </div>
+          <p>
+            이 프로젝트의 512차원은 정답이 아니라 초기 운영값입니다. 실제 중복·비중복 문항 쌍으로 품질을 측정한 뒤 유지하거나 바꿔야 합니다.
+          </p>
+        </article>
+
+        <article class="concept">
+          <p class="concept-kicker">Similarity</p>
+          <h3>코사인 유사도는 크기보다 방향을 본다</h3>
+          <div class="formula">cosine similarity(A, B) = (A · B) ÷ (‖A‖ × ‖B‖)</div>
+          <table>
+            <thead>
+              <tr><th>방식</th><th>비교 기준</th><th>이 프로젝트 관점</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>코사인 유사도</td><td>벡터 사이의 방향</td><td>문장 길이보다 의미 방향 비교에 적합</td></tr>
+              <tr><td>내적</td><td>방향과 크기의 결합</td><td>정규화 여부에 따라 크기의 영향이 생김</td></tr>
+              <tr><td>유클리드 거리</td><td>좌표 사이 직선거리</td><td>벡터 크기 차이까지 거리로 반영</td></tr>
+            </tbody>
+          </table>
+          <p>pgvector의 <code>&lt;=&gt;</code>는 코사인 거리이므로 현재 SQL은 <code>1 - distance</code>로 유사도를 계산합니다.</p>
+          <pre><code>SELECT question_history_id,
+       1 - (embedding &lt;=&gt; CAST(? AS vector)) AS similarity
+FROM question_embedding
+WHERE 1 - (embedding &lt;=&gt; CAST(? AS vector)) &gt;= 0.90
+ORDER BY embedding &lt;=&gt; CAST(? AS vector)
+LIMIT 1;</code></pre>
+        </article>
+
+        <article class="concept">
+          <p class="concept-kicker">Layered protection</p>
+          <h3>정확 해시와 의미 벡터는 경쟁 관계가 아니다</h3>
+          <table>
+            <thead>
+              <tr><th>계층</th><th>잘하는 일</th><th>놓치는 경우</th><th>외부 비용</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>SHA-256</td><td>공백·구두점 차이 정도의 동일 문장</td><td>표현을 바꾼 같은 의미</td><td>없음</td></tr>
+              <tr><td>임베딩 + pgvector</td><td>표현이 다른 의미 중복 후보</td><td>임계값·모델 품질에 따른 오판</td><td>임베딩 API 입력 토큰</td></tr>
+            </tbody>
+          </table>
+          <div class="note warning">
+            임베딩 장애를 “중복 검사를 전부 못 한다”로 처리하지 않습니다. 외부 API가 실패해도 SHA-256 정확 검사는 계속 적용하고,
+            퀴즈 생성의 핵심 기능을 유지합니다.
+          </div>
+        </article>
+
+        <article class="concept">
+          <p class="concept-kicker">Cost boundary</p>
+          <h3>비용은 pgvector가 아니라 임베딩 API에서 발생한다</h3>
+          <div class="metric-grid">
+            <div class="metric"><strong>512</strong><span>벡터 차원</span></div>
+            <div class="metric"><strong>0.90</strong><span>초기 중복 임계값</span></div>
+            <div class="metric"><strong>약 2KB</strong><span>벡터 1개 원시 크기</span></div>
+            <div class="metric"><strong>기본 ON</strong><span>실제 AI 모드의 임베딩</span></div>
+          </div>
+          <p>
+            pgvector는 로컬 PostgreSQL의 CPU·메모리·디스크를 사용할 뿐 호출당 요금이 없습니다.
+            반면 임베딩 모델은 API로 전달한 입력 토큰에 따라 과금됩니다. 짧은 문제 문장에서는 일반적으로 매우 작지만,
+            비용·지연·rate limit·외부 장애 가능성이 있으므로 화면은 더미 모드를 기본으로 두고,
+            운영 중에는 환경 변수로 임베딩을 즉시 끌 수 있도록 설계했습니다.
+          </p>
+        </article>
+      </div>
+    </section>
+
+    <section id="session-2" class="session">
+      <header class="session-header">
+        <div class="session-number">02</div>
+        <div class="session-title">
+          <small>Search</small>
+          <h2>PostgreSQL pgvector와 HNSW</h2>
+          <p>벡터를 관계형 원본 데이터와 함께 저장하고, 근사 최근접 이웃 검색으로 빠르게 후보를 찾는 구조를 이해합니다.</p>
+        </div>
+      </header>
+
+      <div class="session-body">
+        <article class="concept">
+          <p class="concept-kicker">Learning goal</p>
+          <h3>이번 회차가 끝나면 설명할 수 있어야 하는 것</h3>
+          <ul>
+            <li>별도 벡터 DB 대신 PostgreSQL + pgvector가 적합한 조건</li>
+            <li><code>vector(512)</code>, <code>&lt;=&gt;</code>, <code>vector_cosine_ops</code>의 역할</li>
+            <li>완전 탐색과 근사 검색의 정확도·속도 차이</li>
+            <li>HNSW의 다층 그래프 탐색 원리</li>
+            <li><code>m</code>, <code>ef_construction</code>, <code>ef_search</code> 조정 방향</li>
+          </ul>
+        </article>
+
+        <article class="concept">
+          <p class="concept-kicker">Why pgvector</p>
+          <h3>원본 문제와 벡터의 정합성을 한 DB에서 관리한다</h3>
+          <div class="two-grid">
+            <div class="card">
+              <h4>PostgreSQL + pgvector</h4>
+              <ul>
+                <li>문제 이력과 FK로 직접 연결</li>
+                <li>한 가지 백업·복구 체계</li>
+                <li>로컬·포트폴리오 운영 부담이 작음</li>
+                <li>관계형 조건과 벡터 검색을 조합 가능</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4>별도 벡터 DB가 필요해지는 시점</h4>
+              <ul>
+                <li>수천만~수억 벡터 규모</li>
+                <li>벡터 검색의 독립 확장 필요</li>
+                <li>다중 테넌트 격리·분산 샤딩 요구</li>
+                <li>전용 필터·하이브리드 검색 기능 필요</li>
+              </ul>
+            </div>
+          </div>
+          <p>
+            Auknowlog는 대규모 검색 제품보다 “문제 이력에 의미 중복 검사를 붙이는 학습 서비스”에 가깝습니다.
+            이 규모에서 별도 검색 클러스터는 정합성·배포·모니터링 부담이 더 클 수 있습니다.
+          </p>
+        </article>
+
+        <article class="concept">
+          <p class="concept-kicker">HNSW mental model</p>
+          <h3>상위 계층은 고속도로, 하위 계층은 골목길</h3>
+          <div class="road-map">
+            <div class="road-item"><div><h4>희소한 상위 그래프에서 시작</h4><p>전체 후보를 보지 않고 먼 구간을 크게 건너뛰며 질의 벡터와 가까운 영역으로 이동합니다.</p></div></div>
+            <div class="road-item"><div><h4>현재 위치의 이웃과 비교</h4><p>더 가까운 이웃이 있으면 이동하고, 더 나은 후보가 없을 때 한 계층 아래로 내려갑니다.</p></div></div>
+            <div class="road-item"><div><h4>조밀한 하위 그래프에서 정밀 탐색</h4><p>후보 집합을 유지하며 가까운 벡터를 찾고 최종 Top-K를 반환합니다.</p></div></div>
+          </div>
+          <div class="note">
+            HNSW는 근사 검색입니다. 완전 탐색보다 빠른 대신 항상 동일한 결과를 보장하지 않으며,
+            검색 후보 폭을 넓히면 재현율은 올라가지만 지연도 증가합니다.
+          </div>
+        </article>
+
+        <article class="concept">
+          <p class="concept-kicker">Tuning</p>
+          <h3>세 가지 핵심 파라미터</h3>
+          <table>
+            <thead>
+              <tr><th>파라미터</th><th>적용 시점</th><th>높이면</th><th>대가</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>m</code></td><td>인덱스 생성</td><td>노드당 연결 수 증가, 탐색 경로 풍부</td><td>메모리·인덱스 크기·삽입 비용 증가</td></tr>
+              <tr><td><code>ef_construction</code></td><td>인덱스 생성</td><td>더 좋은 그래프 품질과 재현율 가능</td><td>생성·삽입 시간 증가</td></tr>
+              <tr><td><code>ef_search</code></td><td>검색</td><td>더 많은 후보를 탐색해 재현율 증가</td><td>쿼리 지연·CPU 증가</td></tr>
+            </tbody>
+          </table>
+          <p>
+            현재 프로젝트는 pgvector 기본값을 사용합니다. 데이터가 적은 상황에서 튜닝값을 먼저 바꾸는 것은 근거가 약합니다.
+            실제 문항 수와 p95 지연, 중복 판정 재현율을 함께 측정한 뒤 조정해야 합니다.
+          </p>
+        </article>
+
+        <article class="concept">
+          <p class="concept-kicker">Data lifecycle</p>
+          <h3>모델·차원·기존 데이터의 생명주기를 함께 설계한다</h3>
+          <ul>
+            <li>임베딩을 켠 이후의 신규 문제는 저장 시 벡터가 함께 색인됩니다.</li>
+            <li>비활성 기간에 저장된 기존 문제는 자동으로 백필되지 않습니다.</li>
+            <li>512차원을 바꾸면 DB 컬럼 타입과 API 설정을 같은 마이그레이션에서 변경해야 합니다.</li>
+            <li>임베딩 모델이 바뀌면 서로 다른 모델의 벡터를 같은 임계값으로 비교할지 정책이 필요합니다.</li>
+            <li>백필은 API rate limit, 비용, 재시작, 진행률과 멱등성을 고려한 배치 작업이어야 합니다.</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="session-3" class="session">
+      <header class="session-header">
+        <div class="session-number">03</div>
+        <div class="session-title">
+          <small>Verification</small>
+          <h2>Testcontainers 실제 DB 통합 테스트</h2>
+          <p>“도입했다”가 아니라 운영과 같은 DB 타입·마이그레이션·검색 SQL이 실제로 동작함을 자동 테스트로 증명합니다.</p>
+        </div>
+      </header>
+
+      <div class="session-body">
+        <article class="concept">
+          <p class="concept-kicker">Learning goal</p>
+          <h3>이번 회차가 끝나면 설명할 수 있어야 하는 것</h3>
+          <ul>
+            <li>H2의 PostgreSQL 호환 모드로 pgvector 전용 기능을 검증할 수 없는 이유</li>
+            <li>Testcontainers가 고정 로컬 DB보다 재현성과 격리를 높이는 방식</li>
+            <li>Flyway V1~V3와 실제 Repository SQL의 검증 경계</li>
+            <li>임베딩 API 없이 결정적인 벡터 테스트를 만드는 이유</li>
+            <li>단위 테스트와 인프라 통합 테스트를 분리하는 이유</li>
+          </ul>
+        </article>
+
+        <article class="concept">
+          <p class="concept-kicker">Why not H2</p>
+          <h3>SQL 문법 호환과 실제 DB 기능 호환은 다르다</h3>
+          <table>
+            <thead>
+              <tr><th>검증 대상</th><th>H2</th><th>실제 pgvector 컨테이너</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>일반 테이블·FK·유니크 제약</td><td>가능</td><td>가능</td></tr>
+              <tr><td><code>CREATE EXTENSION vector</code></td><td>불가</td><td>가능</td></tr>
+              <tr><td><code>vector(512)</code> 타입</td><td>불가</td><td>가능</td></tr>
+              <tr><td><code>&lt;=&gt;</code> 코사인 거리</td><td>불가</td><td>가능</td></tr>
+              <tr><td><code>USING hnsw</code></td><td>불가</td><td>가능</td></tr>
+            </tbody>
+          </table>
+          <p>
+            H2는 빠른 도메인 테스트에 계속 사용합니다. PostgreSQL 전용 기능만 느리지만 실제와 동일한 통합 테스트로 분리하는 것이 목적입니다.
+          </p>
+        </article>
+
+        <article class="concept">
+          <p class="concept-kicker">Container lifecycle</p>
+          <h3>테스트가 직접 일회용 DB를 준비한다</h3>
+          <div class="road-map">
+            <div class="road-item"><div><h4>pgvector 이미지 시작</h4><p><code>pgvector/pgvector:0.8.6-pg16-bookworm</code>을 임의 포트에 실행합니다.</p></div></div>
+            <div class="road-item"><div><h4>Flyway V1~V3 적용</h4><p>완전히 빈 DB에서 실제 운영과 같은 순서로 스키마를 생성합니다.</p></div></div>
+            <div class="road-item"><div><h4>DB 카탈로그 검증</h4><p>vector 확장, <code>vector(512)</code>, HNSW와 <code>vector_cosine_ops</code>를 확인합니다.</p></div></div>
+            <div class="road-item"><div><h4>Repository SQL 실행</h4><p>실제 <code>CAST(? AS vector)</code>, upsert, 코사인 검색과 0.90 임계값을 실행합니다.</p></div></div>
+            <div class="road-item"><div><h4>컨테이너 제거</h4><p>개발자의 5432/5433 포트와 기존 데이터에 영향을 주지 않고 종료합니다.</p></div></div>
+          </div>
+        </article>
+
+        <article class="concept">
+          <p class="concept-kicker">Deterministic fixture</p>
+          <h3>실제 API 대신 결과를 예측할 수 있는 고정 벡터를 쓴다</h3>
+          <pre><code>기존 벡터: [1.00, 0.00, 0, 0, ...]
+유사 벡터: [0.99, 0.10, 0, 0, ...]  // cosine ≈ 0.995 → 차단
+다른 벡터: [0.00, 1.00, 0, 0, ...]  // cosine = 0     → 통과</code></pre>
+          <p>
+            이 테스트는 외부 모델의 응답 변화나 API 키, 네트워크, 요금에 영향을 받지 않습니다.
+            대신 DB 타입·연산자·SQL·임계값 로직을 동일한 입력으로 반복 검증합니다.
+          </p>
+        </article>
+
+        <article class="concept">
+          <p class="concept-kicker">Test pyramid</p>
+          <h3>빠른 테스트와 실제 인프라 테스트를 분리한다</h3>
+          <table>
+            <thead>
+              <tr><th>명령</th><th>역할</th><th>Docker</th><th>현재 결과</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>./gradlew test</code></td><td>단위·H2 도메인 검증</td><td>불필요</td><td>12개 통과</td></tr>
+              <tr><td><code>./gradlew integrationTest</code></td><td>실제 PostgreSQL + pgvector</td><td>필요</td><td>2개 통과</td></tr>
+              <tr><td><code>./gradlew check</code></td><td>위 두 계층 전체</td><td>필요</td><td>전체 14개 통과</td></tr>
+            </tbody>
+          </table>
+          <p>GitHub Actions는 백엔드 변경 시 <code>./gradlew check --no-daemon</code>을 실행하도록 구성되어 있습니다.</p>
+        </article>
+
+        <article class="concept">
+          <p class="concept-kicker">Honest boundary</p>
+          <h3>이 테스트가 증명하는 것과 증명하지 않는 것</h3>
+          <div class="two-grid">
+            <div class="card">
+              <h4>증명하는 것</h4>
+              <ul>
+                <li>Flyway V3가 실제 DB에서 적용됨</li>
+                <li>512차원 벡터와 HNSW 생성</li>
+                <li>Repository 코사인 SQL의 실행 가능성</li>
+                <li>0.90 임계값 분기</li>
+                <li>임베딩 장애 시 SHA-256 폴백</li>
+              </ul>
+            </div>
+            <div class="card">
+              <h4>아직 증명하지 않는 것</h4>
+              <ul>
+                <li>한국어 임베딩의 실제 의미 품질</li>
+                <li>0.90의 최적 정밀도·재현율</li>
+                <li>대규모 HNSW p95 성능</li>
+                <li>실제 API 네트워크·한도·과금</li>
+                <li>모델 변경 시 벡터 호환성</li>
+              </ul>
+            </div>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <section id="interview" class="panel">
+      <div class="section-head">
+        <div class="section-index">Interview</div>
+        <div>
+          <h2>면접에서 연결할 질문</h2>
+          <p>기술 이름보다 문제·선택·trade-off·검증 순서로 답하는 것이 핵심입니다.</p>
+        </div>
+      </div>
+
+      <div class="two-grid">
+        <article class="question">
+          <strong>Q. 왜 Elasticsearch 대신 pgvector를 선택했나요?</strong>
+          <p>문제 원본과 의미 벡터의 이중 쓰기 정합성을 줄이고, 현재 규모에서 별도 검색 클러스터의 운영 부담보다 PostgreSQL 통합의 이점이 크다고 판단했다고 답합니다.</p>
+        </article>
+        <article class="question">
+          <strong>Q. 정확 해시가 있는데 임베딩이 필요한가요?</strong>
+          <p>해시는 동일 문자열 계열에 강하고 임베딩은 표현이 다른 의미 중복 후보를 보완하므로, 저비용 계층을 먼저 적용한 뒤 선택 기능을 추가했다고 설명합니다.</p>
+        </article>
+        <article class="question">
+          <strong>Q. HNSW가 항상 정확한 결과를 반환하나요?</strong>
+          <p>근사 검색이라 완전 탐색과 같은 재현율을 보장하지 않으며, 후보 폭과 검색 지연을 교환합니다. 실제 데이터로 recall과 p95를 함께 측정해야 합니다.</p>
+        </article>
+        <article class="question">
+          <strong>Q. 왜 H2 테스트만으로 충분하지 않나요?</strong>
+          <p>호환 모드는 PostgreSQL 확장 타입·연산자·HNSW를 구현하지 않으므로, 빠른 테스트는 유지하고 해당 경계만 Testcontainers의 실제 DB로 검증했다고 답합니다.</p>
+        </article>
+        <article class="question">
+          <strong>Q. 임베딩 서비스가 장애 나면 어떻게 되나요?</strong>
+          <p>의미 중복 검사는 건너뛰되 SHA-256 정확 중복 제약과 퀴즈 생성은 계속 동작합니다. 품질 저하는 허용하지만 핵심 가용성은 유지하는 선택입니다.</p>
+        </article>
+        <article class="question">
+          <strong>Q. 0.90과 512는 어떤 근거인가요?</strong>
+          <p>저장·검색 비용을 고려한 초기값이며 최종 근거가 아니라고 명확히 합니다. 라벨링한 문항 쌍으로 임계값과 차원을 비교 평가하는 것이 다음 단계입니다.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="next" class="panel">
+      <div class="section-head">
+        <div class="section-index">Next</div>
+        <div>
+          <h2>학습 이후 프로젝트 개선 순서</h2>
+          <p>새 기술을 추가하기보다 현재 선택의 근거를 데이터로 보강하는 순서입니다.</p>
+        </div>
+      </div>
+
+      <div class="road-map">
+        <div class="road-item"><div><h4>중복 평가셋 구축</h4><p>중복·비중복 문항 쌍을 사람이 라벨링하고 현재 0.90의 정밀도·재현율을 측정합니다.</p></div></div>
+        <div class="road-item"><div><h4>기존 문제 백필</h4><p>임베딩이 없는 문제를 배치로 색인하고 진행률·재시작·rate limit·멱등성을 설계합니다.</p></div></div>
+        <div class="road-item"><div><h4>HNSW 성능 실험</h4><p>문항 규모별 순차 탐색과 HNSW의 실행 계획, p50·p95, recall, 인덱스 크기를 비교합니다.</p></div></div>
+        <div class="road-item"><div><h4>운영 관측 추가</h4><p>임베딩 호출 수·토큰·실패율·지연과 중복 차단율을 메트릭으로 연결합니다.</p></div></div>
+        <div class="road-item"><div><h4>포트폴리오 수치화</h4><p>“pgvector 도입” 대신 중복률 변화, 검색 지연, 장애 폴백 성공률을 결과로 제시합니다.</p></div></div>
+      </div>
+    </section>
+
+    <section id="glossary" class="glossary">
+      <div class="section-head">
+        <div class="section-index">Glossary</div>
+        <div><h2>핵심 용어</h2></div>
+      </div>
+      <dl>
+        <dt>Embedding</dt><dd>텍스트·이미지 같은 대상을 의미 관계가 보존되도록 숫자 벡터로 표현한 것</dd>
+        <dt>Dimension</dt><dd>벡터를 구성하는 숫자 축의 개수. 이 프로젝트는 512개</dd>
+        <dt>Cosine distance</dt><dd>두 벡터 방향 차이를 거리로 표현한 값. pgvector 연산자는 <code>&lt;=&gt;</code></dd>
+        <dt>ANN</dt><dd>Approximate Nearest Neighbor. 정확도를 일부 교환해 가까운 벡터를 빠르게 찾는 방식</dd>
+        <dt>HNSW</dt><dd>벡터를 다층 근접 그래프로 연결해 탐색하는 ANN 인덱스</dd>
+        <dt>pgvector</dt><dd>PostgreSQL에 벡터 타입·거리 연산·ANN 인덱스를 추가하는 확장</dd>
+        <dt>Testcontainers</dt><dd>테스트 중 실제 DB·브로커 같은 의존성을 일회용 컨테이너로 제공하는 라이브러리</dd>
+        <dt>Flyway</dt><dd>SQL 마이그레이션 파일을 버전 순서로 적용하고 이력을 관리하는 DB 변경 도구</dd>
+        <dt>Fallback</dt><dd>선택 기능이 실패했을 때 핵심 기능을 유지하기 위한 대체 처리 경로</dd>
+      </dl>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap footer-grid">
+      <div>
+        <strong>Auknowlog · Engineering Study Note</strong><br>
+        이 문서는 브라우저에서 열거나 인쇄 메뉴를 통해 PDF로 저장할 수 있습니다.
+      </div>
+      <div class="sources">
+        참고:
+        <a href="https://github.com/pgvector/pgvector">pgvector 공식 문서</a> ·
+        <a href="https://java.testcontainers.org/modules/databases/postgres/">Testcontainers PostgreSQL 문서</a> ·
+        <a href="https://developers.openai.com/api/docs/models/text-embedding-3-small">OpenAI text-embedding-3-small</a> ·
+        <a href="PGVECTOR_INTEGRATION_TEST.md">프로젝트 통합 테스트 상세 문서</a>
+      </div>
+    </div>
+  </footer>
+</body>
+</html>

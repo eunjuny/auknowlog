@@ -1,0 +1,1010 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Auknowlog의 퀴즈 생성 요청부터 중복 필터링, 저장, 사용자 화면 표시까지의 전체 처리 흐름">
+  <title>Auknowlog 퀴즈 생성·중복 필터링 흐름</title>
+  <style>
+    :root {
+      --ink: #17211b;
+      --muted: #5f6b63;
+      --paper: #f6f7f1;
+      --card: #ffffff;
+      --line: #dce2d8;
+      --green: #176448;
+      --green-soft: #dff2e8;
+      --lime: #c8f169;
+      --yellow: #fff2b5;
+      --orange: #f59e5b;
+      --orange-soft: #fff0e5;
+      --red: #c94b45;
+      --red-soft: #fdebea;
+      --blue: #3264a8;
+      --blue-soft: #e8f0fb;
+      --shadow: 0 18px 50px rgba(23, 33, 27, 0.08);
+      --radius: 22px;
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 76px;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 8% 4%, rgba(200, 241, 105, 0.28), transparent 24rem),
+        linear-gradient(180deg, #fbfcf8 0%, var(--paper) 100%);
+      font-family: Pretendard, "Noto Sans KR", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.65;
+      word-break: keep-all;
+    }
+
+    a { color: inherit; }
+    code { font-family: "SFMono-Regular", Consolas, monospace; }
+
+    .skip-link {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      z-index: 100;
+      padding: 10px 14px;
+      border-radius: 10px;
+      color: #fff;
+      background: var(--ink);
+      transform: translateY(-160%);
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .wrap {
+      width: min(1180px, calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    .hero { padding: 72px 0 46px; }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.7fr);
+      gap: 24px;
+    }
+
+    .hero-main,
+    .hero-side,
+    .panel {
+      border: 1px solid rgba(23, 33, 27, 0.1);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+    }
+
+    .hero-main {
+      min-height: 390px;
+      padding: 54px;
+      overflow: hidden;
+      position: relative;
+      background: rgba(255, 255, 255, 0.92);
+    }
+
+    .hero-main::after {
+      content: "";
+      position: absolute;
+      width: 290px;
+      height: 290px;
+      right: -90px;
+      bottom: -130px;
+      border: 48px solid rgba(23, 100, 72, 0.07);
+      border-radius: 50%;
+    }
+
+    .eyebrow,
+    .section-kicker {
+      margin: 0 0 16px;
+      color: var(--green);
+      font-size: 0.78rem;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 760px;
+      margin: 0;
+      font-size: clamp(2.5rem, 6vw, 5.2rem);
+      line-height: 1.02;
+      letter-spacing: -0.065em;
+    }
+
+    .hero-copy {
+      max-width: 680px;
+      margin: 28px 0 0;
+      color: var(--muted);
+      font-size: 1.08rem;
+    }
+
+    .hero-side {
+      padding: 34px;
+      color: #fff;
+      background: var(--ink);
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .hero-side strong {
+      display: block;
+      margin-bottom: 22px;
+      color: var(--lime);
+      font-size: 0.76rem;
+      letter-spacing: 0.13em;
+      text-transform: uppercase;
+    }
+
+    .hero-side h2 {
+      margin: 0;
+      font-size: 2rem;
+      line-height: 1.22;
+      letter-spacing: -0.04em;
+    }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 40px;
+    }
+
+    .metric {
+      padding: 15px;
+      border: 1px solid rgba(255, 255, 255, 0.14);
+      border-radius: 14px;
+      background: rgba(255, 255, 255, 0.05);
+    }
+
+    .metric b {
+      display: block;
+      color: var(--lime);
+      font-size: 1.45rem;
+      line-height: 1.1;
+    }
+
+    .metric span {
+      color: #c9d0cb;
+      font-size: 0.78rem;
+    }
+
+    .toc {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      border-top: 1px solid rgba(23, 33, 27, 0.08);
+      border-bottom: 1px solid rgba(23, 33, 27, 0.1);
+      background: rgba(246, 247, 241, 0.92);
+      backdrop-filter: blur(14px);
+    }
+
+    .toc .wrap {
+      display: flex;
+      gap: 8px;
+      padding: 12px 0;
+      overflow-x: auto;
+      scrollbar-width: thin;
+    }
+
+    .toc a {
+      flex: 0 0 auto;
+      padding: 8px 12px;
+      border-radius: 999px;
+      color: #465249;
+      font-size: 0.84rem;
+      font-weight: 700;
+      text-decoration: none;
+    }
+
+    .toc a:hover,
+    .toc a:focus-visible {
+      color: var(--green);
+      background: var(--green-soft);
+      outline: none;
+    }
+
+    main { padding: 44px 0 88px; }
+
+    section { margin-top: 28px; }
+
+    .panel {
+      padding: 38px;
+      background: rgba(255, 255, 255, 0.9);
+    }
+
+    .section-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(220px, 0.4fr);
+      gap: 28px;
+      align-items: end;
+      margin-bottom: 28px;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: clamp(1.8rem, 4vw, 3rem);
+      line-height: 1.12;
+      letter-spacing: -0.045em;
+    }
+
+    h3 {
+      margin: 0 0 8px;
+      font-size: 1.12rem;
+      letter-spacing: -0.02em;
+    }
+
+    h4 { margin: 0 0 6px; }
+
+    p { margin: 0; }
+
+    .section-summary {
+      color: var(--muted);
+      font-size: 0.94rem;
+    }
+
+    .flow-strip {
+      display: grid;
+      grid-template-columns: repeat(7, minmax(120px, 1fr));
+      gap: 10px;
+      overflow-x: auto;
+      padding: 4px 2px 14px;
+    }
+
+    .flow-node {
+      min-width: 128px;
+      min-height: 126px;
+      padding: 18px 16px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      position: relative;
+      background: var(--card);
+    }
+
+    .flow-node:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      right: -15px;
+      top: 45%;
+      z-index: 2;
+      width: 20px;
+      color: var(--green);
+      font-weight: 900;
+      text-align: center;
+    }
+
+    .flow-node .num,
+    .step-num {
+      display: inline-grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      margin-bottom: 12px;
+      border-radius: 9px;
+      color: #fff;
+      background: var(--green);
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+
+    .flow-node small {
+      display: block;
+      margin-top: 7px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    .lane-flow {
+      display: grid;
+      grid-template-columns: 132px minmax(0, 1fr);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      overflow: hidden;
+    }
+
+    .lane-name,
+    .lane-content {
+      padding: 20px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .lane-name {
+      display: flex;
+      align-items: center;
+      color: var(--green);
+      background: #f0f5ee;
+      font-weight: 800;
+    }
+
+    .lane-content {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      overflow-x: auto;
+      background: #fff;
+    }
+
+    .lane-name:last-of-type,
+    .lane-content:last-child { border-bottom: 0; }
+
+    .chip {
+      flex: 0 0 auto;
+      padding: 9px 12px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      font-size: 0.84rem;
+      font-weight: 700;
+    }
+
+    .chip.api { color: #234f82; background: var(--blue-soft); border-color: #cbdcf2; }
+    .chip.db { color: #14543b; background: var(--green-soft); border-color: #c4e5d2; }
+    .chip.warn { color: #8b4a19; background: var(--orange-soft); border-color: #f1d0b8; }
+    .lane-arrow { color: #869087; font-weight: 800; }
+
+    .callout {
+      margin-top: 20px;
+      padding: 18px 20px;
+      border-left: 4px solid var(--green);
+      border-radius: 0 14px 14px 0;
+      color: #36423a;
+      background: var(--green-soft);
+    }
+
+    .callout.warn { border-color: var(--orange); background: var(--orange-soft); }
+    .callout.danger { border-color: var(--red); background: var(--red-soft); }
+
+    .two-col,
+    .three-col {
+      display: grid;
+      gap: 16px;
+    }
+
+    .two-col { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .three-col { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+
+    .card {
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 17px;
+      background: var(--card);
+    }
+
+    .card p,
+    .card li { color: var(--muted); font-size: 0.92rem; }
+
+    .card ul {
+      margin: 12px 0 0;
+      padding-left: 20px;
+    }
+
+    .code-block {
+      margin-top: 14px;
+      padding: 17px 18px;
+      overflow-x: auto;
+      border-radius: 14px;
+      color: #edf7f0;
+      background: #1b2820;
+      font: 0.84rem/1.65 "SFMono-Regular", Consolas, monospace;
+      white-space: pre;
+    }
+
+    .gate {
+      display: grid;
+      grid-template-columns: 64px minmax(0, 1fr) 150px;
+      gap: 18px;
+      align-items: center;
+      padding: 20px 0;
+      border-top: 1px solid var(--line);
+    }
+
+    .gate:first-of-type { border-top: 0; }
+
+    .gate-icon {
+      display: grid;
+      width: 58px;
+      height: 58px;
+      place-items: center;
+      border-radius: 18px;
+      color: var(--green);
+      background: var(--green-soft);
+      font-size: 1.2rem;
+      font-weight: 900;
+    }
+
+    .decision {
+      padding: 10px 12px;
+      border-radius: 12px;
+      text-align: center;
+      font-size: 0.82rem;
+      font-weight: 800;
+    }
+
+    .decision.pass { color: var(--green); background: var(--green-soft); }
+    .decision.block { color: var(--red); background: var(--red-soft); }
+
+    .simulation {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 72px minmax(0, 1fr);
+      gap: 18px;
+      align-items: stretch;
+    }
+
+    .round {
+      padding: 26px;
+      border: 1px solid var(--line);
+      border-radius: 19px;
+      background: #fff;
+    }
+
+    .round-header {
+      display: flex;
+      justify-content: space-between;
+      gap: 16px;
+      align-items: flex-start;
+      margin-bottom: 18px;
+    }
+
+    .round-badge {
+      padding: 7px 10px;
+      border-radius: 999px;
+      color: var(--green);
+      background: var(--green-soft);
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+
+    .candidate-list {
+      display: grid;
+      gap: 8px;
+    }
+
+    .candidate {
+      display: grid;
+      grid-template-columns: 34px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 11px;
+      border-radius: 12px;
+      background: #f7f8f4;
+      font-size: 0.84rem;
+    }
+
+    .candidate b {
+      display: grid;
+      width: 28px;
+      height: 28px;
+      place-items: center;
+      border-radius: 9px;
+      background: #e7ebe4;
+    }
+
+    .status {
+      padding: 5px 8px;
+      border-radius: 8px;
+      font-size: 0.74rem;
+      font-weight: 800;
+    }
+
+    .status.ok { color: var(--green); background: var(--green-soft); }
+    .status.no { color: var(--red); background: var(--red-soft); }
+    .status.stop { color: #6c7370; background: #e9ece9; }
+
+    .math-arrow {
+      display: grid;
+      place-items: center;
+      color: var(--green);
+      font-size: 2rem;
+      font-weight: 900;
+    }
+
+    .formula {
+      margin-top: 18px;
+      padding: 15px;
+      border: 1px dashed #a6b3a8;
+      border-radius: 13px;
+      color: #334039;
+      background: #f9faf7;
+      font-family: "SFMono-Regular", Consolas, monospace;
+      font-size: 0.85rem;
+    }
+
+    .table-wrap { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      min-width: 720px;
+      border-collapse: collapse;
+      font-size: 0.9rem;
+    }
+
+    th,
+    td {
+      padding: 14px 13px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      color: #3f4b43;
+      background: #f0f4ed;
+      font-size: 0.78rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    .final-flow {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      counter-reset: final-step;
+    }
+
+    .final-step {
+      padding: 22px;
+      border: 1px solid var(--line);
+      border-radius: 17px;
+      background: #fff;
+      counter-increment: final-step;
+    }
+
+    .final-step::before {
+      content: counter(final-step, decimal-leading-zero);
+      display: block;
+      margin-bottom: 12px;
+      color: var(--green);
+      font-size: 0.78rem;
+      font-weight: 900;
+      letter-spacing: 0.08em;
+    }
+
+    .truth-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .truth {
+      padding: 18px;
+      border-radius: 15px;
+      font-size: 0.9rem;
+    }
+
+    .truth.yes { background: var(--green-soft); }
+    .truth.no { background: var(--red-soft); }
+
+    footer {
+      padding: 34px 0 60px;
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+
+    footer .wrap {
+      display: flex;
+      justify-content: space-between;
+      gap: 24px;
+      padding-top: 22px;
+      border-top: 1px solid var(--line);
+    }
+
+    .print-button {
+      padding: 9px 13px;
+      border: 0;
+      border-radius: 10px;
+      color: #fff;
+      background: var(--green);
+      cursor: pointer;
+      font: inherit;
+      font-weight: 700;
+    }
+
+    @media (max-width: 900px) {
+      .hero-grid,
+      .section-head,
+      .simulation { grid-template-columns: 1fr; }
+      .hero-main { min-height: auto; padding: 38px; }
+      .math-arrow { transform: rotate(90deg); }
+      .three-col { grid-template-columns: 1fr; }
+      .final-flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+
+    @media (max-width: 640px) {
+      .wrap { width: min(100% - 24px, 1180px); }
+      .hero { padding: 28px 0 24px; }
+      .hero-main,
+      .hero-side,
+      .panel { border-radius: 17px; }
+      .hero-main,
+      .hero-side,
+      .panel { padding: 24px; }
+      .two-col,
+      .truth-grid,
+      .final-flow { grid-template-columns: 1fr; }
+      .lane-flow { grid-template-columns: 92px minmax(0, 1fr); }
+      .lane-name,
+      .lane-content { padding: 14px 12px; }
+      .gate { grid-template-columns: 48px minmax(0, 1fr); }
+      .gate-icon { width: 44px; height: 44px; border-radius: 13px; }
+      .decision { grid-column: 2; text-align: left; }
+      footer .wrap { flex-direction: column; }
+    }
+
+    @media print {
+      :root { --shadow: none; }
+      body { background: #fff; font-size: 10pt; }
+      .toc,
+      .print-button,
+      .skip-link { display: none; }
+      .hero { padding: 20px 0; }
+      .hero-main { min-height: auto; }
+      .panel,
+      .hero-main,
+      .hero-side { box-shadow: none; break-inside: avoid; }
+      section { break-inside: auto; }
+      .card,
+      .round,
+      .gate,
+      .final-step { break-inside: avoid; }
+      .flow-strip { grid-template-columns: repeat(7, 1fr); overflow: visible; }
+      .flow-node { min-width: 0; padding: 10px; }
+      a { text-decoration: none; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">본문으로 이동</a>
+
+  <header class="hero">
+    <div class="wrap hero-grid">
+      <div class="hero-main">
+        <p class="eyebrow">Auknowlog · Request to Screen</p>
+        <h1>퀴즈 생성과<br>중복 필터링 흐름</h1>
+        <p class="hero-copy">
+          사용자가 “쿠버네티스 5문제”를 요청한 순간부터 최근 문제 조회, GPT 생성,
+          SHA-256·pgvector 중복 검사, 부족분 보충, DB 저장과 Vue 화면 표시까지 실제 코드의 실행 순서를 설명합니다.
+        </p>
+      </div>
+      <aside class="hero-side" aria-label="핵심 설정 요약">
+        <div>
+          <strong>Core policy</strong>
+          <h2>먼저 피하고,<br>다시 검사하고,<br>부족하면 보충한다.</h2>
+        </div>
+        <div class="metric-grid">
+          <div class="metric"><b>30</b><span>최근 문제 최대 개수</span></div>
+          <div class="metric"><b>50자</b><span>프롬프트 미리보기</span></div>
+          <div class="metric"><b>3회</b><span>생성 라운드 상한</span></div>
+          <div class="metric"><b>0.90</b><span>의미 중복 임계값</span></div>
+        </div>
+      </aside>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="문서 목차">
+    <div class="wrap">
+      <a href="#overview">전체 흐름</a>
+      <a href="#request">요청</a>
+      <a href="#generation">GPT 생성</a>
+      <a href="#filter">중복 필터</a>
+      <a href="#example">5개 요청 예시</a>
+      <a href="#storage">저장·표시</a>
+      <a href="#exceptions">예외·비용</a>
+    </div>
+  </nav>
+
+  <main id="main" class="wrap">
+    <section id="overview" class="panel">
+      <div class="section-head">
+        <div>
+          <p class="section-kicker">Overview</p>
+          <h2>한눈에 보는 전체 흐름</h2>
+        </div>
+        <p class="section-summary">중복 검사 대상은 사용자가 입력한 주제가 아니라 GPT가 생성한 개별 문제 문장입니다.</p>
+      </div>
+
+      <div class="flow-strip" aria-label="퀴즈 생성 전체 처리 단계">
+        <article class="flow-node"><span class="num">1</span><h3>화면 요청</h3><small>주제와 문제 수 입력</small></article>
+        <article class="flow-node"><span class="num">2</span><h3>최근 이력</h3><small>같은 주제 최근 30개</small></article>
+        <article class="flow-node"><span class="num">3</span><h3>GPT 생성</h3><small>구조화된 문제 후보</small></article>
+        <article class="flow-node"><span class="num">4</span><h3>정확 중복</h3><small>정규화 + SHA-256</small></article>
+        <article class="flow-node"><span class="num">5</span><h3>의미 중복</h3><small>임베딩 + pgvector</small></article>
+        <article class="flow-node"><span class="num">6</span><h3>저장·보충</h3><small>부족하면 다음 라운드</small></article>
+        <article class="flow-node"><span class="num">7</span><h3>화면 표시</h3><small>quizId와 문항 렌더링</small></article>
+      </div>
+
+      <div class="callout">
+        <strong>세 겹의 방어선</strong><br>
+        생성 전에는 최근 문제를 GPT에게 알려 중복 가능성을 낮추고, 생성 후에는 SHA-256으로 동일 표현을,
+        임베딩이 활성화된 경우 pgvector로 의미가 비슷한 표현을 다시 검사합니다.
+      </div>
+    </section>
+
+    <section id="request" class="panel">
+      <div class="section-head">
+        <div>
+          <p class="section-kicker">01 · Client request</p>
+          <h2>사용자가 “쿠버네티스 5문제”를 요청한다</h2>
+        </div>
+        <p class="section-summary">Vue 화면은 입력 상태를 초기화하고 실제 AI 모드에서 생성 API를 호출합니다.</p>
+      </div>
+
+      <div class="lane-flow" aria-label="클라이언트와 서버 요청 흐름">
+        <div class="lane-name">Vue</div>
+        <div class="lane-content">
+          <span class="chip">주제: 쿠버네티스</span><span class="lane-arrow">→</span>
+          <span class="chip">문제 수: 5</span><span class="lane-arrow">→</span>
+          <span class="chip warn">AI 모드 선택</span><span class="lane-arrow">→</span>
+          <span class="chip api">POST /api/quizzes/create</span>
+        </div>
+        <div class="lane-name">Controller</div>
+        <div class="lane-content">
+          <span class="chip">topic 필수·최대 120자</span><span class="lane-arrow">→</span>
+          <span class="chip">문제 수 1~20</span><span class="lane-arrow">→</span>
+          <span class="chip">미지정 시 5개</span>
+        </div>
+        <div class="lane-name">Service</div>
+        <div class="lane-content">
+          <span class="chip">topic.trim()</span><span class="lane-arrow">→</span>
+          <span class="chip db">목표 개수 targetCount = 5</span><span class="lane-arrow">→</span>
+          <span class="chip">collectedQuestions = []</span>
+        </div>
+      </div>
+
+      <div class="two-col" style="margin-top: 18px;">
+        <article class="card">
+          <h3>학습 자료가 없는 경우</h3>
+          <p>주제만으로 문제를 생성하고 <code>sourceReferences</code>는 빈 배열로 받습니다.</p>
+        </article>
+        <article class="card">
+          <h3>학습 자료가 있는 경우</h3>
+          <p>먼저 <code>/api/sources</code>에 자료를 저장하고 반환된 <code>sourceId</code>의 청크를 퀴즈 생성 근거로 전달합니다.</p>
+        </article>
+      </div>
+
+      <div class="callout warn">
+        화면의 “비용 없는 데모 퀴즈”가 켜져 있으면 <code>/api/quizzes/dummy</code>를 호출하므로 GPT 생성과 중복 필터링 경로를 지나지 않습니다.
+        실제 AI 흐름은 해당 옵션을 해제했을 때 실행됩니다.
+      </div>
+    </section>
+
+    <section id="generation" class="panel">
+      <div class="section-head">
+        <div>
+          <p class="section-kicker">02 · Generate candidates</p>
+          <h2>최근 문제를 먼저 보여주고 후보를 생성한다</h2>
+        </div>
+        <p class="section-summary">첫 번째 생성 라운드에서만 같은 주제의 최근 이력을 프롬프트에 포함합니다.</p>
+      </div>
+
+      <div class="three-col">
+        <article class="card">
+          <span class="step-num">1</span>
+          <h3>최근 문제 조회</h3>
+          <p><code>findByTopic("쿠버네티스")</code> 결과를 최신순으로 정렬하고 최대 30개를 선택합니다.</p>
+        </article>
+        <article class="card">
+          <span class="step-num">2</span>
+          <h3>토큰 절약</h3>
+          <p>문제 전체가 아니라 각 문제의 앞 50자만 GPT 프롬프트에 넣습니다.</p>
+        </article>
+        <article class="card">
+          <span class="step-num">3</span>
+          <h3>GPT 후보 생성</h3>
+          <p><code>gpt-5.4-mini</code>에 정확히 5개의 객관식 문제를 구조화된 JSON으로 요청합니다.</p>
+        </article>
+      </div>
+
+      <div class="code-block">Create a multiple-choice quiz with exactly 5 questions.
+Use the same language as the topic.
+
+&lt;topic&gt;
+쿠버네티스
+&lt;/topic&gt;
+
+Create questions materially different from these existing questions:
+&lt;existing_questions&gt;
+- 쿠버네티스에서 Pod의 역할은 무엇인가요?...
+- Deployment와 StatefulSet의 차이는 무엇인가요?...
+... 최대 30개, 각 50자
+&lt;/existing_questions&gt;</div>
+
+      <div class="callout">
+        최근 문제 전달은 “생성 전에 중복을 피하도록 유도”하는 장치입니다. GPT가 지시를 완벽히 지킨다고 가정하지 않기 때문에,
+        응답을 받은 뒤 서버에서 각 문제를 다시 검사합니다.
+      </div>
+    </section>
+
+    <section id="filter" class="panel">
+      <div class="section-head">
+        <div>
+          <p class="section-kicker">03 · Filter every question</p>
+          <h2>후보 문제를 하나씩 통과시킨다</h2>
+        </div>
+        <p class="section-summary">한 개라도 조건을 통과하지 못하면 해당 후보만 버리고 다음 후보를 검사합니다.</p>
+      </div>
+
+      <div class="gate">
+        <div class="gate-icon">A</div>
+        <div><h3>응답 구조 검증</h3><p>요청한 후보 개수, 문제 문장, 서로 다른 선택지 4개, 선택지와 일치하는 정답, 해설을 확인합니다.</p></div>
+        <div class="decision block">응답 전체 거절 가능</div>
+      </div>
+      <div class="gate">
+        <div class="gate-icon">B</div>
+        <div><h3>SHA-256 정확 중복 검사</h3><p>소문자화·공백 제거 전에 <code>++ → plusplus</code>, <code># → sharp</code> 등을 치환하고 64자리 해시를 조회합니다.</p></div>
+        <div class="decision block">같은 해시 → 후보 제외</div>
+      </div>
+      <div class="gate">
+        <div class="gate-icon">C</div>
+        <div><h3>OpenAI 임베딩 생성</h3><p>정확 중복이 아니면 문제 문장 하나를 <code>text-embedding-3-small</code>로 보내 512차원 벡터를 받습니다.</p></div>
+        <div class="decision pass">비활성·장애 → 다음 단계 생략</div>
+      </div>
+      <div class="gate">
+        <div class="gate-icon">D</div>
+        <div><h3>pgvector 의미 중복 검색</h3><p>기존 벡터 중 코사인 유사도가 가장 높은 문제를 찾고 <code>0.90</code> 이상인지 검사합니다.</p></div>
+        <div class="decision block">0.90 이상 → 후보 제외</div>
+      </div>
+      <div class="gate">
+        <div class="gate-icon">E</div>
+        <div><h3>문제·벡터 저장</h3><p><code>question_history</code>에 원문과 해시를 저장하고, 검사에 사용한 벡터를 재호출 없이 <code>question_embedding</code>에 저장합니다.</p></div>
+        <div class="decision pass">통과 → 수집 목록 추가</div>
+      </div>
+
+      <div class="callout danger">
+        <strong>임베딩 장애가 퀴즈 전체 장애는 아닙니다.</strong><br>
+        API 키·네트워크·한도 문제로 임베딩이 실패하면 의미 검사는 건너뛰지만 SHA-256과 DB UNIQUE 제약은 계속 적용합니다.
+      </div>
+    </section>
+
+    <section id="example" class="panel">
+      <div class="section-head">
+        <div>
+          <p class="section-kicker">04 · Concrete simulation</p>
+          <h2>5개 중 2개가 중복이면 왜 4개를 더 요청할까?</h2>
+        </div>
+        <p class="section-summary">보충 요청에서도 다시 중복이 나올 수 있으므로 필요한 개수의 두 배를 후보로 요청합니다.</p>
+      </div>
+
+      <div class="simulation">
+        <article class="round">
+          <div class="round-header">
+            <div><h3>1차 생성</h3><p class="section-summary">목표 5개 → GPT에 5개 요청</p></div>
+            <span class="round-badge">attempt 1 / 3</span>
+          </div>
+          <div class="candidate-list">
+            <div class="candidate"><b>Q1</b><span>Pod 생명주기</span><span class="status ok">저장</span></div>
+            <div class="candidate"><b>Q2</b><span>기존 문장과 동일</span><span class="status no">해시 중복</span></div>
+            <div class="candidate"><b>Q3</b><span>표현만 바꾼 기존 문제</span><span class="status no">의미 중복</span></div>
+            <div class="candidate"><b>Q4</b><span>Service 유형</span><span class="status ok">저장</span></div>
+            <div class="candidate"><b>Q5</b><span>ConfigMap과 Secret</span><span class="status ok">저장</span></div>
+          </div>
+          <div class="formula">수집 3개
+remaining = 5 - 3 = 2</div>
+        </article>
+
+        <div class="math-arrow" aria-hidden="true">→</div>
+
+        <article class="round">
+          <div class="round-header">
+            <div><h3>2차 보충 생성</h3><p class="section-summary">부족 2개 → GPT에 4개 요청</p></div>
+            <span class="round-badge">attempt 2 / 3</span>
+          </div>
+          <div class="candidate-list">
+            <div class="candidate"><b>Q6</b><span>Readiness Probe</span><span class="status ok">저장</span></div>
+            <div class="candidate"><b>Q7</b><span>Resource Limit</span><span class="status ok">저장</span></div>
+            <div class="candidate"><b>Q8</b><span>추가 후보</span><span class="status stop">목표 달성</span></div>
+            <div class="candidate"><b>Q9</b><span>추가 후보</span><span class="status stop">검사 중단</span></div>
+          </div>
+          <div class="formula">requestedCount = min(remaining × 2, 20)
+= min(2 × 2, 20) = 4
+
+수집 3 + 추가 2 = 최종 5개</div>
+        </article>
+      </div>
+
+      <div class="two-col" style="margin-top: 18px;">
+        <article class="card">
+          <h3>왜 정확히 2개만 요청하지 않나?</h3>
+          <p>보충 후보 2개에서도 중복이 나올 수 있습니다. 4개를 받아 여유 후보를 확보하고 목표 5개가 되면 즉시 반복을 끝냅니다.</p>
+        </article>
+        <article class="card">
+          <h3>그래도 5개를 못 채우면?</h3>
+          <p>생성 라운드는 최대 3회입니다. 그때까지 통과한 문제만 저장·반환하므로 결과가 5개보다 적을 수 있습니다.</p>
+        </article>
+      </div>
+
+      <div class="callout warn">
+        최근 30개 문제 미리보기는 1차 GPT 요청에만 포함합니다. 2·3차 보충 요청에서는 다시 보내지 않지만,
+        SHA-256과 pgvector 사후 필터는 모든 라운드의 모든 처리 후보에 계속 적용됩니다.
+      </div>
+    </section>
+
+    <section id="storage" class="panel">
+      <div class="section-head">
+        <div>
+          <p class="section-kicker">05 · Persist and render</p>
+          <h2>통과한 문제를 저장하고 화면에 표시한다</h2>
+        </div>
+        <p class="section-summary">중복 검색용 이력과 실제 퀴즈 풀이용 데이터는 목적이 달라 별도 테이블에 저장됩니다.</p>
+      </div>
+
+      <div class="final-flow">
+        <article class="final-step"><h3>중복 이력 저장</h3><p><code>question_history</code>에 주제, 문제, 해시, 선택지, 정답과 해설을 저장합니다.</p></article>
+        <article class="final-step"><h3>벡터 색인 저장</h3><p><code>question_embedding</code>에 512차원 벡터와 모델명을 저장합니다.</p></article>
+        <article class="final-step"><h3>학습 퀴즈 저장</h3><p><code>learning_quiz</code>와 순서가 있는 <code>learning_question</code>을 저장하고 <code>quizId</code>를 발급합니다.</p></article>
+        <article class="final-step"><h3>Vue 렌더링</h3><p>응답을 <code>quizResult</code>에 넣고 문제·선택지 버튼을 <code>v-for</code>로 화면에 표시합니다.</p></article>
+      </div>
+
+      <div class="code-block">HTTP 200 OK
+{
+  "quizId": 42,
+  "quizTitle": "쿠버네티스 퀴즈",
+  "questions": [
+    {
+      "questionText": "쿠버네티스에서 Readiness Probe의 역할은?",
+      "options": ["...", "...", "...", "..."],
+      "correctAnswer": "...",
+      "explanation": "...",
+      "sourceReferences": []
+    }
+    // 최종 통과한 문제들
+  ]
+}
+
+Vue: quizResult.value = response.data
+화면: quizResult.questions를 순서대로 렌더링</div>
+
+      <div class="callout">
+        화면 표시 시에는 정답과 해설 데이터도 응답에 포함되지만, 사용자가 답안을 제출하기 전까지 Vue가 정답 영역을 숨깁니다.
+        풀이 이력 저장과 오답 복습 예약은 이후 사용자가 별도로 “풀이 기록 저장”을 눌렀을 때 실행됩니다.
+      </div>
+    </section>
+
+    <section id="exceptions" class="panel">
+      <div class="section-head">
+        <div>
+          <p class="section-kicker">06 · Boundaries</p>
+          <h2>재시도, 비용, 보장 범위를 구분한다</h2>
+        </div>
+        <p class="section-summary">“생성 라운드 재시도”와 “같은 HTTP 요청의 일시 장애 재시도”는 서로 다른 장치입니다.</p>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>구분</th><th>발생 조건</th><th>최대</th><th>동작</th><th>비용 가능성</th></tr></thead>
+          <tbody>
+            <tr><td>생성 라운드</td><td>중복 제거 후 목표 개수 부족</td><td>3회</td><td>부족분의 2배를 추가 후보로 요청</td><td>추가 GPT·임베딩 호출</td></tr>
+            <tr><td>HTTP 재시도</td><td>429, 502, 503, 504</td><td>4회</td><td>지수 백오프와 Retry-After를 사용</td><td>요청 처리 여부에 따라 달라짐</td></tr>
+            <tr><td>임베딩 폴백</td><td>임베딩 비활성 또는 호출 장애</td><td>해당 후보마다</td><td>의미 검사 없이 해시 검사만 유지</td><td>실패 이후 추가 임베딩 비용 없음</td></tr>
+            <tr><td>DB UNIQUE</td><td>동시 요청이 같은 해시 저장</td><td>항상</td><td>한 요청만 저장하고 나머지는 후보 제외</td><td>없음</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="truth-grid" style="margin-top: 20px;">
+        <div class="truth yes"><strong>보장하는 것</strong><br>동일 해시 저장 차단, 통과 후보만 반환, 응답 구조 검증, 임베딩 장애 시 핵심 생성 경로 유지</div>
+        <div class="truth no"><strong>보장하지 않는 것</strong><br>항상 정확히 5개 반환, 모든 의미 중복 탐지, 0.90 임계값의 절대적 정확성, 외부 API 무장애</div>
+      </div>
+
+      <div class="callout warn">
+        실제 AI 모드에서는 GPT Responses API 비용이 발생하며, 임베딩이 활성화되면 SHA-256을 통과한 각 후보에 Embeddings API 비용이 추가됩니다.
+        이 문서 자체와 자동 테스트는 외부 API를 호출하지 않습니다.
+      </div>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <p><strong>Auknowlog Engineering Note</strong><br>실제 구현 기준: QuizGenerator.vue → QuizController → QuizGenerationService → OpenAI·PostgreSQL → Vue 렌더링</p>
+      <button class="print-button" type="button" onclick="window.print()">인쇄·PDF 저장</button>
+    </div>
+  </footer>
+</body>
+</html>

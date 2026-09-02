@@ -9,11 +9,11 @@
 | Gemini 전용 생성 요청 | OpenAI Responses API + Structured Outputs | JSON 후처리보다 서버가 기대하는 퀴즈 스키마를 먼저 강제하기 위해 | JSON Schema, 응답 검증, 제한 재시도 | HTTP 요청·응답을 모킹한 단위 테스트 |
 | GPT-5.6 Terra 기본값 | GPT-5.4 mini + 낮은 추론 수준 | 객관식 퀴즈는 고난도 장문 추론보다 형식 안정성·지연·비용이 중요한 고빈도 작업이기 때문 | `auknowlog.openai.model`과 `reasoning-effort`를 환경 설정으로 분리하고, 기본값을 `gpt-5.4-mini`/`low`로 둠 | Responses 요청, 모델별 사용량 메트릭, 생성 원장을 모킹 테스트 |
 | GPT 생성 결과를 Markdown·Git·Notion으로 외부 저장 | PostgreSQL 학습 도메인 | 저장 자체보다 풀이·오답·재학습이라는 사용자 상태를 남기기 위해 | 퀴즈, 문항, 풀이, 답안, 복습 일정을 관계형 데이터로 저장 | 자료 저장 → 더미 퀴즈 → 풀이 → 오답 복습 예약 통합 테스트 |
-| PostgreSQL 해시 + Elasticsearch `match` | PostgreSQL 해시 + pgvector 코사인 유사도 | ES 점수는 어휘 일치 중심이고 DB/ES 이중 쓰기 불일치가 발생할 수 있기 때문 | `question_embedding`에 512차원 벡터를 저장하고 pgvector `<=>` 연산자로 가장 유사한 문항을 찾음 | 임베딩은 모킹. 실제 pgvector SQL은 Docker/Testcontainers CI에서 검증 예정 |
+| PostgreSQL 해시 + Elasticsearch `match` | PostgreSQL 해시 + pgvector 코사인 유사도 | ES 점수는 어휘 일치 중심이고 DB/ES 이중 쓰기 불일치가 발생할 수 있기 때문 | `question_embedding`에 512차원 벡터를 저장하고 pgvector `<=>` 연산자로 가장 유사한 문항을 찾음 | Testcontainers의 실제 pgvector에서 V3·HNSW·유사도 임계값 검증 |
 | Elasticsearch + Kibana 2개 컨테이너 | PostgreSQL + pgvector 1개 데이터 서비스 | 원본 이력과 의미 검색 데이터를 함께 트랜잭션으로 관리하고 로컬 운영 부담을 낮추기 위해 | `pgvector/pgvector` PostgreSQL 16 이미지와 Flyway V3 확장 | Compose 이미지·마이그레이션 구성 점검 |
 | 컨트롤러에 생성·중복 검사·저장·색인 혼재 | 유스케이스 서비스 + 도메인 서비스 | HTTP 계층과 비즈니스 순서를 분리해 테스트 가능성을 높이기 위해 | `QuizGenerationService`, `LearningService`, `SourceService`로 역할 분리 | 서비스 단위 테스트와 HTTP 통합 테스트 |
 | 호출 성공 여부만 로그 확인 | Micrometer 메트릭 + `ai_generation_log` | 비용·성능·실패를 운영 데이터로 남기기 위해 | 모델, 입력/출력/총 토큰, 지연, 실패 유형 기록 | OpenAI 응답 usage 모킹 테스트 |
-| 개발자가 실수로 실제 API 호출 가능 | 더미 모드 기본 + 임베딩 opt-in | 테스트/데모 중 의도치 않은 외부 비용을 막기 위해 | 화면 기본은 `/dummy`, 임베딩은 환경 변수로 명시 활성화 | 모든 자동 테스트에서 라이브 API 미사용 |
+| 개발자가 실수로 실제 API 호출 가능 | 더미 모드 기본 + 임베딩 차단 스위치 | 테스트/데모 중 의도치 않은 외부 비용을 막되 실제 AI 모드에서는 의미 중복 검사를 기본 적용하기 위해 | 화면 기본은 `/dummy`, 필요 시 `AUKNOWLOG_EMBEDDINGS_ENABLED=false`로 임베딩 차단 | 모든 자동 테스트에서 라이브 API 미사용 |
 
 ## 새 스택을 선택한 근거
 
@@ -24,6 +24,10 @@ pgvector는 PostgreSQL 안에 벡터를 저장하고 코사인 거리, 최근접
 - 공식 문서: [pgvector](https://github.com/pgvector/pgvector)
 - Java에서는 `JdbcTemplate`의 파라미터 바인딩으로 벡터 리터럴을 전달한다. JPA 엔티티에 벡터 타입을 억지로 섞지 않아, 학습 도메인과 검색 인프라를 분리했다.
 - 512차원은 `text-embedding-3` 계열이 차원 축소를 지원하는 범위에서 저장 공간과 검색 비용을 고려한 설정값이다. 모델·차원은 설정으로 바꾸며, 유사도 임계값 0.90은 실제 평가셋을 모은 뒤 보정한다.
+
+### Testcontainers
+
+H2는 빠른 도메인 테스트에 유지하되 pgvector 전용 타입과 연산자는 실제 DB로 검증한다. `integrationTest`가 운영과 같은 pgvector 이미지를 일회용 컨테이너로 시작하므로 개발자 PC의 기존 데이터나 고정 포트에 의존하지 않는다. GitHub Actions도 같은 `./gradlew check` 경로를 사용해 로컬과 CI의 검증 차이를 줄였다.
 
 ### Flyway
 

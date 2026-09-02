@@ -14,8 +14,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.text.Normalizer;
 import java.util.HexFormat;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 public class QuestionHistoryService {
@@ -34,8 +36,15 @@ public class QuestionHistoryService {
      * 문제 텍스트를 정규화하고 SHA-256 해시 생성
      */
     public String generateHash(String questionText) {
-        String normalized = questionText
-                .toLowerCase()
+        String normalized = Normalizer.normalize(questionText, Normalizer.Form.NFKC)
+                .toLowerCase(Locale.ROOT)
+                // 기술명과 연산자에서 의미가 있는 기호를 제거 전에 보존한다.
+                .replace("++", "plusplus")
+                .replace("+", "plus")
+                .replace("#", "sharp")
+                .replace("&", "and")
+                .replace("@", "at")
+                .replace("%", "percent")
                 .replaceAll("\\s+", "")
                 .replaceAll("[^a-z0-9가-힣]", "");
 

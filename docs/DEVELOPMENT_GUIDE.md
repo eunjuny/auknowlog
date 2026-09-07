@@ -43,6 +43,14 @@ npm run dev
 | Health | http://localhost:8080/actuator/health |
 | AI 지연 메트릭 | http://localhost:8080/actuator/metrics/auknowlog.ai.quiz.request.duration |
 
+외부 접속은 기본적으로 비활성화된다. 필요할 때만 다음 선택 메뉴에서 `quick-tunnel`을 고른다.
+
+```bash
+./scripts/remote-access.sh
+```
+
+구성과 보안 경계는 [외부 접속 모드 운영 가이드](REMOTE_ACCESS.md)를 참고한다.
+
 ## 비용이 발생하는 설정
 
 OpenAI API 키를 설정하고 화면의 데모 모드를 해제하면 실제 API를 호출한다. 의미 중복 검사는 기본 활성이고, 필요하면 환경 변수로 끌 수 있다.

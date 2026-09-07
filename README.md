@@ -70,6 +70,22 @@ npm run dev
 | 프론트엔드 | http://localhost:5173 |
 | Swagger API | http://localhost:8080/swagger-ui.html |
 
+### 5. 접속 모드 선택
+
+기본값은 외부 공개가 없는 `local`이다. 다른 네트워크에서 임시로 확인할 때만 인증이 적용된 Cloudflare Quick Tunnel을 선택할 수 있다.
+
+```bash
+# 대화형 메뉴에서 local / quick-tunnel 선택
+./scripts/remote-access.sh
+
+# 또는 직접 실행
+./scripts/remote-access.sh quick-tunnel
+./scripts/remote-access.sh status
+./scripts/remote-access.sh stop
+```
+
+Quick Tunnel에는 로그인·세션 인증 프록시가 선행되며 미인증 요청은 애플리케이션에 도달하지 않는다. 설치와 보안 설계, 종료 방법은 [외부 접속 모드 운영 가이드](docs/REMOTE_ACCESS.md)를 참고한다.
+
 ## 📚 문서
 
 자세한 설명은 [개발 가이드](docs/DEVELOPMENT_GUIDE.md)를 참고하세요.
@@ -78,6 +94,7 @@ npm run dev
 - [pgvector·Testcontainers 통합 테스트](docs/PGVECTOR_INTEGRATION_TEST.md)
 - [pgvector·Testcontainers 3회차 학습 문서 (HTML)](docs/PGVECTOR_STUDY_CURRICULUM.html)
 - [퀴즈 생성·중복 필터링 전체 흐름 (HTML)](docs/QUIZ_GENERATION_DUPLICATE_FILTER_FLOW.html)
+- [외부 접속 모드 운영 가이드](docs/REMOTE_ACCESS.md)
 
 - API 명세
 - 데이터베이스 스키마

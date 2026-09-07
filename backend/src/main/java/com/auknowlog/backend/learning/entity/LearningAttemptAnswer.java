@@ -41,4 +41,16 @@ public class LearningAttemptAnswer {
         this.selectedAnswer = selectedAnswer;
         this.correct = correct;
     }
+
+    public LearningQuestion getQuestion() {
+        return question;
+    }
+
+    public String getSelectedAnswer() {
+        return selectedAnswer;
+    }
+
+    public boolean isCorrect() {
+        return correct;
+    }
 }

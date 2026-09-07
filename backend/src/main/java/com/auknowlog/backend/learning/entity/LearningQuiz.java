@@ -47,4 +47,12 @@ public class LearningQuiz {
     public Long getId() {
         return id;
     }
+
+    public String getTopic() {
+        return topic;
+    }
+
+    public String getTitle() {
+        return title;
+    }
 }

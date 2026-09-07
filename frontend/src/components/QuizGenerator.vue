@@ -440,8 +440,8 @@ function cancelNextQuiz() {
 
 <style scoped>
 .quiz-container {
-  max-width: 1600px;
-  min-width: 800px;
+  max-width: 1200px;
+  min-width: 0;
   margin: 0 auto;
   padding: 40px 50px;
   background-color: #ffffff;
@@ -885,5 +885,35 @@ button:disabled {
 
 .cancel-button:hover {
   background-color: #5a6268;
+}
+
+button:focus-visible,
+.quiz-input-group input:focus-visible,
+.quiz-input-group textarea:focus-visible,
+.form-group input:focus-visible {
+  outline: 3px solid rgba(102, 126, 234, 0.35);
+  outline-offset: 2px;
+}
+
+@media (max-width: 680px) {
+  .quiz-container {
+    padding: 26px 18px 36px;
+    border-radius: 0;
+  }
+
+  .quiz-input-group input[type="text"],
+  .quiz-input-group input[type="number"],
+  .quiz-input-group textarea {
+    padding: 13px 14px;
+  }
+
+  .question-item,
+  .answer-section,
+  .next-quiz-form {
+    padding: 16px;
+  }
+
+  .form-buttons { flex-direction: column; }
+  .form-buttons button { width: 100%; }
 }
 </style>

@@ -62,7 +62,23 @@ public class LearningQuestion {
         return questionOrder;
     }
 
+    public String getQuestionText() {
+        return questionText;
+    }
+
+    public String getOptions() {
+        return options;
+    }
+
     public String getCorrectAnswer() {
         return correctAnswer;
+    }
+
+    public String getExplanation() {
+        return explanation;
+    }
+
+    public String getSourceReferences() {
+        return sourceReferences;
     }
 }

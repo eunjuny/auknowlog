@@ -11,6 +11,7 @@ import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -70,7 +71,7 @@ class LearningWorkflowIntegrationTest {
 
         long quizId = new com.fasterxml.jackson.databind.ObjectMapper()
                 .readTree(quizResponse).path("quizId").asLong();
-        mockMvc.perform(post("/api/learning-attempts")
+        String attemptResponse = mockMvc.perform(post("/api/learning-attempts")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
                                 {
@@ -85,7 +86,27 @@ class LearningWorkflowIntegrationTest {
                 .andExpect(jsonPath("$.totalQuestions").value(2))
                 .andExpect(jsonPath("$.correctAnswers").value(1))
                 .andExpect(jsonPath("$.wrongAnswers").value(1))
-                .andExpect(jsonPath("$.reviewScheduledCount").value(1));
+                .andExpect(jsonPath("$.reviewScheduledCount").value(1))
+                .andReturn().getResponse().getContentAsString();
+
+        long attemptId = new com.fasterxml.jackson.databind.ObjectMapper()
+                .readTree(attemptResponse).path("attemptId").asLong();
+
+        mockMvc.perform(get("/api/learning-attempts"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.attempts[0].attemptId").value(attemptId))
+                .andExpect(jsonPath("$.attempts[0].topic").value("Java"))
+                .andExpect(jsonPath("$.attempts[0].correctAnswers").value(1));
+
+        mockMvc.perform(get("/api/learning-attempts/{attemptId}", attemptId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.attemptId").value(attemptId))
+                .andExpect(jsonPath("$.questions.length()").value(2))
+                .andExpect(jsonPath("$.questions[0].questionOrder").value(1))
+                .andExpect(jsonPath("$.questions[0].selectedAnswer").value("선택지 B"))
+                .andExpect(jsonPath("$.questions[0].correct").value(false))
+                .andExpect(jsonPath("$.questions[1].correct").value(true));
 
         assertThat(sourceDocumentRepository.count()).isEqualTo(1);
         assertThat(learningAttemptRepository.count()).isEqualTo(1);

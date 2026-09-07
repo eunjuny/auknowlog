@@ -3,6 +3,10 @@ package com.auknowlog.backend.learning.service;
 import com.auknowlog.backend.learning.dto.AttemptAnswerRequest;
 import com.auknowlog.backend.learning.dto.AttemptRequest;
 import com.auknowlog.backend.learning.dto.AttemptResult;
+import com.auknowlog.backend.learning.dto.LearningAttemptDetail;
+import com.auknowlog.backend.learning.dto.LearningAttemptHistory;
+import com.auknowlog.backend.learning.dto.LearningAttemptQuestionResult;
+import com.auknowlog.backend.learning.dto.LearningAttemptSummary;
 import com.auknowlog.backend.learning.entity.LearningAttempt;
 import com.auknowlog.backend.learning.entity.LearningAttemptAnswer;
 import com.auknowlog.backend.learning.entity.LearningQuestion;
@@ -19,6 +23,8 @@ import com.auknowlog.backend.source.entity.SourceDocument;
 import com.auknowlog.backend.source.repository.SourceDocumentRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -116,6 +122,74 @@ public class LearningService {
         );
     }
 
+    @Transactional(readOnly = true)
+    public LearningAttemptHistory getAttemptHistory(int requestedPage, int requestedSize) {
+        int page = Math.max(0, requestedPage);
+        int size = Math.min(50, Math.max(1, requestedSize));
+        Page<LearningAttempt> attempts = learningAttemptRepository
+                .findAllByOrderBySubmittedAtDesc(PageRequest.of(page, size));
+
+        List<LearningAttemptSummary> summaries = attempts.getContent().stream()
+                .map(this::toAttemptSummary)
+                .toList();
+
+        return new LearningAttemptHistory(
+                summaries,
+                attempts.getNumber(),
+                attempts.getSize(),
+                attempts.getTotalElements(),
+                attempts.getTotalPages(),
+                attempts.hasNext()
+        );
+    }
+
+    @Transactional(readOnly = true)
+    public LearningAttemptDetail getAttemptDetail(Long attemptId) {
+        LearningAttempt attempt = learningAttemptRepository.findById(attemptId)
+                .orElseThrow(() -> new java.util.NoSuchElementException("풀이 기록을 찾을 수 없습니다."));
+
+        List<LearningAttemptQuestionResult> questions = learningAttemptAnswerRepository
+                .findByAttemptIdOrderByQuestionQuestionOrderAsc(attemptId)
+                .stream()
+                .map(this::toQuestionResult)
+                .toList();
+
+        return new LearningAttemptDetail(
+                attempt.getId(),
+                attempt.getQuiz().getTopic(),
+                attempt.getQuiz().getTitle(),
+                attempt.getTotalQuestions(),
+                attempt.getCorrectAnswers(),
+                attempt.getSubmittedAt(),
+                questions
+        );
+    }
+
+    private LearningAttemptSummary toAttemptSummary(LearningAttempt attempt) {
+        return new LearningAttemptSummary(
+                attempt.getId(),
+                attempt.getQuiz().getTopic(),
+                attempt.getQuiz().getTitle(),
+                attempt.getTotalQuestions(),
+                attempt.getCorrectAnswers(),
+                attempt.getSubmittedAt()
+        );
+    }
+
+    private LearningAttemptQuestionResult toQuestionResult(LearningAttemptAnswer answer) {
+        LearningQuestion question = answer.getQuestion();
+        return new LearningAttemptQuestionResult(
+                question.getQuestionOrder(),
+                question.getQuestionText(),
+                readStringList(question.getOptions()),
+                answer.getSelectedAnswer(),
+                question.getCorrectAnswer(),
+                question.getExplanation(),
+                readStringList(question.getSourceReferences()),
+                answer.isCorrect()
+        );
+    }
+
     private Map<Integer, AttemptAnswerRequest> answersByQuestionOrder(List<AttemptAnswerRequest> answers) {
         Map<Integer, AttemptAnswerRequest> result = new HashMap<>();
         for (AttemptAnswerRequest answer : answers) {
@@ -135,6 +209,18 @@ public class LearningService {
             return objectMapper.writeValueAsString(value);
         } catch (JsonProcessingException e) {
             throw new IllegalStateException("학습 데이터를 저장할 수 없습니다.", e);
+        }
+    }
+
+    private List<String> readStringList(String value) {
+        if (value == null || value.isBlank()) {
+            return List.of();
+        }
+        try {
+            return objectMapper.readValue(value, objectMapper.getTypeFactory()
+                    .constructCollectionType(List.class, String.class));
+        } catch (JsonProcessingException e) {
+            throw new IllegalStateException("저장된 학습 데이터를 읽을 수 없습니다.", e);
         }
     }
 }

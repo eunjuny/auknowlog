@@ -46,4 +46,20 @@ public class LearningAttempt {
     public Long getId() {
         return id;
     }
+
+    public LearningQuiz getQuiz() {
+        return quiz;
+    }
+
+    public int getTotalQuestions() {
+        return totalQuestions;
+    }
+
+    public int getCorrectAnswers() {
+        return correctAnswers;
+    }
+
+    public LocalDateTime getSubmittedAt() {
+        return submittedAt;
+    }
 }

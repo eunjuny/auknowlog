@@ -21,6 +21,10 @@ import com.auknowlog.backend.quiz.dto.Question;
 import com.auknowlog.backend.quiz.dto.QuizResponse;
 import com.auknowlog.backend.source.entity.SourceDocument;
 import com.auknowlog.backend.source.repository.SourceDocumentRepository;
+import com.auknowlog.backend.roadmap.entity.LearningRoadmap;
+import com.auknowlog.backend.roadmap.entity.LearningRoadmapStep;
+import com.auknowlog.backend.roadmap.repository.LearningRoadmapRepository;
+import com.auknowlog.backend.roadmap.repository.LearningRoadmapStepRepository;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.domain.Page;
@@ -32,6 +36,7 @@ import java.time.LocalDateTime;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 @Service
 public class LearningService {
@@ -42,6 +47,8 @@ public class LearningService {
     private final LearningAttemptAnswerRepository learningAttemptAnswerRepository;
     private final ReviewScheduleRepository reviewScheduleRepository;
     private final SourceDocumentRepository sourceDocumentRepository;
+    private final LearningRoadmapRepository learningRoadmapRepository;
+    private final LearningRoadmapStepRepository learningRoadmapStepRepository;
     private final ObjectMapper objectMapper;
 
     public LearningService(LearningQuizRepository learningQuizRepository,
@@ -50,6 +57,8 @@ public class LearningService {
                            LearningAttemptAnswerRepository learningAttemptAnswerRepository,
                            ReviewScheduleRepository reviewScheduleRepository,
                            SourceDocumentRepository sourceDocumentRepository,
+                           LearningRoadmapRepository learningRoadmapRepository,
+                           LearningRoadmapStepRepository learningRoadmapStepRepository,
                            ObjectMapper objectMapper) {
         this.learningQuizRepository = learningQuizRepository;
         this.learningQuestionRepository = learningQuestionRepository;
@@ -57,14 +66,32 @@ public class LearningService {
         this.learningAttemptAnswerRepository = learningAttemptAnswerRepository;
         this.reviewScheduleRepository = reviewScheduleRepository;
         this.sourceDocumentRepository = sourceDocumentRepository;
+        this.learningRoadmapRepository = learningRoadmapRepository;
+        this.learningRoadmapStepRepository = learningRoadmapStepRepository;
         this.objectMapper = objectMapper;
     }
 
     @Transactional
-    public QuizResponse storeGeneratedQuiz(String topic, Long sourceId, QuizResponse response) {
+    public QuizResponse storeGeneratedQuiz(String topic, Long sourceId, Long roadmapId, Long roadmapStepId,
+                                           QuizResponse response) {
         SourceDocument sourceDocument = sourceId == null ? null : sourceDocumentRepository.findById(sourceId)
                 .orElseThrow(() -> new java.util.NoSuchElementException("학습 자료를 찾을 수 없습니다."));
-        LearningQuiz quiz = learningQuizRepository.save(new LearningQuiz(sourceDocument, topic, response.quizTitle()));
+        LearningRoadmap roadmap = roadmapId == null ? null : learningRoadmapRepository.findById(roadmapId)
+                .filter(candidate -> "ACTIVE".equals(candidate.getStatus()))
+                .orElseThrow(() -> new java.util.NoSuchElementException("활성 학습 로드맵을 찾을 수 없습니다."));
+        LearningRoadmapStep roadmapStep = roadmapStepId == null ? null : learningRoadmapStepRepository.findById(roadmapStepId)
+                .orElseThrow(() -> new java.util.NoSuchElementException("학습 로드맵 단계를 찾을 수 없습니다."));
+        if (roadmapStep != null) {
+            if (roadmap == null || !roadmapStep.getRoadmap().getId().equals(roadmap.getId())) {
+                throw new IllegalArgumentException("선택한 로드맵에 속한 학습 단계만 사용할 수 있습니다.");
+            }
+            if (!roadmapStep.getTopic().equals(topic)) {
+                throw new IllegalArgumentException("학습 단계의 주제와 퀴즈 주제가 일치하지 않습니다.");
+            }
+            ensureStepAvailable(roadmap, roadmapStep);
+        }
+        LearningQuiz quiz = learningQuizRepository.save(new LearningQuiz(
+                sourceDocument, roadmap, roadmapStep, topic, response.quizTitle()));
 
         for (int index = 0; index < response.questions().size(); index++) {
             Question question = response.questions().get(index);
@@ -81,6 +108,25 @@ public class LearningService {
         return response.withQuizId(quiz.getId());
     }
 
+    private void ensureStepAvailable(LearningRoadmap roadmap, LearningRoadmapStep roadmapStep) {
+        Map<Long, Long> completedByStepId = learningAttemptRepository
+                .findRoadmapStepCompletedQuestions(roadmap.getId())
+                .stream()
+                .collect(Collectors.toMap(
+                        row -> ((Number) row[0]).longValue(),
+                        row -> ((Number) row[1]).longValue()
+                ));
+        if (completedByStepId.getOrDefault(roadmapStep.getId(), 0L) >= roadmapStep.getQuestionTarget()) {
+            throw new IllegalArgumentException("이미 완료한 학습 단계입니다.");
+        }
+        boolean locked = roadmapStep.getPrerequisites().stream()
+                .anyMatch(prerequisite -> completedByStepId.getOrDefault(prerequisite.getId(), 0L)
+                        < prerequisite.getQuestionTarget());
+        if (locked) {
+            throw new IllegalArgumentException("선행 학습 단계를 먼저 완료해주세요.");
+        }
+    }
+
     @Transactional
     public AttemptResult recordAttempt(AttemptRequest request) {
         LearningQuiz quiz = learningQuizRepository.findById(request.quizId())
@@ -91,6 +137,20 @@ public class LearningService {
         if (questions.isEmpty() || answersByOrder.size() != questions.size()
                 || questions.stream().anyMatch(question -> !answersByOrder.containsKey(question.getQuestionOrder()))) {
             throw new IllegalArgumentException("모든 문항에 답안을 제출해주세요.");
+        }
+
+        // 제출 직후의 자동 저장은 네트워크 재시도나 이중 클릭으로 같은 요청이 다시 도착할 수 있다.
+        // 현재 생성 퀴즈는 한 번만 제출하는 UX이므로, 이미 저장됐다면 기존 결과를 돌려준다.
+        LearningAttempt existingAttempt = learningAttemptRepository.findByQuizId(quiz.getId()).orElse(null);
+        if (existingAttempt != null) {
+            return new AttemptResult(
+                    existingAttempt.getId(),
+                    existingAttempt.getTotalQuestions(),
+                    existingAttempt.getCorrectAnswers(),
+                    existingAttempt.getTotalQuestions() - existingAttempt.getCorrectAnswers(),
+                    existingAttempt.getTotalQuestions() - existingAttempt.getCorrectAnswers(),
+                    null
+            );
         }
 
         int correctAnswers = (int) questions.stream()

@@ -3,6 +3,7 @@ package com.auknowlog.backend.quiz.service;
 import com.auknowlog.backend.ai.service.AiGenerationLedgerService;
 import com.auknowlog.backend.common.exception.OpenAiUnavailableException;
 import com.auknowlog.backend.common.observability.AiGenerationMetrics;
+import com.auknowlog.backend.observability.LangfuseTracingService;
 import com.auknowlog.backend.quiz.dto.Question;
 import com.auknowlog.backend.quiz.dto.QuizResponse;
 import com.auknowlog.backend.source.dto.SourceChunkContext;
@@ -40,6 +41,7 @@ public class OpenAiQuizService {
     private final ObjectMapper objectMapper;
     private final AiGenerationMetrics aiGenerationMetrics;
     private final AiGenerationLedgerService aiGenerationLedgerService;
+    private final LangfuseTracingService langfuseTracingService;
 
     @Value("${auknowlog.openai.api.key:}")
     private String apiKey;
@@ -56,11 +58,13 @@ public class OpenAiQuizService {
     public OpenAiQuizService(RestClient.Builder restClientBuilder,
                              ObjectMapper objectMapper,
                              AiGenerationMetrics aiGenerationMetrics,
-                             AiGenerationLedgerService aiGenerationLedgerService) {
+                             AiGenerationLedgerService aiGenerationLedgerService,
+                             LangfuseTracingService langfuseTracingService) {
         this.restClient = restClientBuilder.build();
         this.objectMapper = objectMapper;
         this.aiGenerationMetrics = aiGenerationMetrics;
         this.aiGenerationLedgerService = aiGenerationLedgerService;
+        this.langfuseTracingService = langfuseTracingService;
     }
 
     public QuizResponse generateQuiz(String topic, int numberOfQuestions) {
@@ -74,18 +78,39 @@ public class OpenAiQuizService {
     public QuizResponse generateQuiz(String topic, int numberOfQuestions, List<String> existingQuestions,
                                      List<SourceChunkContext> sourceContext) {
         long startedAt = System.nanoTime();
-        try {
-            if (apiKey == null || apiKey.isBlank()) {
-                throw new IllegalStateException("OpenAI API key is not configured");
-            }
+        try (LangfuseTracingService.TraceScope trace = langfuseTracingService.startGeneration(
+                "quiz-model-generation",
+                modelName,
+                Map.of(
+                        "requestedQuestionCount", numberOfQuestions,
+                        "recentQuestionCount", existingQuestions == null ? 0 : existingQuestions.size(),
+                        "sourceChunkCount", sourceContext == null ? 0 : sourceContext.size()
+                ),
+                Map.of("reasoningEffort", reasoningEffort)
+        )) {
+            try {
+                if (apiKey == null || apiKey.isBlank()) {
+                    throw new IllegalStateException("OpenAI API key is not configured");
+                }
 
-            JsonNode response = callOpenAiWithRetry(createRequest(topic, numberOfQuestions, existingQuestions, sourceContext));
-            QuizResponse quiz = parseQuizResponse(response, numberOfQuestions);
-            Duration duration = Duration.ofNanos(System.nanoTime() - startedAt);
-            String resolvedModel = response.path("model").asText(modelName);
-            aiGenerationMetrics.recordSuccess(resolvedModel, response.path("usage"), duration);
-            aiGenerationLedgerService.recordQuizSuccess(resolvedModel, response.path("usage"), duration);
-            return quiz;
+                JsonNode response = callOpenAiWithRetry(createRequest(topic, numberOfQuestions, existingQuestions, sourceContext));
+                QuizResponse quiz = parseQuizResponse(response, numberOfQuestions);
+                Duration duration = Duration.ofNanos(System.nanoTime() - startedAt);
+                String resolvedModel = response.path("model").asText(modelName);
+                trace.configureModel(resolvedModel, Map.of("reasoningEffort", reasoningEffort));
+                trace.recordUsage(
+                        token(response.path("usage"), "input_tokens"),
+                        token(response.path("usage"), "output_tokens"),
+                        token(response.path("usage"), "total_tokens")
+                );
+                trace.complete(Map.of("returnedQuestionCount", quiz.questions().size()));
+                aiGenerationMetrics.recordSuccess(resolvedModel, response.path("usage"), duration);
+                aiGenerationLedgerService.recordQuizSuccess(resolvedModel, response.path("usage"), duration);
+                return quiz;
+            } catch (RuntimeException e) {
+                trace.fail(e);
+                throw e;
+            }
         } catch (RuntimeException e) {
             Duration duration = Duration.ofNanos(System.nanoTime() - startedAt);
             String failureType = classifyFailure(e);
@@ -93,6 +118,10 @@ public class OpenAiQuizService {
             aiGenerationLedgerService.recordQuizFailure(modelName, failureType, duration);
             throw e;
         }
+    }
+
+    private long token(JsonNode usage, String field) {
+        return usage == null ? 0 : usage.path(field).asLong(0);
     }
 
     private String classifyFailure(RuntimeException exception) {

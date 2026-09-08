@@ -2,6 +2,7 @@ package com.auknowlog.backend.quiz.service;
 
 import com.auknowlog.backend.embedding.service.SemanticDuplicateService;
 import com.auknowlog.backend.learning.service.LearningService;
+import com.auknowlog.backend.observability.LangfuseTracingService;
 import com.auknowlog.backend.question.repository.QuestionHistoryRepository;
 import com.auknowlog.backend.question.service.QuestionHistoryService;
 import com.auknowlog.backend.quiz.dto.Question;
@@ -10,6 +11,7 @@ import com.auknowlog.backend.quiz.dto.QuizResponse;
 import com.auknowlog.backend.source.service.SourceService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentMatchers;
 import org.mockito.InjectMocks;
@@ -21,6 +23,9 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -44,8 +49,19 @@ class QuizGenerationServiceTest {
     @Mock
     private SourceService sourceService;
 
+    @Mock
+    private LangfuseTracingService langfuseTracingService;
+
     @InjectMocks
     private QuizGenerationService quizGenerationService;
+
+    @BeforeEach
+    void setUpTracing() {
+        when(langfuseTracingService.startQuizGeneration(any(), anyInt(), anyBoolean()))
+                .thenReturn(LangfuseTracingService.noopScope());
+        when(langfuseTracingService.startOperation(any(), ArgumentMatchers.anyMap()))
+                .thenReturn(LangfuseTracingService.noopScope());
+    }
 
     @Test
     void savesAndIndexesOnlyNewQuestions() {
@@ -64,8 +80,9 @@ class QuizGenerationServiceTest {
         when(semanticDuplicateService.check(question.questionText()))
                 .thenReturn(new SemanticDuplicateService.SemanticCheck(false, 0, Optional.empty()));
         when(questionHistoryService.saveQuestion("Java", question)).thenReturn(true);
-        when(learningService.storeGeneratedQuiz(eq("Java"), eq(null), ArgumentMatchers.any(QuizResponse.class)))
-                .thenAnswer(invocation -> ((QuizResponse) invocation.getArgument(2)).withQuizId(7L));
+        when(learningService.storeGeneratedQuiz(eq("Java"), eq(null), eq(null), eq(null),
+                ArgumentMatchers.any(QuizResponse.class)))
+                .thenAnswer(invocation -> ((QuizResponse) invocation.getArgument(4)).withQuizId(7L));
 
         QuizResponse response = quizGenerationService.createQuiz(new QuizRequest(" Java ", 1));
 
@@ -93,7 +110,8 @@ class QuizGenerationServiceTest {
                 exactHashService,
                 semanticDuplicateService,
                 sourceService,
-                learningService
+                learningService,
+                langfuseTracingService
         );
 
         when(exactHashRepository.findByTopic("Spring")).thenReturn(List.of());
@@ -101,8 +119,9 @@ class QuizGenerationServiceTest {
                 .thenReturn(modelResponse);
         when(semanticDuplicateService.check(question.questionText()))
                 .thenThrow(new IllegalStateException("embedding service unavailable"));
-        when(learningService.storeGeneratedQuiz(eq("Spring"), eq(null), ArgumentMatchers.any(QuizResponse.class)))
-                .thenAnswer(invocation -> ((QuizResponse) invocation.getArgument(2)).withQuizId(8L));
+        when(learningService.storeGeneratedQuiz(eq("Spring"), eq(null), eq(null), eq(null),
+                ArgumentMatchers.any(QuizResponse.class)))
+                .thenAnswer(invocation -> ((QuizResponse) invocation.getArgument(4)).withQuizId(8L));
 
         QuizResponse response = serviceWithRealHashFallback.createQuiz(new QuizRequest("Spring", 1));
 

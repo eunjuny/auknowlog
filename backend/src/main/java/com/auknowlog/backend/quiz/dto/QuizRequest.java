@@ -14,9 +14,13 @@ public record QuizRequest(
         @Max(value = 20, message = "문제 수는 20개 이하여야 합니다.")
         Integer numberOfQuestions,
         @Positive(message = "학습 자료 식별자는 양수여야 합니다.")
-        Long sourceId
+        Long sourceId,
+        @Positive(message = "학습 로드맵 식별자는 양수여야 합니다.")
+        Long roadmapId,
+        @Positive(message = "학습 로드맵 단계 식별자는 양수여야 합니다.")
+        Long roadmapStepId
 ) {
     public QuizRequest(String topic, Integer numberOfQuestions) {
-        this(topic, numberOfQuestions, null);
+        this(topic, numberOfQuestions, null, null, null);
     }
 }

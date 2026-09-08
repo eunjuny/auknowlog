@@ -59,7 +59,8 @@ public class QuizController {
         int requested = (request.numberOfQuestions() != null) ? request.numberOfQuestions() : 5;
         int questionsToGenerate = Math.max(1, Math.min(20, requested));
         QuizResponse response = createDummyQuizResponse(request.topic(), questionsToGenerate);
-        return learningService.storeGeneratedQuiz(request.topic().trim(), request.sourceId(), response);
+        return learningService.storeGeneratedQuiz(request.topic().trim(), request.sourceId(), request.roadmapId(),
+                request.roadmapStepId(), response);
     }
 
     private QuizResponse createDummyQuizResponse(String topic, int numberOfQuestions) {

@@ -53,4 +53,32 @@ public class AiGenerationLog {
         this.failureType = failureType;
         this.createdAt = LocalDateTime.now();
     }
+
+    public String getModel() {
+        return model;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public Long getInputTokens() {
+        return inputTokens;
+    }
+
+    public Long getOutputTokens() {
+        return outputTokens;
+    }
+
+    public Long getTotalTokens() {
+        return totalTokens;
+    }
+
+    public long getLatencyMs() {
+        return latencyMs;
+    }
+
+    public LocalDateTime getCreatedAt() {
+        return createdAt;
+    }
 }

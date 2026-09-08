@@ -4,6 +4,7 @@ import com.auknowlog.backend.ai.service.AiGenerationLedgerService;
 import com.auknowlog.backend.quiz.dto.Question;
 import com.auknowlog.backend.quiz.dto.QuizResponse;
 import com.auknowlog.backend.common.observability.AiGenerationMetrics;
+import com.auknowlog.backend.observability.LangfuseTracingService;
 import com.auknowlog.backend.source.dto.SourceChunkContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -24,6 +25,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.hamcrest.Matchers.containsString;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
@@ -37,6 +40,7 @@ class OpenAiQuizServiceTest {
     private OpenAiQuizService service;
     private SimpleMeterRegistry meterRegistry;
     private AiGenerationLedgerService aiGenerationLedgerService;
+    private LangfuseTracingService langfuseTracingService;
 
     @BeforeEach
     void setUp() {
@@ -44,7 +48,10 @@ class OpenAiQuizServiceTest {
         server = MockRestServiceServer.bindTo(builder).build();
         meterRegistry = new SimpleMeterRegistry();
         aiGenerationLedgerService = mock(AiGenerationLedgerService.class);
-        service = new OpenAiQuizService(builder, objectMapper, new AiGenerationMetrics(meterRegistry), aiGenerationLedgerService);
+        langfuseTracingService = mock(LangfuseTracingService.class);
+        when(langfuseTracingService.startGeneration(any(), any(), org.mockito.ArgumentMatchers.anyMap(), org.mockito.ArgumentMatchers.anyMap()))
+                .thenReturn(LangfuseTracingService.noopScope());
+        service = new OpenAiQuizService(builder, objectMapper, new AiGenerationMetrics(meterRegistry), aiGenerationLedgerService, langfuseTracingService);
         ReflectionTestUtils.setField(service, "apiKey", "test-key");
         ReflectionTestUtils.setField(service, "apiUrl", "https://api.openai.com/v1/responses");
         ReflectionTestUtils.setField(service, "modelName", "gpt-5.4-mini");

@@ -2,6 +2,13 @@
 import { ref, watch } from 'vue';
 import axios from 'axios';
 
+const props = defineProps({
+  recommendedQuiz: {
+    type: Object,
+    default: null
+  }
+});
+
 const topic = ref('');
 const numberOfQuestions = ref(5); // Default value
 const quizResult = ref(null);
@@ -18,8 +25,21 @@ const sourceMessage = ref(null);
 const demoMode = ref(true);
 const attemptMessage = ref(null);
 const attemptSaved = ref(false);
+const attemptSaving = ref(false);
 const quizSubmitted = ref(false);
 const submissionMessage = ref(null);
+const feedbackForms = ref({});
+const recommendationMessage = ref(null);
+const roadmapContext = ref(null);
+
+const feedbackTypes = [
+  { value: 'INCORRECT_CONTENT', label: '정답 또는 내용이 부정확해요' },
+  { value: 'AMBIGUOUS', label: '질문이 모호해요' },
+  { value: 'EXPLANATION_INSUFFICIENT', label: '해설이 부족해요' },
+  { value: 'DIFFICULTY_TOO_LOW', label: '난이도가 너무 낮아요' },
+  { value: 'DIFFICULTY_TOO_HIGH', label: '난이도가 너무 높아요' },
+  { value: 'OTHER', label: '기타 의견' }
+];
 
 // 노션 저장은 서버 기본 설정을 사용합니다. (별도 입력 필드 제거)
 
@@ -38,6 +58,22 @@ watch(nextQuizQuestions, (v) => {
   else if (n < 1) nextQuizQuestions.value = 1;
 });
 
+watch(() => props.recommendedQuiz?.requestedAt, () => {
+  if (!props.recommendedQuiz?.topic) {
+    return;
+  }
+  topic.value = props.recommendedQuiz.topic;
+  numberOfQuestions.value = props.recommendedQuiz.numberOfQuestions || 5;
+  roadmapContext.value = props.recommendedQuiz.roadmapId
+    ? {
+        roadmapId: props.recommendedQuiz.roadmapId,
+        roadmapStepId: props.recommendedQuiz.roadmapStepId || null,
+        topic: props.recommendedQuiz.topic
+      }
+    : null;
+  recommendationMessage.value = `학습 추천에 따라 “${props.recommendedQuiz.topic}” ${numberOfQuestions.value}문제를 준비했습니다. 생성 방식을 선택한 뒤 시작해주세요.`;
+});
+
 async function generateQuiz() {
   loading.value = true;
   quizResult.value = null;
@@ -46,9 +82,12 @@ async function generateQuiz() {
   saveMessage.value = null; // Clear save message on new quiz generation
   attemptMessage.value = null;
   attemptSaved.value = false;
+  attemptSaving.value = false;
   quizSubmitted.value = false;
   submissionMessage.value = null;
   sourceMessage.value = null;
+  feedbackForms.value = {};
+  recommendationMessage.value = null;
 
   try {
     let sourceId = null;
@@ -65,7 +104,9 @@ async function generateQuiz() {
     const response = await axios.post(endpoint, {
       topic: topic.value,
       numberOfQuestions: numberOfQuestions.value,
-      sourceId
+      sourceId,
+      roadmapId: roadmapContext.value?.topic === topic.value.trim() ? roadmapContext.value.roadmapId : null,
+      roadmapStepId: roadmapContext.value?.topic === topic.value.trim() ? roadmapContext.value.roadmapStepId : null
     });
     quizResult.value = response.data;
   } catch (err) {
@@ -77,30 +118,43 @@ async function generateQuiz() {
 }
 
 async function saveLearningAttempt() {
-  if (!quizSubmitted.value || !quizResult.value?.quizId) {
-    attemptMessage.value = '저장할 풀이 결과가 없습니다.';
+  if (!quizSubmitted.value || !quizResult.value?.quizId || attemptSaved.value || attemptSaving.value) {
     return;
   }
 
-  loading.value = true;
+  attemptSaving.value = true;
   attemptMessage.value = null;
+  const answers = quizResult.value.questions.map((question, index) => ({
+    questionOrder: index + 1,
+    selectedAnswer: question.options[selectedAnswers.value[index]]
+  }));
+
   try {
-    const answers = quizResult.value.questions.map((question, index) => ({
-      questionOrder: index + 1,
-      selectedAnswer: question.options[selectedAnswers.value[index]]
-    }));
-    const response = await axios.post('/api/learning-attempts', {
-      quizId: quizResult.value.quizId,
-      answers
-    });
-    const result = response.data;
-    attemptSaved.value = true;
-    attemptMessage.value = `풀이 기록 저장 완료 · ${result.correctAnswers}/${result.totalQuestions} 정답` +
-      (result.reviewScheduledCount > 0 ? ` · 오답 ${result.reviewScheduledCount}개는 내일 복습으로 예약됐습니다.` : '');
-  } catch (err) {
-    attemptMessage.value = '풀이 기록 저장 실패: ' + (err.response?.data?.message || err.message);
+    // 응답이 유실된 경우에도 백엔드가 quizId 기준으로 기존 기록을 돌려주므로, 한 번 자동 재시도해도 중복 기록이 생기지 않는다.
+    for (let retry = 0; retry < 2; retry += 1) {
+      try {
+        const response = await axios.post('/api/learning-attempts', {
+          quizId: quizResult.value.quizId,
+          answers
+        });
+        const result = response.data;
+        attemptSaved.value = true;
+        attemptMessage.value = null;
+        submissionMessage.value = `채점 완료 · ${result.correctAnswers}/${result.totalQuestions} 정답 · 풀이 기록 자동 저장됨` +
+          (result.reviewScheduledCount > 0 ? ` · 오답 ${result.reviewScheduledCount}개는 내일 복습으로 예약됐습니다.` : '');
+        return;
+      } catch (err) {
+        if (retry === 0) {
+          attemptMessage.value = '풀이 기록을 자동 저장하지 못해 재시도 중입니다.';
+          await new Promise((resolve) => window.setTimeout(resolve, 500));
+          continue;
+        }
+        attemptMessage.value = '풀이 기록 자동 저장 실패: ' + (err.response?.data?.message || err.message);
+        submissionMessage.value = '채점은 완료됐지만 풀이 기록을 저장하지 못했습니다.';
+      }
+    }
   } finally {
-    loading.value = false;
+    attemptSaving.value = false;
   }
 }
 
@@ -147,7 +201,7 @@ function getCorrectAnswerCount() {
   ).length;
 }
 
-function submitQuiz() {
+async function submitQuiz() {
   if (!isAllQuestionsAnswered()) {
     submissionMessage.value = `미응답 문제가 ${getUnansweredQuestionCount()}개 남아 있습니다.`;
     return;
@@ -155,7 +209,57 @@ function submitQuiz() {
 
   quizSubmitted.value = true;
   const correctAnswers = getCorrectAnswerCount();
-  submissionMessage.value = `채점 완료 · ${correctAnswers}/${quizResult.value.questions.length} 정답`;
+  submissionMessage.value = `채점 완료 · ${correctAnswers}/${quizResult.value.questions.length} 정답 · 풀이 기록 저장 중...`;
+  await saveLearningAttempt();
+}
+
+function feedbackFormFor(questionIndex) {
+  if (!feedbackForms.value[questionIndex]) {
+    feedbackForms.value[questionIndex] = {
+      open: false,
+      feedbackType: '',
+      comment: '',
+      saving: false,
+      saved: false,
+      message: null,
+      error: null
+    };
+  }
+  return feedbackForms.value[questionIndex];
+}
+
+function toggleQuestionFeedback(questionIndex) {
+  const form = feedbackFormFor(questionIndex);
+  form.open = !form.open;
+  form.error = null;
+}
+
+async function saveQuestionFeedback(questionIndex) {
+  const form = feedbackFormFor(questionIndex);
+  if (!form.feedbackType || form.saving) {
+    return;
+  }
+  if (form.feedbackType === 'OTHER' && !form.comment.trim()) {
+    form.error = '기타 의견을 선택한 경우 내용을 입력해주세요.';
+    return;
+  }
+
+  form.saving = true;
+  form.error = null;
+  try {
+    const response = await axios.put('/api/question-feedback', {
+      quizId: quizResult.value.quizId,
+      questionOrder: questionIndex + 1,
+      feedbackType: form.feedbackType,
+      comment: form.comment
+    });
+    form.saved = true;
+    form.message = response.data.updated ? '피드백을 수정했습니다. 감사합니다.' : '피드백을 저장했습니다. 감사합니다.';
+  } catch (err) {
+    form.error = '피드백 저장 실패: ' + (err.response?.data?.message || err.message);
+  } finally {
+    form.saving = false;
+  }
 }
 
 async function saveQuizAsMarkdown() {
@@ -324,6 +428,7 @@ function cancelNextQuiz() {
         <input type="checkbox" v-model="demoMode" />
         비용 없는 데모 퀴즈로 생성 (해제 시 OpenAI API 호출)
       </label>
+      <p v-if="recommendationMessage" class="recommendation-message">{{ recommendationMessage }}</p>
       <button @click="generateQuiz" :disabled="loading || !topic">
         {{ loading ? '생성 중...' : demoMode ? '데모 퀴즈 생성' : 'AI 퀴즈 생성' }}
       </button>
@@ -376,6 +481,47 @@ function cancelNextQuiz() {
           <p v-if="quizSubmitted && question.sourceReferences?.length" class="source-reference">
             <strong>근거:</strong> {{ question.sourceReferences.join(', ') }}
           </p>
+          <section v-if="quizSubmitted" class="question-feedback" :aria-label="`${index + 1}번 문제 품질 피드백`">
+            <button
+              type="button"
+              class="feedback-toggle"
+              :aria-expanded="feedbackForms[index]?.open ?? false"
+              @click="toggleQuestionFeedback(index)"
+            >
+              {{ feedbackForms[index]?.saved ? '문제 피드백 수정' : '문제 품질 피드백' }}
+            </button>
+            <div v-if="feedbackForms[index]?.open" class="feedback-form">
+              <p>문제나 해설에 개선이 필요한 부분이 있나요? 의견은 생성 품질을 개선하는 데 사용됩니다.</p>
+              <label :for="`feedback-type-${index}`">피드백 유형</label>
+              <select :id="`feedback-type-${index}`" v-model="feedbackForms[index].feedbackType">
+                <option value="">유형을 선택해주세요</option>
+                <option v-for="feedbackType in feedbackTypes" :key="feedbackType.value" :value="feedbackType.value">
+                  {{ feedbackType.label }}
+                </option>
+              </select>
+              <label :for="`feedback-comment-${index}`">의견 <span>(선택, 기타는 필수)</span></label>
+              <textarea
+                :id="`feedback-comment-${index}`"
+                v-model="feedbackForms[index].comment"
+                maxlength="500"
+                rows="3"
+                placeholder="예: 정답은 B도 가능해 보입니다. 판단 근거를 보완해주세요."
+              ></textarea>
+              <div class="feedback-form-footer">
+                <span>{{ feedbackForms[index].comment.length }}/500</span>
+                <button
+                  type="button"
+                  class="feedback-submit"
+                  :disabled="feedbackForms[index].saving || !feedbackForms[index].feedbackType"
+                  @click="saveQuestionFeedback(index)"
+                >
+                  {{ feedbackForms[index].saving ? '저장 중...' : feedbackForms[index].saved ? '피드백 수정 저장' : '피드백 보내기' }}
+                </button>
+              </div>
+              <p v-if="feedbackForms[index].message" class="feedback-message success">{{ feedbackForms[index].message }}</p>
+              <p v-if="feedbackForms[index].error" class="feedback-message error">{{ feedbackForms[index].error }}</p>
+            </div>
+          </section>
       </div>
       
       <div class="next-quiz-section">
@@ -383,16 +529,13 @@ function cancelNextQuiz() {
           {{ submissionMessage }}
         </div>
         <div class="quiz-actions">
-          <button @click="submitQuiz" :disabled="loading || quizSubmitted || !isAllQuestionsAnswered()" class="submit-button">
-            {{ quizSubmitted ? '채점 완료' : isAllQuestionsAnswered() ? '답안 제출' : `미응답 ${getUnansweredQuestionCount()}개` }}
+          <button @click="submitQuiz" :disabled="loading || attemptSaving || quizSubmitted || !isAllQuestionsAnswered()" class="submit-button">
+            {{ attemptSaving ? '풀이 기록 저장 중...' : quizSubmitted ? (attemptSaved ? '채점 및 기록 저장 완료' : '채점 완료') : isAllQuestionsAnswered() ? '답안 제출' : `미응답 ${getUnansweredQuestionCount()}개` }}
           </button>
-          <button @click="showNextQuizOptions" class="next-quiz-button">
+          <button @click="showNextQuizOptions" :disabled="attemptSaving" class="next-quiz-button">
             다음 문제 생성
           </button>
-          <button @click="saveLearningAttempt" :disabled="loading || attemptSaved || !quizSubmitted || !quizResult.quizId" class="save-button">
-            {{ attemptSaved ? '풀이 기록 저장됨' : loading ? '저장 중...' : quizSubmitted ? '풀이 기록 저장' : '채점 후 기록 저장' }}
-          </button>
-          <button @click="saveQuizToGit" :disabled="loading || !quizSubmitted" class="save-button" style="background-color:#f05033;" title="풀이 결과를 Markdown으로 저장한 뒤 notes 원격 저장소에 commit·push합니다.">
+          <button @click="saveQuizToGit" :disabled="loading || attemptSaving || !quizSubmitted" class="save-button" style="background-color:#f05033;" title="풀이 결과를 Markdown으로 저장한 뒤 notes 원격 저장소에 commit·push합니다.">
             {{ loading ? '저장 중...' : quizSubmitted ? 'Git에 저장' : '채점 후 Git 저장' }}
           </button>
         </div>
@@ -504,6 +647,119 @@ function cancelNextQuiz() {
 .source-reference {
   color: #356a48;
   font-size: 14px;
+}
+
+.recommendation-message {
+  margin: 12px 0 0;
+  padding: 11px 13px;
+  border: 1px solid #cdd5ff;
+  border-radius: 7px;
+  background: #f4f5ff;
+  color: #4653a5;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.question-feedback {
+  margin-top: 16px;
+  border-top: 1px dashed #d8deea;
+  padding-top: 14px;
+}
+
+.feedback-toggle {
+  width: auto;
+  margin: 0;
+  padding: 9px 12px;
+  border: 1px solid #c8d0e8;
+  border-radius: 7px;
+  background: #fff;
+  color: #465575;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.feedback-toggle:hover:not(:disabled) {
+  border-color: #667eea;
+  background: #f5f6ff;
+}
+
+.feedback-form {
+  display: grid;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid #dce4f2;
+  border-radius: 8px;
+  background: #fff;
+  text-align: left;
+}
+
+.feedback-form p {
+  margin: 0 0 2px;
+  color: #596780;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.feedback-form label {
+  color: #43526f;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.feedback-form label span,
+.feedback-form-footer span {
+  color: #7c879d;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.feedback-form select,
+.feedback-form textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid #cdd6e6;
+  border-radius: 6px;
+  padding: 10px;
+  color: #334155;
+  font: inherit;
+}
+
+.feedback-form textarea {
+  resize: vertical;
+}
+
+.feedback-form select:focus,
+.feedback-form textarea:focus {
+  outline: 2px solid rgb(102 126 234 / 28%);
+  border-color: #667eea;
+}
+
+.feedback-form-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.feedback-submit {
+  width: auto;
+  margin: 0;
+  padding: 9px 12px;
+  font-size: 13px;
+}
+
+.feedback-message {
+  margin: 0 !important;
+  font-weight: 700;
+}
+
+.feedback-message.success {
+  color: #24744d;
+}
+
+.feedback-message.error {
+  color: #be3c35;
 }
 
 button {

@@ -1,0 +1,37 @@
+{
+  "version": "1.0",
+  "title": "Kubernetes 단계별 학습 로드맵",
+  "topic": "Kubernetes",
+  "description": "핵심 개념을 완료한 뒤 네트워크와 운영 단계로 진행합니다.",
+  "durationWeeks": 4,
+  "steps": [
+    {
+      "key": "core",
+      "title": "핵심 개념",
+      "description": "Pod, ReplicaSet, Deployment의 역할을 구분합니다.",
+      "topic": "Kubernetes 핵심 개념",
+      "questionTarget": 5,
+      "dependsOn": []
+    },
+    {
+      "key": "network",
+      "title": "네트워크",
+      "description": "Service와 Ingress의 트래픽 흐름을 이해합니다.",
+      "topic": "Kubernetes 네트워크",
+      "questionTarget": 5,
+      "dependsOn": [
+        "core"
+      ]
+    },
+    {
+      "key": "operations",
+      "title": "운영과 장애 대응",
+      "description": "관측성, 롤링 배포, 장애 원인 파악을 연습합니다.",
+      "topic": "Kubernetes 운영",
+      "questionTarget": 5,
+      "dependsOn": [
+        "network"
+      ]
+    }
+  ]
+}

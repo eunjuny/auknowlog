@@ -1,5 +1,6 @@
 package com.auknowlog.backend.embedding.service;
 
+import com.auknowlog.backend.observability.LangfuseTracingService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpHeaders;
@@ -12,6 +13,10 @@ import org.springframework.web.client.RestClient;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
@@ -27,7 +32,10 @@ class OpenAiEmbeddingServiceTest {
     void setUp() {
         RestClient.Builder builder = RestClient.builder();
         server = MockRestServiceServer.bindTo(builder).build();
-        service = new OpenAiEmbeddingService(builder);
+        LangfuseTracingService langfuseTracingService = mock(LangfuseTracingService.class);
+        when(langfuseTracingService.startEmbedding(any(), anyInt(), anyInt()))
+                .thenReturn(LangfuseTracingService.noopScope());
+        service = new OpenAiEmbeddingService(builder, langfuseTracingService);
         ReflectionTestUtils.setField(service, "apiKey", "test-key");
         ReflectionTestUtils.setField(service, "apiUrl", "https://api.openai.com/v1/embeddings");
         ReflectionTestUtils.setField(service, "model", "text-embedding-3-small");

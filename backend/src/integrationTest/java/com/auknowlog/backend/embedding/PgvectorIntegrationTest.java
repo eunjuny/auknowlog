@@ -57,7 +57,7 @@ class PgvectorIntegrationTest {
     }
 
     @Test
-    void appliesFlywayV3AndCreatesVectorHnswIndex() {
+    void appliesFlywayMigrationsAndCreatesVectorHnswAndFeedbackSchema() {
         Integer successfulMigration = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
                 FROM flyway_schema_history
@@ -86,6 +86,68 @@ class PgvectorIntegrationTest {
         assertThat(indexDefinition)
                 .containsIgnoringCase("USING hnsw")
                 .contains("vector_cosine_ops");
+
+        Integer feedbackMigration = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM flyway_schema_history
+                WHERE version = '4' AND success = TRUE
+                """, Integer.class);
+        Integer feedbackTable = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM information_schema.tables
+                WHERE table_schema = 'public' AND table_name = 'question_feedback'
+                """, Integer.class);
+        Integer feedbackQuestionConstraint = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM pg_constraint
+                WHERE conname = 'uk_question_feedback_question'
+                """, Integer.class);
+
+        assertThat(feedbackMigration).isEqualTo(1);
+        assertThat(feedbackTable).isEqualTo(1);
+        assertThat(feedbackQuestionConstraint).isEqualTo(1);
+
+        Integer roadmapMigration = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM flyway_schema_history
+                WHERE version IN ('5', '6', '7', '8') AND success = TRUE
+                """, Integer.class);
+        Integer roadmapTable = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM information_schema.tables
+                WHERE table_schema = 'public' AND table_name = 'learning_roadmap'
+                """, Integer.class);
+        Integer roadmapLinkColumn = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'learning_quiz'
+                  AND column_name = 'roadmap_id'
+                """, Integer.class);
+        Integer roadmapStepTable = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM information_schema.tables
+                WHERE table_schema = 'public' AND table_name = 'learning_roadmap_step'
+                """, Integer.class);
+        Integer roadmapStepDependencyTable = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM information_schema.tables
+                WHERE table_schema = 'public' AND table_name = 'learning_roadmap_step_dependency'
+                """, Integer.class);
+        Integer roadmapStepLinkColumn = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'learning_quiz'
+                  AND column_name = 'roadmap_step_id'
+                """, Integer.class);
+
+        assertThat(roadmapMigration).isEqualTo(4);
+        assertThat(roadmapTable).isEqualTo(1);
+        assertThat(roadmapLinkColumn).isEqualTo(1);
+        assertThat(roadmapStepTable).isEqualTo(1);
+        assertThat(roadmapStepDependencyTable).isEqualTo(1);
+        assertThat(roadmapStepLinkColumn).isEqualTo(1);
     }
 
     @Test

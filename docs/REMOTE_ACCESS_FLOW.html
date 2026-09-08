@@ -1,0 +1,955 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Auknowlog의 인증 기반 Cloudflare Quick Tunnel 외부 접속 구조와 시작, 로그인, 종료 흐름">
+  <title>Auknowlog 외부 접속 구조와 동작 흐름</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #172033;
+      --muted: #647084;
+      --paper: #f4f7fb;
+      --surface: #ffffff;
+      --line: #dbe3ed;
+      --navy: #182c4a;
+      --blue: #2563eb;
+      --blue-soft: #eaf1ff;
+      --cyan: #0e7490;
+      --cyan-soft: #e6f7fb;
+      --green: #15805d;
+      --green-soft: #e5f6ef;
+      --amber: #a85b08;
+      --amber-soft: #fff4dc;
+      --red: #b83c4a;
+      --red-soft: #fdecef;
+      --shadow: 0 20px 55px rgba(24, 44, 74, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    html {
+      scroll-behavior: smooth;
+      scroll-padding-top: 78px;
+    }
+
+    body {
+      margin: 0;
+      overflow-x: hidden;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 7% 3%, rgba(37, 99, 235, 0.13), transparent 30rem),
+        radial-gradient(circle at 92% 18%, rgba(14, 116, 144, 0.09), transparent 25rem),
+        var(--paper);
+      font-family: Pretendard, "Noto Sans KR", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.68;
+      word-break: keep-all;
+    }
+
+    a { color: inherit; }
+    code, pre { font-family: "SFMono-Regular", Consolas, monospace; }
+
+    .skip-link {
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      z-index: 100;
+      padding: 10px 14px;
+      color: #fff;
+      background: var(--navy);
+      border-radius: 10px;
+      transform: translateY(-160%);
+    }
+
+    .skip-link:focus { transform: translateY(0); }
+
+    .wrap {
+      width: min(1180px, calc(100% - 40px));
+      margin: 0 auto;
+    }
+
+    .hero { padding: 72px 0 46px; }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.45fr) minmax(290px, 0.55fr);
+      gap: 22px;
+    }
+
+    .hero-main,
+    .hero-side,
+    .panel {
+      border: 1px solid rgba(24, 44, 74, 0.1);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+    }
+
+    .hero-main {
+      min-width: 0;
+      min-height: 380px;
+      padding: 52px;
+      position: relative;
+      overflow: hidden;
+      background: rgba(255, 255, 255, 0.92);
+    }
+
+    .hero-main::after {
+      content: "";
+      position: absolute;
+      right: -92px;
+      bottom: -135px;
+      width: 300px;
+      height: 300px;
+      border: 46px solid rgba(37, 99, 235, 0.07);
+      border-radius: 50%;
+    }
+
+    .eyebrow,
+    .kicker {
+      margin: 0 0 14px;
+      color: var(--blue);
+      font-size: 0.78rem;
+      font-weight: 850;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 760px;
+      margin: 0;
+      font-size: clamp(2.5rem, 5.8vw, 5rem);
+      line-height: 1.02;
+      letter-spacing: -0.065em;
+    }
+
+    .hero-copy {
+      max-width: 700px;
+      margin: 26px 0 0;
+      color: var(--muted);
+      font-size: 1.07rem;
+    }
+
+    .hero-side {
+      padding: 34px;
+      color: #eef5ff;
+      background: var(--navy);
+    }
+
+    .hero-side h2 {
+      margin: 0 0 26px;
+      color: #fff;
+      font-size: 1.6rem;
+      line-height: 1.25;
+      letter-spacing: -0.035em;
+    }
+
+    .hero-fact {
+      padding: 15px 0;
+      border-top: 1px solid rgba(255, 255, 255, 0.13);
+    }
+
+    .hero-fact b {
+      display: block;
+      margin-bottom: 2px;
+      color: #7dd3fc;
+      font-size: 1.03rem;
+    }
+
+    .hero-fact span { color: #bdcada; font-size: 0.84rem; }
+
+    .toc {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      border-top: 1px solid rgba(24, 44, 74, 0.08);
+      border-bottom: 1px solid rgba(24, 44, 74, 0.11);
+      background: rgba(244, 247, 251, 0.92);
+      backdrop-filter: blur(14px);
+    }
+
+    .toc .wrap {
+      display: flex;
+      gap: 8px;
+      padding: 12px 0;
+      overflow-x: auto;
+    }
+
+    .toc a {
+      flex: 0 0 auto;
+      padding: 8px 12px;
+      border-radius: 999px;
+      color: #4d5c71;
+      font-size: 0.84rem;
+      font-weight: 750;
+      text-decoration: none;
+    }
+
+    .toc a:hover,
+    .toc a:focus-visible {
+      color: var(--blue);
+      background: var(--blue-soft);
+      outline: none;
+    }
+
+    main { padding: 42px 0 88px; }
+    section { margin-top: 28px; }
+
+    .panel {
+      padding: 38px;
+      background: rgba(255, 255, 255, 0.93);
+    }
+
+    .section-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(230px, 0.42fr);
+      gap: 28px;
+      align-items: end;
+      margin-bottom: 28px;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: clamp(1.8rem, 3.8vw, 2.8rem);
+      line-height: 1.14;
+      letter-spacing: -0.048em;
+    }
+
+    h3 { margin: 0 0 8px; font-size: 1.08rem; letter-spacing: -0.02em; }
+    p { margin: 0; }
+    .summary { color: var(--muted); font-size: 0.93rem; }
+
+    .comparison {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .state-card {
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      background: #fff;
+    }
+
+    .state-card.after { border-color: #b9d9ff; background: linear-gradient(145deg, #fff, #f2f7ff); }
+
+    .label {
+      display: inline-block;
+      margin-bottom: 14px;
+      padding: 5px 9px;
+      color: #526077;
+      background: #edf1f6;
+      border-radius: 8px;
+      font-size: 0.73rem;
+      font-weight: 850;
+      letter-spacing: 0.08em;
+    }
+
+    .state-card.after .label { color: var(--blue); background: var(--blue-soft); }
+    .state-card ul { margin: 14px 0 0; padding-left: 21px; color: var(--muted); }
+
+    .architecture {
+      padding: 24px;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      background: linear-gradient(180deg, #fbfdff, #f5f8fc);
+    }
+
+    .trust-labels {
+      display: grid;
+      grid-template-columns: 1.35fr 2fr 2.65fr;
+      gap: 10px;
+      min-width: 980px;
+      margin-bottom: 12px;
+    }
+
+    .trust-label {
+      padding: 7px 10px;
+      border-radius: 9px;
+      text-align: center;
+      font-size: 0.72rem;
+      font-weight: 850;
+      letter-spacing: 0.06em;
+    }
+
+    .trust-label.internet { color: #92400e; background: var(--amber-soft); }
+    .trust-label.edge { color: #075985; background: var(--cyan-soft); }
+    .trust-label.local { color: #166534; background: var(--green-soft); }
+
+    .arch-flow {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(135px, 1fr));
+      gap: 22px;
+      min-width: 980px;
+      align-items: stretch;
+    }
+
+    .arch-node {
+      min-height: 144px;
+      padding: 18px 15px;
+      position: relative;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #fff;
+    }
+
+    .arch-node:not(:last-child)::after {
+      content: "→";
+      position: absolute;
+      top: 50%;
+      right: -19px;
+      width: 16px;
+      color: var(--blue);
+      font-weight: 900;
+      transform: translateY(-50%);
+    }
+
+    .arch-node b { display: block; margin: 8px 0 4px; }
+    .arch-node small { display: block; color: var(--muted); line-height: 1.45; }
+
+    .node-icon {
+      display: grid;
+      width: 34px;
+      height: 34px;
+      place-items: center;
+      color: var(--blue);
+      background: var(--blue-soft);
+      border-radius: 10px;
+      font-size: 0.75rem;
+      font-weight: 900;
+    }
+
+    .boundary-note {
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+      margin-top: 18px;
+      padding: 17px 18px;
+      color: #28405e;
+      background: var(--blue-soft);
+      border-left: 4px solid var(--blue);
+      border-radius: 0 13px 13px 0;
+    }
+
+    .tabs {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 22px;
+      overflow-x: auto;
+    }
+
+    .tab {
+      flex: 0 0 auto;
+      padding: 10px 14px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      color: #4c5b70;
+      background: #fff;
+      font: inherit;
+      font-size: 0.88rem;
+      font-weight: 800;
+      cursor: pointer;
+    }
+
+    .tab[aria-selected="true"] { color: #fff; border-color: var(--blue); background: var(--blue); }
+    .tab:focus-visible { outline: 3px solid rgba(37, 99, 235, 0.25); outline-offset: 2px; }
+    .flow-panel[hidden] { display: none; }
+
+    .timeline {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .step {
+      min-height: 176px;
+      padding: 19px;
+      position: relative;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #fff;
+    }
+
+    .step-num {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      margin-bottom: 13px;
+      color: #fff;
+      background: var(--blue);
+      border-radius: 9px;
+      font-size: 0.76rem;
+      font-weight: 900;
+    }
+
+    .step p { color: var(--muted); font-size: 0.87rem; }
+
+    .decision-flow {
+      display: grid;
+      grid-template-columns: minmax(160px, 1fr) 54px minmax(190px, 1fr) 54px minmax(190px, 1fr);
+      gap: 10px;
+      align-items: center;
+    }
+
+    .decision-node {
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      text-align: center;
+      background: #fff;
+    }
+
+    .decision-node.question { border-color: #f1ca92; background: var(--amber-soft); }
+    .decision-node.pass { border-color: #addfc9; background: var(--green-soft); }
+    .arrow { color: var(--blue); text-align: center; font-size: 1.45rem; font-weight: 900; }
+
+    .branch-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 16px;
+    }
+
+    .branch {
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #fff;
+    }
+
+    .branch.fail { border-color: #f3c4cb; background: var(--red-soft); }
+    .branch.ok { border-color: #addfc9; background: var(--green-soft); }
+    .branch p { color: #546174; font-size: 0.89rem; }
+
+    .security-grid,
+    .file-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 13px;
+    }
+
+    .security-item,
+    .file-item {
+      padding: 20px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: #fff;
+    }
+
+    .security-item b,
+    .file-item code { display: block; margin-bottom: 7px; }
+    .security-item p,
+    .file-item p { color: var(--muted); font-size: 0.87rem; }
+    .file-item code { color: var(--blue); font-size: 0.78rem; overflow-wrap: anywhere; }
+
+    .table-wrap { overflow-x: auto; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 760px;
+      font-size: 0.9rem;
+    }
+
+    th, td { padding: 15px 14px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: #415169; background: #f3f6fa; font-size: 0.78rem; letter-spacing: 0.04em; }
+    td { color: #58667a; }
+
+    .status {
+      display: inline-block;
+      padding: 4px 8px;
+      border-radius: 8px;
+      font-size: 0.73rem;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+
+    .status.closed { color: #166534; background: var(--green-soft); }
+    .status.open { color: #92400e; background: var(--amber-soft); }
+
+    .code-block {
+      margin: 0;
+      padding: 20px;
+      overflow-x: auto;
+      color: #eaf2ff;
+      background: #14233a;
+      border-radius: 16px;
+      font-size: 0.84rem;
+      line-height: 1.72;
+      white-space: pre;
+    }
+
+    .run-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(260px, 0.42fr);
+      gap: 16px;
+    }
+
+    .note-list { margin: 0; padding-left: 21px; color: var(--muted); }
+    .note-list li + li { margin-top: 8px; }
+
+    .caution {
+      margin-top: 20px;
+      padding: 18px 20px;
+      color: #6e430e;
+      background: var(--amber-soft);
+      border-left: 4px solid #d98316;
+      border-radius: 0 14px 14px 0;
+    }
+
+    footer { padding: 0 0 52px; color: var(--muted); font-size: 0.82rem; text-align: center; }
+
+    @media (max-width: 900px) {
+      .hero-grid,
+      .section-head,
+      .run-grid { grid-template-columns: minmax(0, 1fr); }
+      .timeline { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .security-grid,
+      .file-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .decision-flow { grid-template-columns: 1fr; }
+      .arrow { transform: rotate(90deg); }
+    }
+
+    @media (max-width: 620px) {
+      body { word-break: normal; }
+      .wrap { width: calc(100% - 24px); max-width: 1180px; }
+      .hero { padding-top: 34px; }
+      .hero-main, .hero-side, .panel { border-radius: 18px; }
+      .hero-main, .hero-side, .panel { padding: 25px; }
+      .comparison,
+      .timeline,
+      .branch-grid,
+      .security-grid,
+      .file-grid { grid-template-columns: minmax(0, 1fr); }
+      h1 { font-size: clamp(2rem, 10.8vw, 2.75rem); overflow-wrap: anywhere; }
+    }
+
+    @media print {
+      body { background: #fff; }
+      .toc, .tabs { display: none; }
+      .panel, .hero-main, .hero-side { box-shadow: none; break-inside: avoid; }
+      .flow-panel[hidden] { display: block; }
+      .flow-panel { margin-top: 24px; }
+    }
+  </style>
+</head>
+<body>
+  <a class="skip-link" href="#main">본문으로 이동</a>
+
+  <header class="hero">
+    <div class="wrap hero-grid">
+      <div class="hero-main">
+        <p class="eyebrow">Auknowlog · Remote Access</p>
+        <h1>필요할 때만 열고,<br>인증 뒤에 숨긴다</h1>
+        <p class="hero-copy">
+          다른 네트워크의 모바일에서도 로컬 개발 화면을 확인하되, 프론트엔드·백엔드·DB를 직접 공개하지 않는
+          선택형 외부 접속 구조다. 이 문서는 왜 바꿨는지부터 요청이 사용자 화면에 도달하는 과정까지 설명한다.
+        </p>
+      </div>
+      <aside class="hero-side" aria-label="핵심 원칙">
+        <h2>외부 공개는 기능이 아니라<br>명시적으로 고르는 운영 모드</h2>
+        <div class="hero-fact"><b>Local by default</b><span>평소에는 외부 공개 없음</span></div>
+        <div class="hero-fact"><b>Authentication first</b><span>앱보다 인증 프록시가 먼저 요청을 받음</span></div>
+        <div class="hero-fact"><b>Auto cleanup</b><span>기본 8시간 후 터널과 인증 정보 제거</span></div>
+      </aside>
+    </div>
+  </header>
+
+  <nav class="toc" aria-label="문서 목차">
+    <div class="wrap">
+      <a href="#reason">도입 배경</a>
+      <a href="#architecture">전체 구조</a>
+      <a href="#flow">동작 흐름</a>
+      <a href="#authentication">인증과 세션</a>
+      <a href="#security">보안 설계</a>
+      <a href="#files">수정 파일</a>
+      <a href="#operation">실행 방법</a>
+      <a href="#limits">한계와 선택 기준</a>
+    </div>
+  </nav>
+
+  <main id="main" class="wrap">
+    <section id="reason" class="panel">
+      <div class="section-head">
+        <div>
+          <p class="kicker">01 · Why</p>
+          <h2>문제와 해결 방향</h2>
+        </div>
+        <p class="summary">공유기 포트 포워딩이나 서버 전체 공개 없이, 짧은 확인 시간 동안만 외부에서 접속하는 것이 목표다.</p>
+      </div>
+
+      <div class="comparison">
+        <article class="state-card">
+          <span class="label">BEFORE</span>
+          <h3>로컬 네트워크에 묶인 화면</h3>
+          <ul>
+            <li><code>127.0.0.1:5173</code>은 맥북에서만 접근 가능</li>
+            <li>다른 Wi-Fi나 모바일 데이터에서는 확인 불가</li>
+            <li>Vite 포트를 그대로 공개하면 개발 서버가 인터넷에 노출됨</li>
+          </ul>
+        </article>
+        <article class="state-card after">
+          <span class="label">AFTER</span>
+          <h3>선택형 인증 Quick Tunnel</h3>
+          <ul>
+            <li>기본 모드는 여전히 로컬 전용</li>
+            <li>필요할 때 임시 HTTPS URL만 생성</li>
+            <li>모든 요청이 로그인·세션 검증을 통과해야 앱에 도달</li>
+          </ul>
+        </article>
+      </div>
+    </section>
+
+    <section id="architecture" class="panel">
+      <div class="section-head">
+        <div>
+          <p class="kicker">02 · Architecture</p>
+          <h2>전체 요청 경로</h2>
+        </div>
+        <p class="summary">인터넷에 보이는 것은 Cloudflare가 발급한 임시 HTTPS 주소뿐이다. 로컬 서비스는 모두 루프백 주소에 남는다.</p>
+      </div>
+
+      <div class="architecture" role="img" aria-label="모바일 브라우저 요청이 Cloudflare, cloudflared, 인증 프록시, Vite, Spring Boot 순서로 전달되는 구조">
+        <div class="trust-labels" aria-hidden="true">
+          <div class="trust-label internet">PUBLIC INTERNET</div>
+          <div class="trust-label edge">CLOUDFLARE EDGE + OUTBOUND TUNNEL</div>
+          <div class="trust-label local">MACBOOK · LOOPBACK ONLY</div>
+        </div>
+        <div class="arch-flow">
+          <div class="arch-node"><span class="node-icon">01</span><b>모바일 브라우저</b><small>다른 Wi-Fi 또는 모바일 데이터</small></div>
+          <div class="arch-node"><span class="node-icon">02</span><b>임시 HTTPS URL</b><small><code>*.trycloudflare.com</code></small></div>
+          <div class="arch-node"><span class="node-icon">03</span><b>cloudflared</b><small>맥북에서 바깥으로 만든 암호화 연결</small></div>
+          <div class="arch-node"><span class="node-icon">04</span><b>인증 프록시</b><small><code>127.0.0.1:4180</code><br>로그인·세션 검사</small></div>
+          <div class="arch-node"><span class="node-icon">05</span><b>Vite</b><small><code>127.0.0.1:5173</code><br>Vue 화면과 <code>/api</code> 프록시</small></div>
+          <div class="arch-node"><span class="node-icon">06</span><b>Spring Boot</b><small><code>127.0.0.1:8080</code><br>DB·OpenAI 호출</small></div>
+        </div>
+      </div>
+
+      <div class="boundary-note">
+        <strong>핵심</strong>
+        <p>공유기에서 인바운드 포트를 열지 않는다. PostgreSQL과 OpenAI API 키도 외부로 전달되지 않으며, 백엔드가 필요한 요청만 내부에서 처리한다.</p>
+      </div>
+
+      <div class="table-wrap" style="margin-top: 22px;">
+        <table>
+          <thead><tr><th>통신 구간</th><th>연결 방식</th><th>보호·신뢰 경계</th></tr></thead>
+          <tbody>
+            <tr><td>브라우저 → Cloudflare</td><td>공개 인터넷의 HTTPS</td><td>TLS로 암호화되며 Cloudflare Edge가 HTTPS 요청을 받는다.</td></tr>
+            <tr><td>Cloudflare → cloudflared</td><td>맥북이 먼저 만든 아웃바운드 터널</td><td>보통 7844 포트의 QUIC 또는 HTTP/2 연결을 사용한다. 공유기 인바운드 포트는 열지 않는다.</td></tr>
+            <tr><td>cloudflared → 인증 프록시</td><td><code>127.0.0.1:4180</code></td><td>맥북 내부 루프백 통신이다. Cloudflare는 외부 HTTPS 종단이므로 신뢰하는 중계자에 포함된다.</td></tr>
+            <tr><td>인증 프록시 → Vite → Spring Boot</td><td>로컬 HTTP 프록시</td><td>세션 검증을 통과한 요청만 화면과 API까지 전달한다.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="flow" class="panel">
+      <div class="section-head">
+        <div>
+          <p class="kicker">03 · Runtime Flow</p>
+          <h2>시작부터 종료까지</h2>
+        </div>
+        <p class="summary">아래 탭을 선택하면 시작, 사용자 로그인, 인증 후 전달, 종료 흐름을 단계별로 확인할 수 있다.</p>
+      </div>
+
+      <div class="tabs" role="tablist" aria-label="동작 흐름 선택">
+        <button class="tab" id="tab-start" type="button" role="tab" aria-selected="true" aria-controls="flow-start" data-flow="start">1. 터널 시작</button>
+        <button class="tab" id="tab-login" type="button" role="tab" aria-selected="false" aria-controls="flow-login" data-flow="login">2. 로그인 판단</button>
+        <button class="tab" id="tab-proxy" type="button" role="tab" aria-selected="false" aria-controls="flow-proxy" data-flow="proxy">3. 앱 요청 전달</button>
+        <button class="tab" id="tab-stop" type="button" role="tab" aria-selected="false" aria-controls="flow-stop" data-flow="stop">4. 종료·정리</button>
+      </div>
+
+      <div class="flow-panel" id="flow-start" role="tabpanel" aria-labelledby="tab-start">
+        <ol class="timeline">
+          <li class="step"><span class="step-num">1</span><h3>모드 선택</h3><p><code>quick-tunnel</code> 명령을 명시적으로 실행한다. 기본값은 외부 공개가 없는 <code>local</code>이다.</p></li>
+          <li class="step"><span class="step-num">2</span><h3>사전 확인</h3><p>Node.js, cloudflared, curl, OpenSSL과 프론트엔드·백엔드 Health 응답을 확인한다.</p></li>
+          <li class="step"><span class="step-num">3</span><h3>자체 테스트</h3><p>인증 우회 차단, 보안 쿠키, 헤더 제거, 로그인 실패 제한 테스트를 먼저 실행한다.</p></li>
+          <li class="step"><span class="step-num">4</span><h3>비밀정보 생성</h3><p>임시 비밀번호 128비트와 세션 토큰 256비트를 OpenSSL의 안전한 난수로 생성한다.</p></li>
+          <li class="step"><span class="step-num">5</span><h3>인증 프록시 시작</h3><p><code>127.0.0.1:4180</code>에만 바인딩하고, 실제 시작한 프로세스가 살아 있는지 검증한다.</p></li>
+          <li class="step"><span class="step-num">6</span><h3>로컬 검증</h3><p>미인증 요청은 <code>302</code>, 유효 세션 요청은 <code>200</code>인지 확인한다.</p></li>
+          <li class="step"><span class="step-num">7</span><h3>Quick Tunnel 시작</h3><p>cloudflared가 인증 프록시로 향하는 아웃바운드 터널과 임시 HTTPS URL을 만든다.</p></li>
+          <li class="step"><span class="step-num">8</span><h3>외부 검증</h3><p>공개 URL에서도 미인증 <code>302</code>와 인증 성공 <code>200</code>을 확인한 뒤 URL과 인증 정보를 표시한다.</p></li>
+        </ol>
+      </div>
+
+      <div class="flow-panel" id="flow-login" role="tabpanel" aria-labelledby="tab-login" hidden>
+        <div class="decision-flow">
+          <div class="decision-node"><b>외부 요청 도착</b><br><small>Cloudflare → 인증 프록시</small></div>
+          <div class="arrow" aria-hidden="true">→</div>
+          <div class="decision-node question"><b>유효한 세션 쿠키인가?</b><br><small>고정 시간 비교로 토큰 확인</small></div>
+          <div class="arrow" aria-hidden="true">→</div>
+          <div class="decision-node pass"><b>Yes</b><br><small>앱 요청 전달 단계로 이동</small></div>
+        </div>
+        <div class="branch-grid">
+          <article class="branch fail">
+            <h3>No · 로그인 필요</h3>
+            <p><code>302</code>로 로그인 화면에 보낸다. 제출 횟수가 제한을 넘으면 <code>429</code>, 인증 정보가 다르면 <code>403</code>을 반환한다. 어느 경우에도 앱은 요청을 받지 않는다.</p>
+          </article>
+          <article class="branch ok">
+            <h3>성공 · 세션 발급</h3>
+            <p>사용자명과 비밀번호가 모두 맞으면 <code>Secure</code>·<code>HttpOnly</code>·<code>SameSite=Strict</code> 쿠키를 발급하고 원래 요청 경로로 <code>303</code> 이동한다.</p>
+          </article>
+        </div>
+      </div>
+
+      <div class="flow-panel" id="flow-proxy" role="tabpanel" aria-labelledby="tab-proxy" hidden>
+        <ol class="timeline">
+          <li class="step"><span class="step-num">1</span><h3>세션 재검증</h3><p>화면·API·WebSocket 요청마다 세션 토큰을 다시 확인한다.</p></li>
+          <li class="step"><span class="step-num">2</span><h3>인증정보 제거</h3><p>터널 세션 쿠키와 외부 <code>Authorization</code> 헤더를 업스트림 요청에서 제거한다.</p></li>
+          <li class="step"><span class="step-num">3</span><h3>Vite 전달</h3><p>인증된 요청만 <code>127.0.0.1:5173</code>으로 프록시한다. 화면 자원과 HMR WebSocket도 같은 규칙을 따른다.</p></li>
+          <li class="step"><span class="step-num">4</span><h3>백엔드 처리</h3><p><code>/api</code> 요청은 기존 Vite 설정을 통해 Spring Boot로 전달되고, 결과가 같은 경로를 거쳐 사용자에게 돌아간다.</p></li>
+        </ol>
+      </div>
+
+      <div class="flow-panel" id="flow-stop" role="tabpanel" aria-labelledby="tab-stop" hidden>
+        <ol class="timeline">
+          <li class="step"><span class="step-num">1</span><h3>종료 조건</h3><p><code>stop</code>, <code>local</code>, Ctrl+C, 프로세스 오류 또는 기본 8시간 만료가 종료를 시작한다.</p></li>
+          <li class="step"><span class="step-num">2</span><h3>프로세스 식별</h3><p>PID뿐 아니라 예상 명령행도 확인해 관계없는 프로세스를 종료하지 않는다.</p></li>
+          <li class="step"><span class="step-num">3</span><h3>연결 종료</h3><p>cloudflared와 인증 프록시를 순서대로 종료해 외부 요청 경로를 닫는다.</p></li>
+          <li class="step"><span class="step-num">4</span><h3>정보 폐기</h3><p>공개 URL과 인증 정보 파일을 삭제한다. 프로세스가 사라져 기존 세션 토큰도 즉시 무효가 된다.</p></li>
+        </ol>
+      </div>
+    </section>
+
+    <section id="authentication" class="panel">
+      <div class="section-head">
+        <div>
+          <p class="kicker">04 · Authentication</p>
+          <h2>비밀번호, 세션 토큰, 쿠키의 역할</h2>
+        </div>
+        <p class="summary">현재 구현은 API의 <code>Authorization</code> 헤더가 아니라 브라우저가 자동 관리하는 세션 쿠키를 사용한다. 단, 쿠키도 실제 HTTP 요청에서는 <code>Cookie</code> 헤더로 전달된다.</p>
+      </div>
+
+      <div class="comparison">
+        <article class="state-card">
+          <span class="label">AUTHORIZATION HEADER</span>
+          <h3>클라이언트 코드가 토큰을 직접 붙임</h3>
+          <pre class="code-block"><code>Authorization: Bearer &lt;access-token&gt;</code></pre>
+          <ul>
+            <li>프론트엔드 코드나 모바일 앱이 저장·첨부를 관리한다.</li>
+            <li>REST API, 모바일 앱, 서버 간 통신에 잘 맞는다.</li>
+            <li>브라우저가 자동 전송하지 않아 일반적인 CSRF 노출은 낮지만, JavaScript 저장소에 둔 토큰은 XSS 탈취에 주의해야 한다.</li>
+            <li><b>이 터널 인증에는 사용하지 않는다.</b> 외부에서 들어온 헤더는 업스트림 전달 전에 제거한다.</li>
+          </ul>
+        </article>
+        <article class="state-card after">
+          <span class="label">SESSION COOKIE · CURRENT</span>
+          <h3>브라우저가 세션 증명을 자동 전송</h3>
+          <pre class="code-block"><code>Set-Cookie: auknowlog_tunnel_session=&lt;token&gt;;
+  HttpOnly; Secure; SameSite=Strict
+
+Cookie: auknowlog_tunnel_session=&lt;token&gt;</code></pre>
+          <ul>
+            <li>로그인 성공 응답을 받은 브라우저가 쿠키를 저장한다.</li>
+            <li>같은 사이트의 이후 화면·API·WebSocket 요청에 자동으로 포함한다.</li>
+            <li><code>HttpOnly</code>로 JavaScript 접근을 막고, <code>Secure</code>로 HTTPS에서만 전송하며, <code>SameSite=Strict</code>로 교차 사이트 전송을 제한한다.</li>
+            <li><b>현재 임시 브라우저 로그인 흐름에 사용한다.</b></li>
+          </ul>
+        </article>
+      </div>
+
+      <h3 style="margin-top: 28px;">프록시가 “토큰을 만든다”는 뜻</h3>
+      <p class="summary" style="margin-bottom: 16px;">토큰은 사용자 정보가 들어 있는 JWT가 아니다. 터널 시작 스크립트가 OpenSSL의 암호학적으로 안전한 난수로 만든, 의미 없는 일회성 비밀 문자열이다. 프록시는 이 값을 기억하고 쿠키 값과 일치하는지만 확인한다.</p>
+      <ol class="timeline">
+        <li class="step"><span class="step-num">1</span><h3>실행마다 생성</h3><p>임시 비밀번호는 16바이트(128비트), 세션 토큰은 32바이트(256비트) 난수로 생성한다.</p></li>
+        <li class="step"><span class="step-num">2</span><h3>프록시에 전달</h3><p>세션 토큰은 환경 변수로 인증 프록시 프로세스에 전달되고 실행 중 메모리에서 비교 기준으로 사용된다.</p></li>
+        <li class="step"><span class="step-num">3</span><h3>로그인 제출</h3><p>사용자는 임시 사용자명·비밀번호를 한 번 입력한다. 실패는 식별자별 횟수를 제한한다.</p></li>
+        <li class="step"><span class="step-num">4</span><h3>쿠키 발급</h3><p>인증 정보가 맞으면 프록시가 같은 세션 토큰을 보안 쿠키로 브라우저에 전달한다.</p></li>
+        <li class="step"><span class="step-num">5</span><h3>자동 첨부</h3><p>이후 브라우저가 요청의 <code>Cookie</code> 헤더에 토큰을 자동으로 넣는다. 비밀번호를 매번 보내지 않는다.</p></li>
+        <li class="step"><span class="step-num">6</span><h3>매 요청 검증</h3><p>프록시는 HTTP와 WebSocket 요청마다 쿠키를 꺼내 보관 중인 토큰과 고정 시간으로 비교한다.</p></li>
+        <li class="step"><span class="step-num">7</span><h3>분리 후 전달</h3><p>검증에 성공하면 터널 쿠키와 외부 인증 헤더를 제거한 뒤 Vite로 전달한다. 앱의 다른 쿠키는 유지한다.</p></li>
+        <li class="step"><span class="step-num">8</span><h3>종료 시 무효화</h3><p>터널·프록시 종료 또는 기본 8시간 만료 후 비교 대상이 사라진다. 다음 실행은 새 토큰을 만들므로 기존 쿠키는 통하지 않는다.</p></li>
+      </ol>
+
+      <div class="table-wrap" style="margin-top: 22px;">
+        <table>
+          <thead><tr><th>이름</th><th>용도</th><th>저장·수명</th><th>서로 다른 점</th></tr></thead>
+          <tbody>
+            <tr><td>임시 비밀번호</td><td>최초 로그인에서 사용자 확인</td><td>실행마다 생성, 로컬 런타임 파일과 프록시 메모리</td><td>사용자가 입력하며 매 요청에는 보내지 않는다.</td></tr>
+            <tr><td>터널 세션 토큰</td><td>로그인 완료 사실을 증명</td><td>프록시 메모리와 브라우저 쿠키, 최대 8시간</td><td>현재 구현은 로그인마다 별도 발급하지 않고 터널 하나가 하나의 토큰을 공유한다.</td></tr>
+            <tr><td>OpenAI API 키</td><td>백엔드가 OpenAI API 비용·권한 계정을 증명</td><td>백엔드 환경 변수</td><td>외부 접속 인증과 무관하며 브라우저나 터널로 보내지 않는다.</td></tr>
+            <tr><td>Cloudflare 터널 자격정보</td><td>정식 Named Tunnel에서 계정·터널 식별</td><td>해당 구성을 사용할 때 cloudflared가 관리</td><td>현재 Quick Tunnel은 임시 URL 방식이라 애플리케이션 로그인 토큰과 별개다.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 style="margin-top: 28px;">요청 헤더는 어디까지 검사하는가</h3>
+      <div class="table-wrap" style="margin-top: 12px;">
+        <table>
+          <thead><tr><th>헤더</th><th>현재 처리</th><th>인증 판단에 사용하는가</th></tr></thead>
+          <tbody>
+            <tr><td><code>Cookie</code></td><td><code>auknowlog_tunnel_session</code> 값을 추출·검증하고, 전달 전 이 쿠키만 제거한다. 다른 앱 쿠키는 유지한다.</td><td><span class="status closed">사용</span></td></tr>
+            <tr><td><code>Authorization</code></td><td>신뢰하지 않고 업스트림 전달 전에 제거한다.</td><td><span class="status open">미사용</span></td></tr>
+            <tr><td><code>Proxy-Authorization</code></td><td>업스트림 전달 전에 제거한다.</td><td><span class="status open">미사용</span></td></tr>
+            <tr><td><code>CF-Connecting-IP</code>·<code>X-Forwarded-For</code></td><td>로그인 실패 횟수 제한의 식별자로만 사용한다. 비밀번호나 세션을 대체하지 않는다.</td><td><span class="status open">미사용</span></td></tr>
+            <tr><td><code>Host</code></td><td>로컬 업스트림 주소에 맞게 다시 쓴다.</td><td><span class="status open">미사용</span></td></tr>
+            <tr><td><code>Origin</code></td><td>명시적으로 검증하지 않는다. 현재는 <code>SameSite=Strict</code>가 교차 사이트 쿠키 전송을 제한한다.</td><td><span class="status open">미사용</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="caution"><strong>현재 구현의 범위:</strong> 한 사람이 잠시 개발 화면을 확인하는 용도라서 터널 실행 1회당 세션 토큰 1개를 공유한다. 사용자별 세션, 선택적 로그아웃·강제 폐기, 역할 권한, 계정 복구 기능은 없다. 정식 서비스라면 Spring Security/OIDC 같은 애플리케이션 인증, 로그인별 세션, 서버 측 세션 저장소 또는 서명 쿠키, 명시적 CSRF 방어와 감사 로그를 설계해야 한다.</div>
+    </section>
+
+    <section id="security" class="panel">
+      <div class="section-head">
+        <div>
+          <p class="kicker">05 · Security</p>
+          <h2>보안 경계와 방어 수단</h2>
+        </div>
+        <p class="summary">임시 URL 자체는 비밀정보로 취급하지 않는다. URL을 알아도 인증을 통과하지 못하면 애플리케이션에 접근할 수 없도록 설계했다.</p>
+      </div>
+
+      <div class="security-grid">
+        <article class="security-item"><b>강한 임시 비밀정보</b><p>실행마다 32자리 16진수 비밀번호와 64자리 세션 토큰을 새로 생성한다.</p></article>
+        <article class="security-item"><b>고정 시간 비교</b><p><code>crypto.timingSafeEqual</code>로 사용자 입력을 비교해 시간 차이를 통한 추측 가능성을 줄인다.</p></article>
+        <article class="security-item"><b>로그인 횟수 제한</b><p>식별자별 5분 동안 5회 실패하면 <code>429 Too Many Requests</code>로 차단한다.</p></article>
+        <article class="security-item"><b>보안 세션 쿠키</b><p>JavaScript 접근 차단, HTTPS 전용, 교차 사이트 전송 제한 속성을 함께 설정한다.</p></article>
+        <article class="security-item"><b>응답 보안 헤더</b><p><code>no-store</code>, CSP, 프레임 차단, MIME 추측 방지, referrer 차단을 적용한다.</p></article>
+        <article class="security-item"><b>최소 로그</b><p>인증 실패 사실만 남기며 입력값, IP, 어느 필드가 맞았는지는 기록하지 않는다.</p></article>
+        <article class="security-item"><b>로컬 전용 바인딩</b><p>인증 프록시와 기존 서버는 <code>127.0.0.1</code>에서만 대기한다.</p></article>
+        <article class="security-item"><b>런타임 정보 격리</b><p><code>.runtime/</code>은 Git에서 제외하고 디렉터리 <code>700</code>, 파일 <code>600</code> 권한을 사용한다.</p></article>
+        <article class="security-item"><b>실패 시 닫힘</b><p>사전 검사나 공개 검증 하나라도 실패하면 시작한 프로세스와 인증 정보를 정리한다.</p></article>
+      </div>
+
+      <div class="table-wrap" style="margin-top: 22px;">
+        <table>
+          <thead><tr><th>대상</th><th>인터넷 직접 노출</th><th>접근 조건</th><th>설명</th></tr></thead>
+          <tbody>
+            <tr><td>임시 Cloudflare URL</td><td><span class="status open">공개</span></td><td>HTTPS</td><td>외부에 보이는 유일한 진입점</td></tr>
+            <tr><td>인증 프록시</td><td><span class="status closed">비공개</span></td><td>cloudflared 또는 로컬</td><td>모든 HTTP·WebSocket 요청의 인증 게이트</td></tr>
+            <tr><td>Vite 프론트엔드</td><td><span class="status closed">비공개</span></td><td>유효한 터널 세션</td><td>인증 프록시 뒤에서만 접근</td></tr>
+            <tr><td>Spring Boot API</td><td><span class="status closed">비공개</span></td><td>Vite의 <code>/api</code> 경로</td><td>별도 외부 포트를 열지 않음</td></tr>
+            <tr><td>PostgreSQL·pgvector</td><td><span class="status closed">비공개</span></td><td>백엔드 내부 연결</td><td>터널 경로에 포함되지 않음</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="files" class="panel">
+      <div class="section-head">
+        <div>
+          <p class="kicker">06 · Changed Files</p>
+          <h2>수정 내용과 책임</h2>
+        </div>
+        <p class="summary">터널 수명주기, 인증, 테스트, 운영 문서를 분리해 각 파일의 역할이 섞이지 않게 했다.</p>
+      </div>
+
+      <div class="file-grid">
+        <article class="file-item"><code>scripts/remote-access.sh</code><p>local/quick-tunnel 선택, 사전 검사, 비밀정보 생성, 프로세스 시작·검증·종료를 담당한다.</p></article>
+        <article class="file-item"><code>scripts/tunnel-auth-proxy.mjs</code><p>로그인 화면, 세션 쿠키, 실패 횟수 제한, HTTP·WebSocket 역방향 프록시를 제공한다.</p></article>
+        <article class="file-item"><code>scripts/tunnel-auth-proxy.test.mjs</code><p>미인증 차단, 자격증명 비노출, 보안 쿠키, 헤더·쿠키 제거, 속도 제한을 검증한다.</p></article>
+        <article class="file-item"><code>.gitignore</code><p>임시 비밀번호, 세션과 프로세스 상태가 들어가는 <code>.runtime/</code>을 추적 대상에서 제외한다.</p></article>
+        <article class="file-item"><code>docs/REMOTE_ACCESS.md</code><p>운영 명령, 보안 설계, 사전 조건과 한계를 텍스트 중심으로 설명한다.</p></article>
+        <article class="file-item"><code>README.md · DEVELOPMENT_GUIDE.md</code><p>개발자가 외부 접속 모드를 발견하고 상세 운영 문서로 이동할 수 있게 연결한다.</p></article>
+      </div>
+    </section>
+
+    <section id="operation" class="panel">
+      <div class="section-head">
+        <div>
+          <p class="kicker">07 · Runbook</p>
+          <h2>실행과 확인 방법</h2>
+        </div>
+        <p class="summary">프론트엔드와 백엔드가 먼저 실행 중이어야 한다. 터널은 애플리케이션 서버를 대신 실행하지 않는다.</p>
+      </div>
+
+      <div class="run-grid">
+        <pre class="code-block"><code># 대화형 모드 선택
+./scripts/remote-access.sh
+
+# 외부 접속 시작
+./scripts/remote-access.sh quick-tunnel
+
+# 실행 상태와 URL 확인
+./scripts/remote-access.sh status
+
+# 임시 인증 정보 확인
+./scripts/remote-access.sh credentials
+
+# 터널 종료 / 로컬 전용 전환
+./scripts/remote-access.sh stop
+./scripts/remote-access.sh local</code></pre>
+        <div class="state-card after">
+          <span class="label">OUTPUT</span>
+          <h3>시작 성공 시 제공되는 정보</h3>
+          <ul>
+            <li>매번 바뀌는 임시 HTTPS URL</li>
+            <li>기본 사용자명 <code>eunjuny</code></li>
+            <li>매번 새로 생성되는 임시 비밀번호</li>
+            <li>자동 종료 예정 시간</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="caution"><strong>주의:</strong> 인증 정보는 터미널 출력과 로컬 런타임 파일에만 존재한다. 저장소, 문서, 메신저 공개 채널에 복사하지 않고 사용이 끝나면 즉시 <code>stop</code>한다.</div>
+    </section>
+
+    <section id="limits" class="panel">
+      <div class="section-head">
+        <div>
+          <p class="kicker">08 · Trade-offs</p>
+          <h2>어디까지 적합한가</h2>
+        </div>
+        <p class="summary">이 구조는 혼자 쓰는 개발 화면의 임시 확인을 위한 선택이다. 정식 서비스 인증이나 배포를 대체하지 않는다.</p>
+      </div>
+
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>상황</th><th>권장 방식</th><th>이유</th></tr></thead>
+          <tbody>
+            <tr><td>몇 시간 동안 모바일에서 개발 화면 확인</td><td><b>현재 Quick Tunnel</b></td><td>설정이 빠르고 종료 시 공개 경로가 사라짐</td></tr>
+            <tr><td>내 기기들에서 반복적으로 비공개 접속</td><td><b>Tailscale</b></td><td>임시 공용 URL 없이 기기 단위 사설 네트워크 구성</td></tr>
+            <tr><td>포트폴리오를 상시 공개</td><td><b>정식 배포 + 앱 인증</b></td><td>고정 주소, 사용자 계정, 모니터링, 장애 대응과 접근 제어 필요</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <ul class="note-list" style="margin-top: 22px;">
+        <li>Quick Tunnel 주소는 실행할 때마다 바뀌며 가용성 보장이 없다.</li>
+        <li>맥북, Docker, 프론트엔드와 백엔드가 실행 중이어야 한다.</li>
+        <li>공유 인증 한 쌍만 제공하므로 사용자별 권한·로그아웃·계정 복구가 필요한 서비스에는 부족하다.</li>
+        <li>인증 후에는 실제 OpenAI API 요청도 실행할 수 있으므로 API 예산 한도와 애플리케이션 요청 제한은 별도로 유지해야 한다.</li>
+      </ul>
+
+      <p class="summary" style="margin-top: 22px;">참고: <a href="https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/">Cloudflare Tunnel 공식 문서</a> · <a href="https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/do-more-with-tunnels/trycloudflare/">Quick Tunnel 공식 문서</a> · <a href="https://developers.cloudflare.com/cloudflare-one/networks/connectors/cloudflare-tunnel/configure-tunnels/tunnel-with-firewall/">터널 방화벽·연결 방식</a></p>
+    </section>
+  </main>
+
+  <footer class="wrap">Auknowlog 외부 접속 구현 기록 · 2026-09-07 기준</footer>
+
+  <script>
+    const tabs = [...document.querySelectorAll('[data-flow]')]
+    const panels = [...document.querySelectorAll('.flow-panel')]
+
+    function selectFlow(selectedTab) {
+      tabs.forEach((tab) => {
+        const selected = tab === selectedTab
+        tab.setAttribute('aria-selected', String(selected))
+        tab.tabIndex = selected ? 0 : -1
+      })
+      panels.forEach((panel) => {
+        panel.hidden = panel.id !== `flow-${selectedTab.dataset.flow}`
+      })
+    }
+
+    tabs.forEach((tab, index) => {
+      tab.addEventListener('click', () => selectFlow(tab))
+      tab.addEventListener('keydown', (event) => {
+        if (!['ArrowLeft', 'ArrowRight'].includes(event.key)) return
+        event.preventDefault()
+        const direction = event.key === 'ArrowRight' ? 1 : -1
+        const nextTab = tabs[(index + direction + tabs.length) % tabs.length]
+        selectFlow(nextTab)
+        nextTab.focus()
+      })
+    })
+  </script>
+</body>
+</html>

@@ -17,7 +17,7 @@
 | Database | PostgreSQL 16 + pgvector | 학습 이력의 원본 데이터와 선택적 의미 검색 |
 | Migration | Flyway | 리뷰 가능한 DB 스키마 버전 관리 |
 | AI | OpenAI Responses API, Embeddings API | 구조화 퀴즈 생성, 선택적 의미 중복 검사 |
-| Observability | Actuator, Micrometer | AI 지연·결과·토큰 메트릭 |
+| Observability | Actuator, Micrometer, Prometheus | AI 지연·결과·토큰 및 문제 품질 추세 |
 | Frontend | Vue 3, Vite | 자료 입력, 풀이, 결과 저장 |
 | Local Infra | Docker Compose | 개발 환경 재현 |
 
@@ -41,7 +41,17 @@ npm run dev
 | 프런트엔드 | http://localhost:5173 |
 | API/Swagger | http://localhost:8080/swagger-ui.html |
 | Health | http://localhost:8080/actuator/health |
-| AI 지연 메트릭 | http://localhost:8080/actuator/metrics/auknowlog.ai.quiz.request.duration |
+| AI 지연 메트릭 | http://localhost:8080/actuator/metrics/auknowlog.ai.request.duration |
+| Prometheus 형식 | http://localhost:8080/actuator/prometheus |
+| Prometheus UI (`monitoring` 프로필) | http://127.0.0.1:9090 |
+
+Prometheus는 기본 실행에 포함되지 않는다. 백엔드를 `8080` 포트로 실행한 뒤 필요할 때만 다음 명령으로 시작한다.
+
+```bash
+docker compose --profile monitoring up -d prometheus
+```
+
+커스텀 지표, PromQL 예시와 데이터 책임 범위는 [Prometheus 운영 관측](PROMETHEUS_OBSERVABILITY.md)을 참고한다.
 
 외부 접속은 기본적으로 비활성화된다. 필요할 때만 다음 선택 메뉴에서 `quick-tunnel`을 고른다.
 

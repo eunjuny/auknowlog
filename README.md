@@ -23,12 +23,13 @@ AI를 활용하여 원하는 주제에 대한 객관식 문제를 자동으로 �
 ## ✨ 주요 기능
 
 - 🤖 **AI 퀴즈 자동 생성** - 주제 입력만으로 객관식 퀴즈 생성
-- 📚 **학습 자료 기반 생성** - Markdown·문서 텍스트를 청크로 저장해 생성 요청의 근거로 사용
+- 📚 **학습 자료 기반 생성** - 파일·공개 URL의 본문을 청크로 저장하고 제한된 문맥으로 AI 학습 로드맵 생성
+- 🔐 **안전한 자료 가져오기** - TXT·Markdown·PDF 파일과 공개 URL을 SSRF·크기·시간 제한 아래 추출하고 미리보기 후 저장
 - 🧠 **학습 기록과 복습 예약** - 풀이 결과를 저장하고 오답은 다음 날 복습 대상으로 예약
 - 🔍 **의미 기반 중복 방지** - pgvector 코사인 유사도와 PostgreSQL 정확 해시를 조합
 - 📊 **AI 운영 관측** - 호출 모델·지연·성공/실패·토큰 사용량을 기록
 - 🔭 **AI Trace 분석** - 선택 시 Langfuse에 생성·임베딩·중복 검사의 요청 흐름을 OpenTelemetry로 기록
-- 🧭 **단계형 학습 로드맵** - 직접 작성, AI 생성, `*.roadmap.json` 가져오기와 선행 단계 잠금 지원
+- 🧭 **계층형 학습 로드맵** - 대주제·순차 소주제, 동시 진행, 자동 완료 분류, 편집 가능한 AI 미리보기, `*.roadmap.json` 가져오기 지원
 - 💬 **문제 품질 피드백** - 제출한 문항의 정확성·난이도·해설 품질 의견을 저장하고 대시보드에서 집계
 
 ## 🚀 빠른 시작
@@ -101,6 +102,8 @@ Quick Tunnel에는 로그인·세션 인증 프록시가 선행되며 미인증 
 - [외부 접속 구조와 동작 흐름 (HTML)](docs/REMOTE_ACCESS_FLOW.html)
 - [포트폴리오 완성도·부족한 부분 점검](docs/PORTFOLIO_GAP_ANALYSIS.md)
 - [Langfuse 기반 AI 관측·비용 없는 설정](docs/LANGFUSE_OBSERVABILITY.md)
+- [Prometheus 기반 AI·문제 품질 운영 관측](docs/PROMETHEUS_OBSERVABILITY.md)
+- [파일·URL 학습 자료 수집 보안 설계](docs/SOURCE_INGESTION_SECURITY.md)
 - [`.roadmap.json` 단계형 학습 로드맵 형식](docs/ROADMAP_JSON_FORMAT.md)
 
 - API 명세
@@ -113,7 +116,8 @@ Quick Tunnel에는 로그인·세션 인증 프록시가 선행되며 미인증 
 ## 🔎 운영 확인
 
 - 스키마는 Flyway 마이그레이션으로 관리하며 애플리케이션 시작 시 검증합니다.
-- AI 호출 지연·결과·토큰 사용량은 `/actuator/metrics`에서 확인합니다. 예: `/actuator/metrics/auknowlog.ai.quiz.request.duration`
+- AI 호출 지연·결과·토큰 사용량은 `/actuator/metrics`에서 진단하고 `/actuator/prometheus`로 수집합니다. 예: `/actuator/metrics/auknowlog.ai.request.duration`
+- Prometheus는 기본 실행에서 제외되며 `docker compose --profile monitoring up -d`로 필요할 때만 실행합니다. UI는 `http://127.0.0.1:9090`입니다.
 - 화면은 기본적으로 비용 없는 더미 퀴즈 모드입니다. 실제 GPT 생성은 화면에서 해제하고 `OPENAI_API_KEY`를 설정한 경우에만 실행됩니다.
 - 의미 중복 검사용 임베딩은 기본 활성입니다. 실제 AI 퀴즈 생성 시 Embeddings API가 함께 호출되며, 비활성화하려면 `AUKNOWLOG_EMBEDDINGS_ENABLED=false`를 설정하세요.
 - Langfuse 관측은 기본 비활성입니다. 별도 비용 없이 Cloud Hobby를 연결하는 방법과 개인정보 기본값은 [Langfuse 운영 문서](docs/LANGFUSE_OBSERVABILITY.md)를 참고하세요.
@@ -133,7 +137,7 @@ cd backend
 ./gradlew check
 ```
 
-`integrationTest`는 Testcontainers가 격리된 임시 DB를 만들고 Flyway V1~V8, `vector(512)`, HNSW 인덱스, 코사인 유사도 검색과 피드백·단계형 로드맵 스키마를 검증한 뒤 컨테이너를 제거합니다. OpenAI API는 호출하지 않습니다.
+`integrationTest`는 Testcontainers가 격리된 임시 DB를 만들고 Flyway V1~V12, `vector(512)`, HNSW 인덱스, 코사인 유사도 검색과 피드백·계층형 로드맵·자료 출처 및 로드맵 연결 스키마를 검증한 뒤 컨테이너를 제거합니다. OpenAI API는 호출하지 않습니다.
 
 ## ⚙️ 환경 설정
 

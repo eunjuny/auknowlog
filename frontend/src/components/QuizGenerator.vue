@@ -28,14 +28,17 @@ const attemptSaved = ref(false);
 const attemptSaving = ref(false);
 const quizSubmitted = ref(false);
 const submissionMessage = ref(null);
+const gradingResults = ref({});
 const feedbackForms = ref({});
 const recommendationMessage = ref(null);
 const roadmapContext = ref(null);
+const reviewRegistrations = ref({});
 
 const feedbackTypes = [
   { value: 'INCORRECT_CONTENT', label: '정답 또는 내용이 부정확해요' },
   { value: 'AMBIGUOUS', label: '질문이 모호해요' },
   { value: 'EXPLANATION_INSUFFICIENT', label: '해설이 부족해요' },
+  { value: 'TOO_SIMILAR', label: '비슷한 문제가 자주 나와요' },
   { value: 'DIFFICULTY_TOO_LOW', label: '난이도가 너무 낮아요' },
   { value: 'DIFFICULTY_TOO_HIGH', label: '난이도가 너무 높아요' },
   { value: 'OTHER', label: '기타 의견' }
@@ -85,8 +88,10 @@ async function generateQuiz() {
   attemptSaving.value = false;
   quizSubmitted.value = false;
   submissionMessage.value = null;
+  gradingResults.value = {};
   sourceMessage.value = null;
   feedbackForms.value = {};
+  reviewRegistrations.value = {};
   recommendationMessage.value = null;
 
   try {
@@ -138,6 +143,9 @@ async function saveLearningAttempt() {
           answers
         });
         const result = response.data;
+        gradingResults.value = Object.fromEntries(
+          (result.questions || []).map((question) => [question.questionOrder - 1, question])
+        );
         attemptSaved.value = true;
         attemptMessage.value = null;
         submissionMessage.value = `채점 완료 · ${result.correctAnswers}/${result.totalQuestions} 정답 · 풀이 기록 자동 저장됨` +
@@ -194,23 +202,80 @@ function getUnansweredQuestionCount() {
   return quizResult.value.questions.filter((_, index) => selectedAnswers.value[index] === null || selectedAnswers.value[index] === undefined).length;
 }
 
-function getCorrectAnswerCount() {
-  if (!quizResult.value?.questions) return 0;
-  return quizResult.value.questions.filter((question, index) =>
-    question.options[selectedAnswers.value[index]] === question.correctAnswer
-  ).length;
-}
-
 async function submitQuiz() {
+  if (quizSubmitted.value && !attemptSaved.value) {
+    submissionMessage.value = '서버 채점 및 풀이 기록 저장을 다시 시도합니다.';
+    await saveLearningAttempt();
+    return;
+  }
   if (!isAllQuestionsAnswered()) {
     submissionMessage.value = `미응답 문제가 ${getUnansweredQuestionCount()}개 남아 있습니다.`;
     return;
   }
 
   quizSubmitted.value = true;
-  const correctAnswers = getCorrectAnswerCount();
-  submissionMessage.value = `채점 완료 · ${correctAnswers}/${quizResult.value.questions.length} 정답 · 풀이 기록 저장 중...`;
+  submissionMessage.value = '서버에서 채점하고 풀이 기록과 복습 일정을 저장하는 중입니다...';
   await saveLearningAttempt();
+}
+
+function isQuestionCorrect(questionIndex) {
+  return gradingResults.value[questionIndex]?.correct === true;
+}
+
+function buildGradedQuizPayload() {
+  const questions = quizResult.value.questions.map((question, index) => {
+    const grade = gradingResults.value[index];
+    return {
+      ...question,
+      userSelectedIndex: selectedAnswers.value[index],
+      userSelectedAnswer: grade.selectedAnswer,
+      correctAnswer: grade.correctAnswer,
+      explanation: grade.explanation,
+      sourceReferences: grade.sourceReferences,
+      isCorrect: grade.correct
+    };
+  });
+  const correct = questions.filter((question) => question.isCorrect).length;
+  return {
+    ...quizResult.value,
+    userAnswers: selectedAnswers.value,
+    questions,
+    stats: { total: questions.length, correct, wrong: questions.length - correct }
+  };
+}
+
+async function registerQuestionForReview(questionIndex) {
+  if (!attemptSaved.value || !isQuestionCorrect(questionIndex)) {
+    return;
+  }
+
+  const state = reviewRegistrations.value[questionIndex] || {
+    saving: false,
+    registered: false,
+    message: null,
+    error: null
+  };
+  reviewRegistrations.value[questionIndex] = state;
+  if (state.saving || state.registered) {
+    return;
+  }
+
+  state.saving = true;
+  state.error = null;
+  try {
+    const response = await axios.post('/api/reviews', {
+      quizId: quizResult.value.quizId,
+      questionOrder: questionIndex + 1
+    });
+    state.registered = true;
+    state.message = response.data.created
+      ? '내일 복습 대상으로 추가했습니다.'
+      : '이미 복습 대상으로 등록된 문항입니다.';
+  } catch (err) {
+    state.error = '복습 등록 실패: ' + (err.response?.data?.message || err.message);
+  } finally {
+    state.saving = false;
+  }
 }
 
 function feedbackFormFor(questionIndex) {
@@ -263,8 +328,8 @@ async function saveQuestionFeedback(questionIndex) {
 }
 
 async function saveQuizAsMarkdown() {
-  if (!quizSubmitted.value) {
-    saveMessage.value = '답안을 제출한 후 저장할 수 있습니다.';
+  if (!attemptSaved.value) {
+    saveMessage.value = '서버 채점과 풀이 저장이 끝난 후 저장할 수 있습니다.';
     return;
   }
 
@@ -273,29 +338,7 @@ async function saveQuizAsMarkdown() {
   error.value = null;
 
   try {
-    const questionsWithUser = quizResult.value.questions.map((question, index) => {
-      const selectedIndex = selectedAnswers.value[index];
-      const userSelectedAnswer = question.options[selectedIndex];
-      const isCorrect = userSelectedAnswer === question.correctAnswer;
-      return {
-        ...question,
-        userSelectedIndex: selectedIndex,
-        userSelectedAnswer,
-        isCorrect,
-      };
-    });
-
-    const numCorrect = questionsWithUser.filter(q => q.isCorrect).length;
-    const payload = {
-      ...quizResult.value,
-      userAnswers: selectedAnswers.value,
-      questions: questionsWithUser,
-      stats: {
-        total: questionsWithUser.length,
-        correct: numCorrect,
-        wrong: questionsWithUser.length - numCorrect,
-      },
-    };
+    const payload = buildGradedQuizPayload();
 
     // 노션 관련 파라미터는 마크다운 저장에서는 사용하지 않습니다.
 
@@ -310,8 +353,8 @@ async function saveQuizAsMarkdown() {
 }
 
 async function saveQuizToNotion() {
-  if (!quizSubmitted.value) {
-    saveMessage.value = '답안을 제출한 후 저장할 수 있습니다.';
+  if (!attemptSaved.value) {
+    saveMessage.value = '서버 채점과 풀이 저장이 끝난 후 저장할 수 있습니다.';
     return;
   }
 
@@ -320,29 +363,7 @@ async function saveQuizToNotion() {
   error.value = null;
 
   try {
-    const questionsWithUser = quizResult.value.questions.map((question, index) => {
-      const selectedIndex = selectedAnswers.value[index];
-      const userSelectedAnswer = question.options[selectedIndex];
-      const isCorrect = userSelectedAnswer === question.correctAnswer;
-      return {
-        ...question,
-        userSelectedIndex: selectedIndex,
-        userSelectedAnswer,
-        isCorrect,
-      };
-    });
-
-    const numCorrect = questionsWithUser.filter(q => q.isCorrect).length;
-    const payload = {
-      ...quizResult.value,
-      userAnswers: selectedAnswers.value,
-      questions: questionsWithUser,
-      stats: {
-        total: questionsWithUser.length,
-        correct: numCorrect,
-        wrong: questionsWithUser.length - numCorrect,
-      },
-    };
+    const payload = buildGradedQuizPayload();
 
     const response = await axios.post('/api/documents/save-quiz-notion', payload);
     saveMessage.value = response.data;
@@ -355,8 +376,8 @@ async function saveQuizToNotion() {
 }
 
 async function saveQuizToGit() {
-  if (!quizSubmitted.value) {
-    saveMessage.value = '답안을 제출한 후 저장할 수 있습니다.';
+  if (!attemptSaved.value) {
+    saveMessage.value = '서버 채점과 풀이 저장이 끝난 후 저장할 수 있습니다.';
     return;
   }
 
@@ -365,29 +386,7 @@ async function saveQuizToGit() {
   error.value = null;
 
   try {
-    const questionsWithUser = quizResult.value.questions.map((question, index) => {
-      const selectedIndex = selectedAnswers.value[index];
-      const userSelectedAnswer = question.options[selectedIndex];
-      const isCorrect = userSelectedAnswer === question.correctAnswer;
-      return {
-        ...question,
-        userSelectedIndex: selectedIndex,
-        userSelectedAnswer,
-        isCorrect,
-      };
-    });
-
-    const numCorrect = questionsWithUser.filter(q => q.isCorrect).length;
-    const payload = {
-      ...quizResult.value,
-      userAnswers: selectedAnswers.value,
-      questions: questionsWithUser,
-      stats: {
-        total: questionsWithUser.length,
-        correct: numCorrect,
-        wrong: questionsWithUser.length - numCorrect,
-      },
-    };
+    const payload = buildGradedQuizPayload();
 
     const response = await axios.post('/api/documents/save-quiz-git', payload);
     saveMessage.value = response.data;
@@ -406,6 +405,11 @@ function cancelNextQuiz() {
 
 <template>
   <div class="quiz-container">
+    <div class="quiz-heading">
+      <p class="eyebrow">QUIZ</p>
+      <h2>새 퀴즈 만들기</h2>
+      <p>학습할 주제와 문제 수를 정하고, 필요하면 참고 자료를 함께 입력하세요.</p>
+    </div>
     <div class="quiz-input-section">
       <div class="quiz-input-group">
         <label for="topic">주제:</label>
@@ -452,10 +456,10 @@ function cancelNextQuiz() {
             :disabled="quizSubmitted"
             :aria-pressed="selectedAnswers[index] === optIndex"
             :class="{
-              'selected': !quizSubmitted && selectedAnswers[index] === optIndex,
-              'correct-answer': quizSubmitted && option === question.correctAnswer,
-              'wrong-answer': quizSubmitted && selectedAnswers[index] === optIndex && option !== question.correctAnswer,
-              'not-selected': quizSubmitted && selectedAnswers[index] !== optIndex && option !== question.correctAnswer
+              'selected': selectedAnswers[index] === optIndex && (!quizSubmitted || !gradingResults[index]),
+              'correct-answer': gradingResults[index] && option === gradingResults[index].correctAnswer,
+              'wrong-answer': gradingResults[index] && selectedAnswers[index] === optIndex && option !== gradingResults[index].correctAnswer,
+              'not-selected': gradingResults[index] && selectedAnswers[index] !== optIndex && option !== gradingResults[index].correctAnswer
             }"
             @click="selectOption(index, optIndex)"
           >
@@ -463,25 +467,42 @@ function cancelNextQuiz() {
           </button>
         </div>
         
-          <div v-if="quizSubmitted"
+          <div v-if="gradingResults[index]"
              class="answer-section"
              :class="{
-               'correct-result': question.options[selectedAnswers[index]] === question.correctAnswer,
-               'incorrect-result': question.options[selectedAnswers[index]] !== question.correctAnswer
+               'correct-result': gradingResults[index].correct,
+               'incorrect-result': !gradingResults[index].correct
              }">
           <div class="result-indicator">
-            <span v-if="question.options[selectedAnswers[index]] === question.correctAnswer" class="correct-icon">✓</span>
+            <span v-if="gradingResults[index].correct" class="correct-icon">✓</span>
             <span v-else class="incorrect-icon">✗</span>
-            <strong v-if="question.options[selectedAnswers[index]] === question.correctAnswer">정답입니다!</strong>
+            <strong v-if="gradingResults[index].correct">정답입니다!</strong>
             <strong v-else>틀렸습니다.</strong>
           </div>
-          <p><strong>정답:</strong> {{ question.correctAnswer }}</p>
-            <p><strong>설명:</strong> {{ question.explanation }}</p>
+          <p><strong>정답:</strong> {{ gradingResults[index].correctAnswer }}</p>
+            <p><strong>설명:</strong> {{ gradingResults[index].explanation }}</p>
           </div>
           <p v-if="quizSubmitted && question.sourceReferences?.length" class="source-reference">
             <strong>근거:</strong> {{ question.sourceReferences.join(', ') }}
           </p>
-          <section v-if="quizSubmitted" class="question-feedback" :aria-label="`${index + 1}번 문제 품질 피드백`">
+          <section v-if="attemptSaved" class="review-registration" :aria-label="`${index + 1}번 문제 복습 등록`">
+            <template v-if="isQuestionCorrect(index)">
+              <button
+                type="button"
+                class="review-add-button"
+                :disabled="!attemptSaved || reviewRegistrations[index]?.saving || reviewRegistrations[index]?.registered"
+                @click="registerQuestionForReview(index)"
+              >
+                {{ reviewRegistrations[index]?.saving ? '복습에 추가 중...' : reviewRegistrations[index]?.registered ? '복습 추가 완료' : '이 문제도 복습하기' }}
+              </button>
+            </template>
+            <span v-else class="review-auto-label">
+              오답은 내일 복습 대상으로 자동 등록됐습니다.
+            </span>
+            <p v-if="reviewRegistrations[index]?.message" class="review-message success">{{ reviewRegistrations[index].message }}</p>
+            <p v-if="reviewRegistrations[index]?.error" class="review-message error">{{ reviewRegistrations[index].error }}</p>
+          </section>
+          <section v-if="attemptSaved" class="question-feedback" :aria-label="`${index + 1}번 문제 품질 피드백`">
             <button
               type="button"
               class="feedback-toggle"
@@ -529,14 +550,14 @@ function cancelNextQuiz() {
           {{ submissionMessage }}
         </div>
         <div class="quiz-actions">
-          <button @click="submitQuiz" :disabled="loading || attemptSaving || quizSubmitted || !isAllQuestionsAnswered()" class="submit-button">
-            {{ attemptSaving ? '풀이 기록 저장 중...' : quizSubmitted ? (attemptSaved ? '채점 및 기록 저장 완료' : '채점 완료') : isAllQuestionsAnswered() ? '답안 제출' : `미응답 ${getUnansweredQuestionCount()}개` }}
+          <button @click="submitQuiz" :disabled="loading || attemptSaving || attemptSaved || (!quizSubmitted && !isAllQuestionsAnswered())" class="submit-button">
+            {{ attemptSaving ? '서버 채점 및 저장 중...' : attemptSaved ? '채점 및 기록 저장 완료' : quizSubmitted ? '채점·저장 다시 시도' : isAllQuestionsAnswered() ? '답안 제출' : `미응답 ${getUnansweredQuestionCount()}개` }}
           </button>
           <button @click="showNextQuizOptions" :disabled="attemptSaving" class="next-quiz-button">
             다음 문제 생성
           </button>
-          <button @click="saveQuizToGit" :disabled="loading || attemptSaving || !quizSubmitted" class="save-button" style="background-color:#f05033;" title="풀이 결과를 Markdown으로 저장한 뒤 notes 원격 저장소에 commit·push합니다.">
-            {{ loading ? '저장 중...' : quizSubmitted ? 'Git에 저장' : '채점 후 Git 저장' }}
+          <button @click="saveQuizToGit" :disabled="loading || attemptSaving || !attemptSaved" class="save-button" title="풀이 결과를 Markdown으로 저장한 뒤 notes 원격 저장소에 commit·push합니다.">
+            {{ loading ? '저장 중...' : attemptSaved ? 'Git에 저장' : '채점 후 Git 저장' }}
           </button>
         </div>
 
@@ -587,11 +608,30 @@ function cancelNextQuiz() {
   min-width: 0;
   margin: 0 auto;
   padding: 40px 50px;
-  background-color: #ffffff;
-  border-radius: 0 0 8px 8px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  background-color: var(--surface);
   min-height: 120px;
-  margin-top: 0;
+}
+
+.quiz-heading h2,
+.quiz-heading p {
+  margin: 0;
+}
+
+.quiz-heading .eyebrow {
+  color: var(--accent);
+  font-size: .75rem;
+  font-weight: 800;
+  letter-spacing: .08em;
+}
+
+.quiz-heading h2 {
+  color: var(--ink);
+  font-size: clamp(1.7rem, 4vw, 2.25rem);
+}
+
+.quiz-heading p:not(.eyebrow) {
+  margin-top: 6px;
+  color: var(--muted);
 }
 
 .quiz-input-section {
@@ -607,7 +647,7 @@ function cancelNextQuiz() {
   display: block;
   margin-bottom: 8px;
   font-weight: 600;
-  color: #333;
+  color: var(--ink);
 }
 
 .quiz-input-group input[type="text"],
@@ -616,8 +656,8 @@ function cancelNextQuiz() {
   width: 100%;
   max-width: 900px;
   padding: 15px 20px;
-  border: 1px solid #e0e0e0;
-  border-radius: 5px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
   font-size: 16px;
   transition: border-color 0.3s ease;
   box-sizing: border-box;
@@ -626,7 +666,7 @@ function cancelNextQuiz() {
 .quiz-input-group input[type="text"]:focus,
 .quiz-input-group input[type="number"]:focus,
 .quiz-input-group textarea:focus {
-  border-color: #667eea;
+  border-color: var(--accent);
   outline: none;
 }
 
@@ -639,8 +679,12 @@ function cancelNextQuiz() {
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #444;
+  color: var(--ink-soft);
   font-size: 14px;
+}
+
+.demo-mode-toggle input {
+  accent-color: var(--accent);
 }
 
 .source-message,
@@ -652,35 +696,78 @@ function cancelNextQuiz() {
 .recommendation-message {
   margin: 12px 0 0;
   padding: 11px 13px;
-  border: 1px solid #cdd5ff;
+  border: 1px solid #f0c9bd;
   border-radius: 7px;
-  background: #f4f5ff;
-  color: #4653a5;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
   font-size: 14px;
   font-weight: 600;
 }
 
 .question-feedback {
   margin-top: 16px;
-  border-top: 1px dashed #d8deea;
+  border-top: 1px dashed var(--line-strong);
   padding-top: 14px;
 }
+
+.review-registration {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  align-items: center;
+  margin-top: 14px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.review-add-button {
+  width: auto;
+  margin: 0;
+  padding: 9px 13px;
+  border: 1px solid var(--ink);
+  background: var(--surface);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+.review-add-button:hover:not(:disabled) {
+  background: var(--ink);
+  color: #fff;
+}
+
+.review-auto-label,
+.review-hint,
+.review-message {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.review-message {
+  flex-basis: 100%;
+  margin: 0;
+  font-weight: 700;
+}
+
+.review-message.success { color: #24744d; }
+.review-message.error { color: #be3c35; }
 
 .feedback-toggle {
   width: auto;
   margin: 0;
   padding: 9px 12px;
-  border: 1px solid #c8d0e8;
+  border: 1px solid var(--line);
   border-radius: 7px;
-  background: #fff;
-  color: #465575;
+  background: var(--surface);
+  color: var(--ink-soft);
   font-size: 13px;
   font-weight: 700;
 }
 
 .feedback-toggle:hover:not(:disabled) {
-  border-color: #667eea;
-  background: #f5f6ff;
+  border-color: var(--ink);
+  background: var(--surface-subtle);
 }
 
 .feedback-form {
@@ -688,28 +775,28 @@ function cancelNextQuiz() {
   gap: 8px;
   margin-top: 12px;
   padding: 14px;
-  border: 1px solid #dce4f2;
+  border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fff;
+  background: var(--surface);
   text-align: left;
 }
 
 .feedback-form p {
   margin: 0 0 2px;
-  color: #596780;
+  color: var(--muted);
   font-size: 13px;
   line-height: 1.5;
 }
 
 .feedback-form label {
-  color: #43526f;
+  color: var(--ink-soft);
   font-size: 13px;
   font-weight: 700;
 }
 
 .feedback-form label span,
 .feedback-form-footer span {
-  color: #7c879d;
+  color: var(--muted);
   font-size: 12px;
   font-weight: 500;
 }
@@ -718,10 +805,10 @@ function cancelNextQuiz() {
 .feedback-form textarea {
   width: 100%;
   box-sizing: border-box;
-  border: 1px solid #cdd6e6;
+  border: 1px solid var(--line);
   border-radius: 6px;
   padding: 10px;
-  color: #334155;
+  color: var(--ink-soft);
   font: inherit;
 }
 
@@ -731,8 +818,8 @@ function cancelNextQuiz() {
 
 .feedback-form select:focus,
 .feedback-form textarea:focus {
-  outline: 2px solid rgb(102 126 234 / 28%);
-  border-color: #667eea;
+  outline: 2px solid rgb(198 78 50 / 18%);
+  border-color: var(--accent);
 }
 
 .feedback-form-footer {
@@ -763,11 +850,11 @@ function cancelNextQuiz() {
 }
 
 button {
-  background-color: #667eea;
+  background-color: var(--ink);
   color: white;
   padding: 18px 25px;
   border: none;
-  border-radius: 5px;
+  border-radius: 8px;
   cursor: pointer;
   font-size: 17px;
   font-weight: 600;
@@ -777,7 +864,7 @@ button {
 }
 
 button:hover:not(:disabled) {
-  background-color: #5a67d8;
+  background-color: var(--ink-soft);
 }
 
 button:disabled {
@@ -799,27 +886,26 @@ button:disabled {
   margin-bottom: 40px;
   padding-top: 30px;
   padding-bottom: 30px;
-  border-top: 1px solid #eee;
+  border-top: 1px solid var(--line);
 }
 
 .quiz-output-section h2 {
   text-align: center;
-  color: #444;
+  color: var(--ink);
   margin-bottom: 25px;
   font-size: 24px;
 }
 
 .question-item {
-  background-color: #f9f9f9;
-  border: 1px solid #e0e0e0;
+  background-color: var(--surface-subtle);
+  border: 1px solid var(--line);
   padding: 20px;
   margin-bottom: 20px;
   border-radius: 8px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.05);
 }
 
 .question-item h3 {
-  color: #667eea;
+  color: var(--ink);
   margin-top: 0;
   font-size: 18px;
   margin-bottom: 15px;
@@ -830,15 +916,15 @@ button:disabled {
 }
 
 .option-item {
-  background-color: #f0f2f5;
+  background-color: var(--surface);
   padding: 18px 20px;
   margin-bottom: 8px;
   border-radius: 8px;
   font-size: 15px;
-  color: #555;
+  color: var(--ink-soft);
   cursor: pointer;
   transition: all 0.3s ease;
-  border: 2px solid transparent;
+  border: 1px solid var(--line);
   width: 100%;
   box-sizing: border-box;
   text-align: left;
@@ -846,10 +932,9 @@ button:disabled {
 }
 
 .option-item:hover:not(:disabled) {
-  background-color: #e8f0fe;
-  border-color: #667eea;
+  background-color: var(--surface-subtle);
+  border-color: var(--ink);
   transform: translateY(-1px);
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.15);
 }
 
 .option-item:disabled {
@@ -858,17 +943,15 @@ button:disabled {
 }
 
 .option-item.selected {
-  background-color: #667eea;
+  background-color: #2563eb;
   color: white;
-  border-color: #5a67d8;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+  border-color: #1d4ed8;
 }
 
 .option-item.correct-answer {
   background-color: #4caf50;
   color: white;
   border-color: #45a049;
-  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
   font-weight: 600;
 }
 
@@ -876,7 +959,6 @@ button:disabled {
   background-color: #f44336;
   color: white;
   border-color: #d32f2f;
-  box-shadow: 0 4px 12px rgba(244, 67, 54, 0.3);
   font-weight: 600;
 }
 
@@ -887,11 +969,12 @@ button:disabled {
 }
 
 .answer-section {
-  background-color: #f8f9fa;
+  background-color: var(--surface);
   padding: 20px;
   border-radius: 8px;
   margin-top: 15px;
-  border-left: 4px solid #667eea;
+  border: 1px solid var(--line);
+  border-left: 4px solid var(--accent);
   width: 100%;
   box-sizing: border-box;
   transition: all 0.3s ease;
@@ -946,17 +1029,17 @@ button:disabled {
   text-align: center;
   margin-top: 40px;
   padding-top: 30px;
-  border-top: 2px solid #e0e0e0;
+  border-top: 1px solid var(--line);
 }
 
 .result-summary {
   max-width: 560px;
   margin: 0 auto 20px;
   padding: 16px 20px;
-  border: 1px solid #b8c2ff;
+  border: 1px solid #f0c9bd;
   border-radius: 8px;
-  background-color: #eef0ff;
-  color: #3f4a9a;
+  background-color: var(--accent-soft);
+  color: var(--accent-strong);
   font-size: 18px;
   font-weight: 700;
 }
@@ -970,7 +1053,7 @@ button:disabled {
 }
 
 .submit-button {
-  background-color: #5a67d8;
+  background-color: var(--ink);
   color: white;
   padding: 15px 30px;
   border: none;
@@ -979,11 +1062,10 @@ button:disabled {
   font-size: 16px;
   font-weight: 600;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 12px rgba(90, 103, 216, 0.3);
 }
 
 .submit-button:hover:not(:disabled) {
-  background-color: #4c51bf;
+  background-color: var(--ink-soft);
   transform: translateY(-2px);
 }
 
@@ -994,7 +1076,7 @@ button:disabled {
 }
 
 .save-button {
-  background-color: #28a745;
+  background-color: var(--accent);
   color: white;
   padding: 15px 30px;
   border: none;
@@ -1003,13 +1085,11 @@ button:disabled {
   font-size: 16px;
   font-weight: 600;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 12px rgba(40, 167, 69, 0.3);
 }
 
 .save-button:hover:not(:disabled) {
-  background-color: #218838;
+  background-color: var(--accent-strong);
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(40, 167, 69, 0.4);
 }
 
 .save-button:disabled {
@@ -1037,32 +1117,30 @@ button:disabled {
 }
 
 .next-quiz-button {
-  background-color: #667eea;
-  color: white;
+  background-color: var(--surface);
+  color: var(--ink);
   padding: 15px 30px;
-  border: none;
+  border: 1px solid var(--line-strong);
   border-radius: 8px;
   cursor: pointer;
   font-size: 16px;
   font-weight: 600;
   transition: all 0.3s ease;
-  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
 }
 
 .next-quiz-button:hover {
-  background-color: #5a67d8;
+  background-color: var(--surface-subtle);
+  border-color: var(--ink);
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(102, 126, 234, 0.4);
 }
 
 .next-quiz-button:active {
   transform: translateY(0);
-  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
 }
 
 .next-quiz-form {
-  background-color: #f8f9fa;
-  border: 1px solid #e0e0e0;
+  background-color: var(--surface-subtle);
+  border: 1px solid var(--line);
   border-radius: 8px;
   padding: 25px;
   margin-top: 20px;
@@ -1073,7 +1151,7 @@ button:disabled {
 
 .next-quiz-form h3 {
   margin: 0 0 20px 0;
-  color: #333;
+  color: var(--ink);
   text-align: center;
   font-size: 18px;
 }
@@ -1086,13 +1164,13 @@ button:disabled {
   display: block;
   margin-bottom: 8px;
   font-weight: 600;
-  color: #333;
+  color: var(--ink);
 }
 
 .form-group input {
   width: 100%;
   padding: 12px 15px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--line);
   border-radius: 5px;
   font-size: 14px;
   transition: border-color 0.3s ease;
@@ -1100,7 +1178,7 @@ button:disabled {
 }
 
 .form-group input:focus {
-  border-color: #667eea;
+  border-color: var(--accent);
   outline: none;
 }
 
@@ -1112,7 +1190,7 @@ button:disabled {
 }
 
 .confirm-button {
-  background-color: #667eea;
+  background-color: var(--ink);
   color: white;
   padding: 12px 25px;
   border: none;
@@ -1124,7 +1202,7 @@ button:disabled {
 }
 
 .confirm-button:hover {
-  background-color: #5a67d8;
+  background-color: var(--ink-soft);
 }
 
 .cancel-button {
@@ -1147,7 +1225,7 @@ button:focus-visible,
 .quiz-input-group input:focus-visible,
 .quiz-input-group textarea:focus-visible,
 .form-group input:focus-visible {
-  outline: 3px solid rgba(102, 126, 234, 0.35);
+  outline: 3px solid rgb(198 78 50 / 24%);
   outline-offset: 2px;
 }
 

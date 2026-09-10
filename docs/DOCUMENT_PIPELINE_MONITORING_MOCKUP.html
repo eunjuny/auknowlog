@@ -1,0 +1,399 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>문서 학습 파이프라인과 Prometheus 관측 화면 샘플</title>
+  <style>
+    :root {
+      --ink: #171717;
+      --muted: #6b6b66;
+      --line: #dfdfda;
+      --soft-line: #ededE8;
+      --paper: #fff;
+      --canvas: #f5f5f2;
+      --blue: #2367d1;
+      --blue-soft: #eaf2ff;
+      --orange: #c64e32;
+      --orange-soft: #fff0eb;
+      --green: #13795b;
+      --green-soft: #e8f7f0;
+      --amber: #a15c00;
+      --amber-soft: #fff5dc;
+      --red: #b42318;
+      --red-soft: #fff0ef;
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--canvas); color: var(--ink); font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.5; }
+    button, input { font: inherit; }
+    button { cursor: pointer; }
+
+    .app-header {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 66px;
+      padding: 0 34px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, .95);
+      backdrop-filter: blur(10px);
+    }
+    .brand { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 800; letter-spacing: -.02em; }
+    .brand-mark { display: grid; width: 30px; height: 30px; place-items: center; border-radius: 9px; background: var(--ink); color: white; font-size: 14px; }
+    .app-nav { display: flex; gap: 4px; }
+    .app-nav span { border-radius: 9px; padding: 9px 13px; color: var(--muted); font-size: 14px; }
+    .app-nav .current { background: #ecece8; color: var(--ink); font-weight: 700; }
+    .sample-badge { border: 1px solid var(--line); border-radius: 999px; padding: 6px 10px; background: var(--paper); color: var(--muted); font-size: 12px; font-weight: 700; }
+
+    main { max-width: 1220px; margin: 0 auto; padding: 38px 30px 64px; }
+    .page-title { margin-bottom: 24px; }
+    .eyebrow { margin: 0 0 7px; color: var(--orange); font-size: 12px; font-weight: 800; letter-spacing: .12em; }
+    h1 { margin: 0; font-size: clamp(28px, 4vw, 42px); letter-spacing: -.045em; }
+    .page-title > p:last-child { max-width: 720px; margin: 9px 0 0; color: var(--muted); }
+
+    .concept-strip {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      align-items: stretch;
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .concept-block { border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; background: var(--paper); }
+    .concept-block.product { border-top: 4px solid var(--blue); }
+    .concept-block.monitor { border-top: 4px solid var(--orange); }
+    .concept-block small { color: var(--muted); font-weight: 800; letter-spacing: .08em; }
+    .concept-block strong { display: block; margin-top: 5px; font-size: 17px; }
+    .concept-block p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+    .concept-arrow { display: grid; place-items: center; color: var(--muted); font-size: 22px; }
+
+    .view-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-bottom: 16px; border: 1px solid var(--line); border-radius: 13px; padding: 5px; background: var(--paper); }
+    .view-tabs button { min-height: 48px; border: 0; border-radius: 9px; background: transparent; color: var(--muted); }
+    .view-tabs button[aria-selected="true"] { background: var(--ink); color: white; font-weight: 750; }
+    [role="tabpanel"][hidden] { display: none; }
+
+    .panel, .stat { border: 1px solid var(--line); border-radius: var(--radius); background: var(--paper); }
+    .panel { padding: 21px; }
+    .panel + .panel { margin-top: 14px; }
+    .panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 19px; }
+    .panel-heading h2, .panel-heading h3 { margin: 0; letter-spacing: -.025em; }
+    .panel-heading h2 { font-size: 21px; }
+    .panel-heading h3 { font-size: 17px; }
+    .panel-heading p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+    .state-badge { flex: none; border-radius: 999px; padding: 6px 10px; background: var(--blue-soft); color: var(--blue); font-size: 12px; font-weight: 800; }
+    .state-badge.running { background: var(--amber-soft); color: var(--amber); }
+    .state-badge.healthy { background: var(--green-soft); color: var(--green); }
+
+    .upload-layout { display: grid; grid-template-columns: minmax(0, .75fr) minmax(0, 1.25fr); gap: 14px; }
+    .dropzone { display: grid; min-height: 250px; place-items: center; border: 1.5px dashed #bdbdb7; border-radius: 14px; padding: 24px; background: #fafaf8; text-align: center; }
+    .file-icon { display: grid; width: 50px; height: 50px; margin: 0 auto 12px; place-items: center; border-radius: 14px; background: var(--blue-soft); color: var(--blue); font-size: 13px; font-weight: 900; }
+    .dropzone strong { display: block; }
+    .dropzone p { margin: 5px 0 16px; color: var(--muted); font-size: 13px; }
+    .primary-button, .secondary-button { border-radius: 9px; padding: 9px 14px; font-weight: 700; }
+    .primary-button { border: 1px solid var(--ink); background: var(--ink); color: white; }
+    .secondary-button { border: 1px solid var(--line); background: var(--paper); color: var(--ink); }
+
+    .file-preview { display: grid; gap: 13px; }
+    .file-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; border-bottom: 1px solid var(--soft-line); padding-bottom: 13px; }
+    .file-info { display: flex; align-items: center; gap: 11px; min-width: 0; }
+    .file-type { flex: none; border-radius: 8px; padding: 7px; background: var(--orange-soft); color: var(--orange); font-size: 11px; font-weight: 900; }
+    .file-info strong, .file-info span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .file-info span { color: var(--muted); font-size: 12px; }
+    .estimate { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+    .estimate div { border-radius: 11px; padding: 12px; background: #f5f5f2; }
+    .estimate span { display: block; color: var(--muted); font-size: 11px; }
+    .estimate strong { font-size: 15px; }
+    .check-row { display: flex; align-items: flex-start; gap: 9px; border-radius: 11px; padding: 12px; background: var(--blue-soft); color: #1d4f9d; font-size: 12px; }
+    .check-row input { margin-top: 3px; accent-color: var(--blue); }
+    .action-row { display: flex; justify-content: flex-end; gap: 8px; }
+
+    .job-layout { display: grid; grid-template-columns: minmax(230px, .72fr) minmax(0, 1.28fr); gap: 14px; }
+    .job-list { display: grid; align-content: start; gap: 8px; }
+    .job-item { width: 100%; border: 1px solid var(--line); border-radius: 12px; padding: 13px; background: var(--paper); color: var(--ink); text-align: left; }
+    .job-item[aria-pressed="true"] { border-color: var(--ink); background: #f7f7f4; }
+    .job-item strong, .job-item span { display: block; }
+    .job-item span { margin-top: 3px; color: var(--muted); font-size: 12px; }
+    .job-progress { display: flex; align-items: center; gap: 8px; margin-top: 9px; }
+    .progress-track { overflow: hidden; flex: 1; height: 6px; border-radius: 999px; background: #e8e8e3; }
+    .progress-track i { display: block; height: 100%; border-radius: inherit; background: var(--blue); }
+    .job-progress b { font-size: 11px; }
+
+    .pipeline { display: grid; gap: 0; }
+    .pipeline-step { position: relative; display: grid; grid-template-columns: 30px 1fr auto; gap: 12px; align-items: start; min-height: 66px; }
+    .pipeline-step:not(:last-child)::before { content: ""; position: absolute; left: 14px; top: 29px; bottom: 0; width: 2px; background: var(--soft-line); }
+    .step-mark { z-index: 1; display: grid; width: 30px; height: 30px; place-items: center; border-radius: 50%; background: #ecece8; color: var(--muted); font-size: 11px; font-weight: 900; }
+    .pipeline-step.done .step-mark { background: var(--green-soft); color: var(--green); }
+    .pipeline-step.current .step-mark { background: var(--blue); color: white; }
+    .step-copy strong { display: block; font-size: 14px; }
+    .step-copy span { color: var(--muted); font-size: 12px; }
+    .step-time { color: var(--muted); font-size: 12px; }
+    .live-track { width: 100%; height: 5px; margin-top: 8px; overflow: hidden; border-radius: 999px; background: #e7e7e2; }
+    .live-track span { display: block; width: 64%; height: 100%; border-radius: inherit; background: var(--blue); }
+
+    .result-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; margin-top: 13px; }
+    .result-card { border-left: 3px solid var(--line); padding: 7px 10px; }
+    .result-card span { display: block; color: var(--muted); font-size: 11px; }
+    .result-card strong { font-size: 15px; }
+
+    .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 14px; }
+    .stat { padding: 17px; }
+    .stat span { display: block; color: var(--muted); font-size: 12px; }
+    .stat strong { display: block; margin-top: 7px; font-size: 25px; letter-spacing: -.04em; }
+    .stat small { display: block; margin-top: 3px; color: var(--muted); }
+
+    .monitor-grid { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(300px, .7fr); gap: 14px; }
+    .stage-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .stage-table th { padding: 0 10px 10px; color: var(--muted); font-size: 11px; text-align: left; }
+    .stage-table td { padding: 13px 10px; border-top: 1px solid var(--soft-line); }
+    .stage-table td:last-child, .stage-table th:last-child { text-align: right; }
+    .health { display: inline-flex; align-items: center; gap: 6px; color: var(--green); font-size: 12px; font-weight: 800; }
+    .health::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+    .health.busy { color: var(--amber); }
+    .latency-bar { display: flex; align-items: center; gap: 8px; }
+    .latency-bar span { display: block; width: var(--width); height: 7px; border-radius: 999px; background: var(--ink); }
+    .latency-bar b { font-size: 11px; }
+
+    .event-list { display: grid; gap: 12px; }
+    .event { display: grid; grid-template-columns: auto 1fr; gap: 10px; }
+    .event-mark { display: grid; width: 27px; height: 27px; place-items: center; border-radius: 8px; background: var(--green-soft); color: var(--green); font-size: 11px; font-weight: 900; }
+    .event.warn .event-mark { background: var(--amber-soft); color: var(--amber); }
+    .event strong { display: block; font-size: 13px; }
+    .event p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+
+    .metric-flow { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 10px; align-items: center; }
+    .flow-node { min-height: 95px; border: 1px solid var(--line); border-radius: 13px; padding: 14px; background: #fafaf8; }
+    .flow-node strong, .flow-node span { display: block; }
+    .flow-node span { margin-top: 4px; color: var(--muted); font-size: 12px; }
+    .flow-arrow { color: var(--muted); font-size: 20px; text-align: center; }
+
+    .alert-list { display: grid; gap: 9px; }
+    .alert-rule { display: grid; grid-template-columns: auto 1fr auto; gap: 11px; align-items: center; border-bottom: 1px solid var(--soft-line); padding-bottom: 10px; }
+    .alert-rule:last-child { border-bottom: 0; padding-bottom: 0; }
+    .severity { border-radius: 999px; padding: 4px 8px; background: var(--amber-soft); color: var(--amber); font-size: 10px; font-weight: 900; }
+    .severity.info { background: var(--blue-soft); color: var(--blue); }
+    .alert-rule strong { display: block; font-size: 13px; }
+    .alert-rule p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+    .rule-state { color: var(--green); font-size: 11px; font-weight: 800; }
+
+    .separation-note { margin-top: 14px; border: 1px solid #bfd9fb; border-radius: 14px; padding: 15px 17px; background: var(--blue-soft); color: #204d8f; font-size: 13px; }
+    .separation-note strong { display: block; margin-bottom: 3px; }
+
+    @media (max-width: 880px) {
+      .app-nav { display: none; }
+      .upload-layout, .job-layout, .monitor-grid { grid-template-columns: 1fr; }
+      .stat-grid { grid-template-columns: repeat(2, 1fr); }
+      .metric-flow { grid-template-columns: 1fr; }
+      .flow-arrow { transform: rotate(90deg); }
+    }
+
+    @media (max-width: 560px) {
+      .app-header { padding: 0 17px; }
+      main { padding: 26px 15px 46px; }
+      .concept-strip { grid-template-columns: 1fr; }
+      .concept-arrow { transform: rotate(90deg); }
+      .view-tabs { grid-template-columns: 1fr; }
+      .panel { padding: 17px; }
+      .panel-heading { flex-direction: column; }
+      .estimate, .result-grid, .stat-grid { grid-template-columns: 1fr; }
+      .sample-badge { display: none; }
+      .stage-table th:nth-child(3), .stage-table td:nth-child(3) { display: none; }
+      .alert-rule { grid-template-columns: auto 1fr; }
+      .rule-state { grid-column: 2; }
+    }
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <div class="brand"><span class="brand-mark">A</span>Auknowlog</div>
+    <nav class="app-nav" aria-label="주요 메뉴"><span>문제 생성</span><span>풀이 기록</span><span>복습</span><span>로드맵</span><span class="current">자료 학습</span><span>대시보드</span></nav>
+    <span class="sample-badge">SAMPLE DATA</span>
+  </header>
+
+  <main>
+    <div class="page-title">
+      <p class="eyebrow">DOCUMENT LEARNING PIPELINE</p>
+      <h1>문서 학습과 운영 관측</h1>
+      <p>문서를 문제와 로드맵으로 만드는 것은 사용자 기능이고, Prometheus는 그 과정이 정상적으로 진행되는지 뒤에서 관측합니다.</p>
+    </div>
+
+    <section class="concept-strip" aria-label="제품 기능과 모니터링의 차이">
+      <article class="concept-block product"><small>PRODUCT FEATURE</small><strong>문서 기반 학습 파이프라인</strong><p>파일을 분석하고 퀴즈·로드맵을 만들어 사용자에게 제공합니다.</p></article>
+      <span class="concept-arrow" aria-hidden="true">→</span>
+      <article class="concept-block monitor"><small>MONITORING</small><strong>Prometheus 운영 관측</strong><p>각 단계의 속도·실패·정체·비용 신호를 수집합니다.</p></article>
+    </section>
+
+    <div class="view-tabs" role="tablist" aria-label="예시 화면 선택">
+      <button id="product-tab" type="button" role="tab" aria-controls="product-view" aria-selected="true">① 사용자가 보는 제품 기능</button>
+      <button id="monitor-tab" type="button" role="tab" aria-controls="monitor-view" aria-selected="false">② 운영자가 보는 Prometheus 관측</button>
+    </div>
+
+    <section id="product-view" role="tabpanel" aria-labelledby="product-tab">
+      <section class="panel">
+        <div class="panel-heading"><div><h2>내 학습 자료 등록</h2><p>PDF·Markdown·TXT에서 텍스트를 추출해 문제와 로드맵을 만듭니다.</p></div><span class="state-badge">사용자 기능</span></div>
+        <div class="upload-layout">
+          <div class="dropzone">
+            <div><span class="file-icon">FILE</span><strong>학습 자료를 끌어다 놓으세요</strong><p>PDF, Markdown, TXT · 최대 20MB</p><button type="button" class="secondary-button">파일 선택</button></div>
+          </div>
+          <div class="file-preview">
+            <div class="file-row"><div class="file-info"><span class="file-type">PDF</span><div><strong>kubernetes-in-action-chapter-3.pdf</strong><span>4.8MB · 38페이지 · 텍스트 추출 가능</span></div></div><button type="button" class="secondary-button">변경</button></div>
+            <div class="estimate"><div><span>예상 문서 조각</span><strong>42 chunks</strong></div><div><span>예상 AI 토큰</span><strong>약 8,000</strong></div><div><span>예상 비용</span><strong>약 ₩35</strong></div></div>
+            <label class="check-row"><input type="checkbox" checked><span>예상 비용을 확인했습니다. 문서 임베딩과 퀴즈 생성에 OpenAI API가 사용됩니다.</span></label>
+            <div class="action-row"><button type="button" class="secondary-button">임베딩만 저장</button><button type="button" class="primary-button">학습 자료 만들기</button></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading"><div><h2>문서 처리 현황</h2><p>서버에서 실행 중인 작업을 단계별로 확인하고 실패한 단계부터 재시도합니다.</p></div><span class="state-badge running">1개 처리 중</span></div>
+        <div class="job-layout">
+          <div class="job-list" aria-label="문서 작업 목록">
+            <button class="job-item" type="button" aria-pressed="true" data-job="kubernetes"><strong>kubernetes-in-action.pdf</strong><span>퀴즈 생성 중 · 2분 전 시작</span><div class="job-progress"><div class="progress-track"><i style="width:72%"></i></div><b>72%</b></div></button>
+            <button class="job-item" type="button" aria-pressed="false" data-job="postgresql"><strong>postgresql-indexing.md</strong><span>완료 · 문제 10개</span><div class="job-progress"><div class="progress-track"><i style="width:100%"></i></div><b>100%</b></div></button>
+            <button class="job-item" type="button" aria-pressed="false" data-job="network"><strong>network-basics.txt</strong><span>임베딩 재시도 필요</span><div class="job-progress"><div class="progress-track"><i style="width:48%"></i></div><b>48%</b></div></button>
+          </div>
+
+          <div>
+            <div class="file-row"><div class="file-info"><span class="file-type" id="selected-type">PDF</span><div><strong id="selected-name">kubernetes-in-action.pdf</strong><span id="selected-meta">작업 ID DOC-20260910-003 · RUNNING</span></div></div><span class="state-badge running" id="selected-state">처리 중</span></div>
+            <div class="pipeline" id="pipeline" aria-live="polite"></div>
+            <div class="result-grid" id="job-results"></div>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <section id="monitor-view" role="tabpanel" aria-labelledby="monitor-tab" hidden>
+      <section class="stat-grid" aria-label="파이프라인 핵심 지표">
+        <article class="stat"><span>대기 작업</span><strong>2건</strong><small>목표: 10분 이내 시작</small></article>
+        <article class="stat"><span>진행 작업</span><strong>1건</strong><small>Worker 1/2 사용 중</small></article>
+        <article class="stat"><span>최근 7일 성공률</span><strong>94%</strong><small>성공 16 · 실패 1</small></article>
+        <article class="stat"><span>마지막 성공</span><strong>18분 전</strong><small>postgresql-indexing.md</small></article>
+      </section>
+
+      <section class="monitor-grid">
+        <article class="panel">
+          <div class="panel-heading"><div><h2>단계별 처리 상태</h2><p>Micrometer가 만든 지표를 Prometheus가 15초마다 수집한 예시입니다.</p></div><span class="state-badge healthy">정상 수집 중</span></div>
+          <table class="stage-table">
+            <thead><tr><th>처리 단계</th><th>현재 상태</th><th>진행 작업</th><th>평균 시간</th></tr></thead>
+            <tbody>
+              <tr><td>텍스트 추출</td><td><span class="health">정상</span></td><td>0건</td><td><div class="latency-bar"><span style="--width:18px"></span><b>1.4초</b></div></td></tr>
+              <tr><td>문서 분할</td><td><span class="health">정상</span></td><td>0건</td><td><div class="latency-bar"><span style="--width:8px"></span><b>0.4초</b></div></td></tr>
+              <tr><td>임베딩 생성</td><td><span class="health">정상</span></td><td>0건</td><td><div class="latency-bar"><span style="--width:35px"></span><b>3.1초</b></div></td></tr>
+              <tr><td>pgvector 저장</td><td><span class="health">정상</span></td><td>0건</td><td><div class="latency-bar"><span style="--width:10px"></span><b>0.7초</b></div></td></tr>
+              <tr><td>퀴즈 생성</td><td><span class="health busy">처리 중</span></td><td>1건</td><td><div class="latency-bar"><span style="--width:112px"></span><b>9.8초</b></div></td></tr>
+            </tbody>
+          </table>
+        </article>
+
+        <article class="panel">
+          <div class="panel-heading"><div><h2>최근 운영 이벤트</h2><p>오류와 복구 흐름을 시간순으로 확인합니다.</p></div></div>
+          <div class="event-list">
+            <div class="event"><span class="event-mark">✓</span><div><strong>퀴즈 생성 1차 완료</strong><p>5개 생성 · 중복 2개 제외 · 14:22</p></div></div>
+            <div class="event warn"><span class="event-mark">!</span><div><strong>유사 문제 보충 생성</strong><p>부족한 2개에 대해 최대 4개 요청 · 14:22</p></div></div>
+            <div class="event"><span class="event-mark">✓</span><div><strong>임베딩 단계 복구</strong><p>일시 오류 후 1회 재시도로 성공 · 13:41</p></div></div>
+            <div class="event"><span class="event-mark">✓</span><div><strong>Prometheus scrape 성공</strong><p>/actuator/prometheus · 15초 간격</p></div></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="panel">
+        <div class="panel-heading"><div><h2>지표가 수집되는 흐름</h2><p>Prometheus는 문서를 처리하지 않고, 처리 코드가 노출한 숫자를 정기적으로 가져갑니다.</p></div></div>
+        <div class="metric-flow">
+          <div class="flow-node"><strong>Spring Boot 작업 코드</strong><span>단계 시작·성공·실패 시 Micrometer 지표 갱신</span></div>
+          <span class="flow-arrow" aria-hidden="true">→</span>
+          <div class="flow-node"><strong>/actuator/prometheus</strong><span>대기열·처리시간·실패 횟수를 텍스트 지표로 노출</span></div>
+          <span class="flow-arrow" aria-hidden="true">→</span>
+          <div class="flow-node"><strong>Prometheus → Grafana</strong><span>15초마다 수집하고 시간별 그래프와 경고 조건 계산</span></div>
+        </div>
+      </section>
+
+      <section class="monitor-grid">
+        <article class="panel">
+          <div class="panel-heading"><div><h2>핵심 Prometheus 지표</h2><p>문서 ID나 주제처럼 값이 계속 늘어나는 정보는 label로 사용하지 않습니다.</p></div></div>
+          <table class="stage-table">
+            <thead><tr><th>Metric</th><th>의미</th><th>현재값</th></tr></thead>
+            <tbody>
+              <tr><td><code>auknowlog_document_jobs_queued</code></td><td>대기 작업 수</td><td>2</td></tr>
+              <tr><td><code>auknowlog_document_stage_duration_seconds</code></td><td>단계별 처리시간</td><td>stage별</td></tr>
+              <tr><td><code>auknowlog_document_jobs_total</code></td><td>성공·실패 누적</td><td>17</td></tr>
+              <tr><td><code>auknowlog_document_job_last_success</code></td><td>마지막 성공 시각</td><td>18분 전</td></tr>
+              <tr><td><code>auknowlog_document_retries_total</code></td><td>단계별 재시도</td><td>1</td></tr>
+            </tbody>
+          </table>
+        </article>
+
+        <article class="panel">
+          <div class="panel-heading"><div><h2>알림 규칙 예시</h2><p>사용자가 조치할 수 있는 증상만 알립니다.</p></div></div>
+          <div class="alert-list">
+            <div class="alert-rule"><span class="severity">WARNING</span><div><strong>작업이 10분 이상 대기</strong><p>Worker 중단 또는 처리 정체 가능성</p></div><span class="rule-state">정상</span></div>
+            <div class="alert-rule"><span class="severity">WARNING</span><div><strong>3회 연속 처리 실패</strong><p>OpenAI·임베딩·DB 단계 확인</p></div><span class="rule-state">정상</span></div>
+            <div class="alert-rule"><span class="severity info">INFO</span><div><strong>작업당 토큰 12,000 초과</strong><p>비용 한도 확인 필요</p></div><span class="rule-state">정상</span></div>
+          </div>
+        </article>
+      </section>
+
+      <aside class="separation-note"><strong>핵심 구분</strong>문서 업로드·분석·퀴즈 생성은 PostgreSQL과 애플리케이션이 수행합니다. Prometheus가 없어도 기능은 동작하며, Prometheus는 그 기능이 느려지거나 멈추거나 비용을 과도하게 쓰는지를 발견하는 역할입니다.</aside>
+    </section>
+  </main>
+
+  <script>
+    const tabs = document.querySelectorAll('[role="tab"]');
+    function activateTab(tab, updateLocation) {
+        tabs.forEach(item => item.setAttribute('aria-selected', String(item === tab)));
+        document.querySelectorAll('[role="tabpanel"]').forEach(panel => { panel.hidden = panel.id !== tab.getAttribute('aria-controls'); });
+        if (updateLocation) history.replaceState(null, '', tab.id === 'monitor-tab' ? '#monitoring' : '#product');
+    }
+    tabs.forEach(tab => {
+      tab.addEventListener('click', () => activateTab(tab, true));
+    });
+
+    const jobs = {
+      kubernetes: {
+        type: 'PDF', name: 'kubernetes-in-action.pdf', meta: '작업 ID DOC-20260910-003 · RUNNING', state: '처리 중', running: true,
+        steps: [['done','텍스트 추출','38페이지 · 18,420자','1.4초'],['done','문서 분할','42개 chunk 생성','0.4초'],['done','임베딩·pgvector 저장','512차원 벡터 42개','3.1초'],['current','퀴즈 생성','5개 중 3개 검증 완료','진행 중'],['','로드맵 생성','퀴즈 생성 완료 후 시작','대기']],
+        results: [['사용 토큰','6,420'],['현재 비용','약 ₩27'],['재시도','0회']]
+      },
+      postgresql: {
+        type: 'MD', name: 'postgresql-indexing.md', meta: '작업 ID DOC-20260910-002 · COMPLETED', state: '완료', running: false,
+        steps: [['done','텍스트 추출','1개 Markdown 문서','0.2초'],['done','문서 분할','18개 chunk 생성','0.1초'],['done','임베딩·pgvector 저장','512차원 벡터 18개','1.8초'],['done','퀴즈 생성','문제 10개 저장','8.2초'],['done','로드맵 생성','대주제 4개 · 소주제 12개','6.1초']],
+        results: [['총 사용 토큰','7,180'],['최종 비용','약 ₩31'],['생성 결과','문제 10개']]
+      },
+      network: {
+        type: 'TXT', name: 'network-basics.txt', meta: '작업 ID DOC-20260910-001 · RETRY_REQUIRED', state: '재시도 필요', running: true,
+        steps: [['done','텍스트 추출','6,730자','0.1초'],['done','문서 분할','15개 chunk 생성','0.1초'],['current','임베딩·pgvector 저장','OpenAI 일시 오류 · 2/3회','재시도'],['','퀴즈 생성','임베딩 완료 후 시작','대기'],['','로드맵 생성','퀴즈 생성 완료 후 시작','대기']],
+        results: [['사용 토큰','1,020'],['현재 비용','약 ₩2'],['재시도','2회']]
+      }
+    };
+
+    function renderJob(key) {
+      const job = jobs[key];
+      document.getElementById('selected-type').textContent = job.type;
+      document.getElementById('selected-name').textContent = job.name;
+      document.getElementById('selected-meta').textContent = job.meta;
+      const state = document.getElementById('selected-state');
+      state.textContent = job.state;
+      state.className = `state-badge ${job.running ? 'running' : 'healthy'}`;
+      document.getElementById('pipeline').innerHTML = job.steps.map((step, index) => `
+        <div class="pipeline-step ${step[0]}">
+          <span class="step-mark">${step[0] === 'done' ? '✓' : index + 1}</span>
+          <div class="step-copy"><strong>${step[1]}</strong><span>${step[2]}</span>${step[0] === 'current' ? '<div class="live-track"><span></span></div>' : ''}</div>
+          <span class="step-time">${step[3]}</span>
+        </div>`).join('');
+      document.getElementById('job-results').innerHTML = job.results.map(item => `<div class="result-card"><span>${item[0]}</span><strong>${item[1]}</strong></div>`).join('');
+    }
+
+    document.querySelectorAll('.job-item').forEach(button => {
+      button.addEventListener('click', () => {
+        document.querySelectorAll('.job-item').forEach(item => item.setAttribute('aria-pressed', String(item === button)));
+        renderJob(button.dataset.job);
+      });
+    });
+
+    renderJob('kubernetes');
+    activateTab(document.getElementById(location.hash === '#monitoring' ? 'monitor-tab' : 'product-tab'), false);
+  </script>
+</body>
+</html>

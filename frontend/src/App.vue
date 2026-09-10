@@ -5,10 +5,14 @@ import LearningHistory from './components/LearningHistory.vue'
 
 const DashboardView = defineAsyncComponent(() => import('./components/DashboardView.vue'))
 const RoadmapView = defineAsyncComponent(() => import('./components/RoadmapView.vue'))
+const ReviewQueue = defineAsyncComponent(() => import('./components/ReviewQueue.vue'))
+const SourceLibrary = defineAsyncComponent(() => import('./components/SourceLibrary.vue'))
 
 const activeView = ref('quiz')
 const historyMounted = ref(false)
 const roadmapMounted = ref(false)
+const reviewMounted = ref(false)
+const sourceMounted = ref(false)
 const recommendedQuiz = ref(null)
 const roadmapDraft = ref(null)
 
@@ -24,6 +28,16 @@ function showHistory() {
 function showRoadmap() {
   roadmapMounted.value = true
   activeView.value = 'roadmap'
+}
+
+function showReview() {
+  reviewMounted.value = true
+  activeView.value = 'review'
+}
+
+function showSources() {
+  sourceMounted.value = true
+  activeView.value = 'sources'
 }
 
 function startRecommendedQuiz(recommendation) {
@@ -46,6 +60,16 @@ function createRoadmapFromRecommendation(recommendation) {
   showRoadmap()
 }
 
+function createRoadmapFromSource(source) {
+  roadmapDraft.value = {
+    topic: source.title,
+    sourceId: source.sourceId,
+    sourceUri: source.sourceUri,
+    requestedAt: Date.now()
+  }
+  showRoadmap()
+}
+
 function startRoadmapQuiz(roadmapQuiz) {
   recommendedQuiz.value = {
     topic: roadmapQuiz.topic,
@@ -60,7 +84,7 @@ function startRoadmapQuiz(roadmapQuiz) {
 </script>
 
 <template>
-  <div id="app">
+  <div class="app-shell">
     <header>
       <div class="header-content">
         <div>
@@ -70,7 +94,9 @@ function startRoadmapQuiz(roadmapQuiz) {
         <nav aria-label="주요 메뉴">
           <button type="button" :class="{ active: activeView === 'dashboard' }" :aria-current="activeView === 'dashboard' ? 'page' : undefined" @click="showDashboard">대시보드</button>
           <button type="button" :class="{ active: activeView === 'quiz' }" :aria-current="activeView === 'quiz' ? 'page' : undefined" @click="activeView = 'quiz'">문제 생성</button>
+          <button type="button" :class="{ active: activeView === 'review' }" :aria-current="activeView === 'review' ? 'page' : undefined" @click="showReview">오늘의 복습</button>
           <button type="button" :class="{ active: activeView === 'roadmap' }" :aria-current="activeView === 'roadmap' ? 'page' : undefined" @click="showRoadmap">학습 로드맵</button>
+          <button type="button" :class="{ active: activeView === 'sources' }" :aria-current="activeView === 'sources' ? 'page' : undefined" @click="showSources">학습 자료</button>
           <button type="button" :class="{ active: activeView === 'history' }" :aria-current="activeView === 'history' ? 'page' : undefined" @click="showHistory">풀이 기록</button>
         </nav>
       </div>
@@ -79,13 +105,33 @@ function startRoadmapQuiz(roadmapQuiz) {
     <main>
       <DashboardView v-if="activeView === 'dashboard'" @start-recommended-quiz="startRecommendedQuiz" @create-learning-roadmap="createRoadmapFromRecommendation" />
       <QuizGenerator v-show="activeView === 'quiz'" :recommended-quiz="recommendedQuiz" />
-      <RoadmapView v-if="roadmapMounted" v-show="activeView === 'roadmap'" :initial-roadmap="roadmapDraft" @start-roadmap-quiz="startRoadmapQuiz" />
+      <ReviewQueue v-if="reviewMounted" v-show="activeView === 'review'" />
+      <RoadmapView v-if="roadmapMounted" v-show="activeView === 'roadmap'" :initial-roadmap="roadmapDraft" :visible="activeView === 'roadmap'" @start-roadmap-quiz="startRoadmapQuiz" />
+      <SourceLibrary v-if="sourceMounted" v-show="activeView === 'sources'" @create-roadmap="createRoadmapFromSource" />
       <LearningHistory v-if="historyMounted" v-show="activeView === 'history'" />
     </main>
   </div>
 </template>
 
 <style>
+:root {
+  --ink: #171717;
+  --ink-soft: #303030;
+  --muted: #6b6b66;
+  --line: #deded8;
+  --line-strong: #c9c9c1;
+  --surface: #ffffff;
+  --surface-subtle: #f7f7f4;
+  --page: #efefeb;
+  --accent: #c64e32;
+  --accent-strong: #9f3823;
+  --accent-soft: #fff1ec;
+  --success: #24744d;
+  --success-soft: #edf8f1;
+  --danger: #b83a32;
+  --danger-soft: #fff1ef;
+}
+
 * {
   box-sizing: border-box;
 }
@@ -94,26 +140,32 @@ body {
   margin: 0;
   padding: 0;
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', 'Cantarell', sans-serif;
-  background-color: #f5f7fa;
+  color: var(--ink);
+  background-color: var(--page);
   line-height: 1.6;
 }
 
-#app {
+.app-shell {
   display: block;
   width: 100%;
   max-width: 1200px;
-  margin: 40px auto;
+  margin: 24px auto;
   padding: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+  box-shadow: 0 18px 50px rgb(23 23 23 / 7%);
 }
 
 header {
   width: 100%;
   margin: 0 auto;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 24px 40px 58px;
+  background: var(--surface);
+  color: var(--ink);
+  padding: 25px 40px;
   margin-bottom: 0;
-  box-shadow: none;
+  border-bottom: 1px solid var(--line);
 }
 
 .header-content {
@@ -127,7 +179,7 @@ header {
 
 .product-name {
   margin: 0 0 3px;
-  color: rgb(255 255 255 / 72%);
+  color: var(--accent);
   font-size: .78rem;
   font-weight: 800;
   letter-spacing: .1em;
@@ -143,9 +195,9 @@ header h1 {
 header nav { display: flex; gap: 8px; }
 header nav button {
   padding: 9px 12px;
-  color: rgb(255 255 255 / 80%);
-  background: transparent;
-  border: 1px solid rgb(255 255 255 / 24%);
+  color: var(--muted);
+  background: var(--surface);
+  border: 1px solid transparent;
   border-radius: 8px;
   font: inherit;
   font-size: .9rem;
@@ -153,8 +205,8 @@ header nav button {
   cursor: pointer;
 }
 header nav button:hover,
-header nav button.active { color: #4c51bf; background: #fff; border-color: #fff; }
-header nav button:focus-visible { outline: 3px solid rgb(255 255 255 / 55%); outline-offset: 3px; }
+header nav button.active { color: #fff; background: var(--ink); border-color: var(--ink); }
+header nav button:focus-visible { outline: 3px solid rgb(198 78 50 / 24%); outline-offset: 3px; }
 
 main {
   width: 100%;
@@ -164,8 +216,10 @@ main {
 }
 
 @media (max-width: 680px) {
-  #app { margin: 0; }
-  header { padding: 20px 18px 48px; }
+  .app-shell { margin: 0; border: 0; border-radius: 0; }
+  header { padding: 20px 18px; }
   .header-content { align-items: flex-start; flex-direction: column; }
+  header nav { width: 100%; overflow-x: auto; padding-bottom: 3px; }
+  header nav button { flex: 0 0 auto; white-space: nowrap; }
 }
 </style>

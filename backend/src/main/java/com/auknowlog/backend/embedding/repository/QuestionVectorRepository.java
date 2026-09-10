@@ -4,6 +4,9 @@ import com.auknowlog.backend.embedding.service.EmbeddingResult;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 import java.util.Optional;
 
 @Repository
@@ -27,6 +30,42 @@ public class QuestionVectorRepository {
                 (resultSet, rowNumber) -> new SimilarQuestion(
                         resultSet.getLong("question_history_id"), resultSet.getDouble("similarity")),
                 vector, vector, threshold, vector
+        ).stream().findFirst();
+    }
+
+    public Optional<SimilarQuestion> findMostSimilarByQuestionHashes(
+            EmbeddingResult embedding,
+            List<String> questionHashes,
+            double threshold
+    ) {
+        if (questionHashes == null || questionHashes.isEmpty()) {
+            return Optional.empty();
+        }
+
+        String vector = toVectorLiteral(embedding.values());
+        String placeholders = String.join(",", Collections.nCopies(questionHashes.size(), "?"));
+        String sql = """
+                SELECT embedding.question_history_id,
+                       1 - (embedding.embedding <=> CAST(? AS vector)) AS similarity
+                FROM question_embedding embedding
+                JOIN question_history history ON history.id = embedding.question_history_id
+                WHERE history.question_hash IN (%s)
+                  AND 1 - (embedding.embedding <=> CAST(? AS vector)) >= ?
+                ORDER BY embedding.embedding <=> CAST(? AS vector)
+                LIMIT 1
+                """.formatted(placeholders);
+
+        List<Object> arguments = new ArrayList<>();
+        arguments.add(vector);
+        arguments.addAll(questionHashes);
+        arguments.add(vector);
+        arguments.add(threshold);
+        arguments.add(vector);
+
+        return jdbcTemplate.query(sql,
+                (resultSet, rowNumber) -> new SimilarQuestion(
+                        resultSet.getLong("question_history_id"), resultSet.getDouble("similarity")),
+                arguments.toArray()
         ).stream().findFirst();
     }
 

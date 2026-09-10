@@ -4,6 +4,7 @@ import com.auknowlog.backend.learning.service.LearningService;
 import com.auknowlog.backend.quiz.dto.Question;
 import com.auknowlog.backend.quiz.dto.QuizRequest;
 import com.auknowlog.backend.quiz.dto.QuizResponse;
+import com.auknowlog.backend.quiz.dto.QuizViewResponse;
 import com.auknowlog.backend.quiz.service.OpenAiQuizService;
 import com.auknowlog.backend.quiz.service.QuizGenerationService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -39,28 +40,29 @@ public class QuizController {
 
     @Operation(summary = "새로운 퀴즈 생성", description = "주제와 문제 수를 기반으로 OpenAI를 통해 새로운 객관식 퀴즈를 생성합니다.")
     @ApiResponse(responseCode = "200", description = "퀴즈 생성 성공",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = QuizResponse.class)))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = QuizViewResponse.class)))
     @ApiResponse(responseCode = "400", description = "잘못된 요청 파라미터",
             content = @Content(mediaType = "application/json"))
     @PostMapping("/create")
-    public QuizResponse createQuiz(
+    public QuizViewResponse createQuiz(
             @Parameter(description = "퀴즈 생성 요청 객체 (주제 및 문제 수 포함)", required = true)
             @Valid @RequestBody QuizRequest request) {
-        return quizGenerationService.createQuiz(request);
+        return QuizViewResponse.from(quizGenerationService.createQuiz(request));
     }
 
     @Operation(summary = "개발용 더미 퀴즈 생성", description = "실제 AI 호출 없이 더미 데이터로 퀴즈를 생성합니다.")
     @ApiResponse(responseCode = "200", description = "더미 퀴즈 생성 성공",
-            content = @Content(mediaType = "application/json", schema = @Schema(implementation = QuizResponse.class)))
+            content = @Content(mediaType = "application/json", schema = @Schema(implementation = QuizViewResponse.class)))
     @PostMapping("/dummy")
-    public QuizResponse createDummyQuiz(
+    public QuizViewResponse createDummyQuiz(
             @Parameter(description = "퀴즈 생성 요청 객체 (주제 및 문제 수 포함)", required = true)
             @Valid @RequestBody QuizRequest request) {
         int requested = (request.numberOfQuestions() != null) ? request.numberOfQuestions() : 5;
         int questionsToGenerate = Math.max(1, Math.min(20, requested));
         QuizResponse response = createDummyQuizResponse(request.topic(), questionsToGenerate);
-        return learningService.storeGeneratedQuiz(request.topic().trim(), request.sourceId(), request.roadmapId(),
+        QuizResponse storedQuiz = learningService.storeGeneratedQuiz(request.topic().trim(), request.sourceId(), request.roadmapId(),
                 request.roadmapStepId(), response);
+        return QuizViewResponse.from(storedQuiz);
     }
 
     private QuizResponse createDummyQuizResponse(String topic, int numberOfQuestions) {

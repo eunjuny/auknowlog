@@ -95,10 +95,12 @@ class OpenAiQuizServiceTest {
         assertThat(quiz.quizTitle()).isEqualTo("Java 기초 퀴즈");
         assertThat(quiz.questions()).hasSize(1);
         assertThat(quiz.questions().getFirst().correctAnswer()).isEqualTo("객체지향");
-        assertThat(meterRegistry.find("auknowlog.ai.quiz.request.duration")
-                .tags("model", "gpt-5.4-mini", "outcome", "success").timer().count()).isEqualTo(1);
-        assertThat(meterRegistry.find("auknowlog.ai.quiz.tokens")
-                .tags("model", "gpt-5.4-mini", "type", "total").summary().totalAmount()).isEqualTo(200);
+        assertThat(meterRegistry.find("auknowlog.ai.request.duration")
+                .tags("operation", "quiz", "model", "gpt-5.4-mini", "outcome", "success")
+                .timer().count()).isEqualTo(1);
+        assertThat(meterRegistry.find("auknowlog.ai.tokens")
+                .tags("operation", "quiz", "model", "gpt-5.4-mini", "type", "total")
+                .summary().totalAmount()).isEqualTo(200);
         verify(aiGenerationLedgerService).recordQuizSuccess(
                 org.mockito.ArgumentMatchers.eq("gpt-5.4-mini"), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
         server.verify();

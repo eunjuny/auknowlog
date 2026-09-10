@@ -82,7 +82,7 @@ brew install cloudflared
 AUKNOWLOG_TUNNEL_MAX_SECONDS=3600 ./scripts/remote-access.sh quick-tunnel
 ```
 
-기본 사용자명은 `eunjuny`다. `quick-tunnel`은 실행할 때마다 32자리 임시 비밀번호와 64자리 세션 토큰을 새로 만든다. 인증 성공 시 브라우저에는 `Secure`, `HttpOnly`, `SameSite=Strict` 속성의 세션 쿠키가 저장된다. 평문 비밀번호, 프로세스 ID와 로그는 `.runtime/remote-access`에 권한 `600/700`으로 저장되고 Git에서 제외된다. 터널을 종료하면 인증 정보와 공개 URL을 삭제하며 이전 세션 토큰도 무효가 된다.
+기본 사용자명은 `eunjuny`다. `quick-tunnel`은 실행할 때마다 32자리 임시 비밀번호와 64자리 세션 토큰을 새로 만든다. 인증 정보 출력은 라벨과 값을 서로 다른 줄에 표시하므로 값 앞에 공백 없이 한 줄만 복사할 수 있다. 환경변수로 전달한 사용자명과 비밀번호도 시작·끝 공백을 제거한 뒤 사용한다. 인증 성공 시 브라우저에는 `Secure`, `HttpOnly`, `SameSite=Strict` 속성의 세션 쿠키가 저장된다. 평문 비밀번호, 프로세스 ID와 로그는 `.runtime/remote-access`에 권한 `600/700`으로 저장되고 Git에서 제외된다. 터널을 종료하면 인증 정보와 공개 URL을 삭제하며 이전 세션 토큰도 무효가 된다.
 
 고정 사용자명 또는 비밀번호가 필요한 경우 실행 프로세스에만 환경 변수로 전달할 수 있다.
 

@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AI 비용·문제 품질 관측 대시보드 샘플 | Auknowlog</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #171717;
+      --muted: #6d6d68;
+      --line: #dfdfda;
+      --line-soft: #ecece8;
+      --paper: #ffffff;
+      --canvas: #f5f5f2;
+      --blue: #2367d1;
+      --blue-soft: #eaf2ff;
+      --orange: #c64e32;
+      --orange-soft: #fff0eb;
+      --green: #13795b;
+      --green-soft: #e8f7f0;
+      --amber: #a15c00;
+      --amber-soft: #fff6df;
+      --red: #b42318;
+      --red-soft: #fff0ef;
+      --radius: 18px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--canvas);
+      color: var(--ink);
+      font-family: Pretendard, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      line-height: 1.5;
+    }
+
+    button { font: inherit; }
+
+    .app-shell { min-height: 100vh; }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      min-height: 66px;
+      padding: 0 34px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.94);
+      backdrop-filter: blur(12px);
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 18px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    .brand-mark {
+      display: grid;
+      width: 30px;
+      height: 30px;
+      place-items: center;
+      border-radius: 9px;
+      background: var(--ink);
+      color: white;
+      font-size: 14px;
+    }
+
+    .main-nav { display: flex; gap: 4px; }
+
+    .main-nav button {
+      border: 0;
+      border-radius: 9px;
+      padding: 9px 13px;
+      background: transparent;
+      color: var(--muted);
+      cursor: default;
+    }
+
+    .main-nav .active { background: #ededE9; color: var(--ink); font-weight: 700; }
+
+    .sample-label {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 6px 10px;
+      color: var(--muted);
+      background: var(--paper);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    main { max-width: 1240px; margin: 0 auto; padding: 38px 30px 64px; }
+
+    .page-heading {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 26px;
+    }
+
+    .eyebrow {
+      margin: 0 0 7px;
+      color: var(--orange);
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.12em;
+    }
+
+    h1 { margin: 0; font-size: clamp(28px, 4vw, 42px); letter-spacing: -0.045em; }
+    .page-heading p:last-child { margin: 9px 0 0; color: var(--muted); }
+
+    .period-control {
+      display: flex;
+      gap: 4px;
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      padding: 4px;
+      background: var(--paper);
+    }
+
+    .period-control button {
+      min-width: 58px;
+      border: 0;
+      border-radius: 7px;
+      padding: 7px 10px;
+      background: transparent;
+      color: var(--muted);
+      cursor: pointer;
+    }
+
+    .period-control button[aria-pressed="true"] { background: var(--ink); color: white; font-weight: 700; }
+
+    .status-strip {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 18px;
+      margin-bottom: 18px;
+      border: 1px solid #badfce;
+      border-radius: var(--radius);
+      padding: 17px 20px;
+      background: var(--green-soft);
+    }
+
+    .status-copy { display: flex; align-items: center; gap: 12px; }
+    .status-dot { width: 11px; height: 11px; border-radius: 50%; background: var(--green); box-shadow: 0 0 0 5px rgba(19, 121, 91, 0.12); }
+    .status-copy strong { display: block; }
+    .status-copy span, .status-time { color: #376c5b; font-size: 13px; }
+
+    .metric-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .metric-card, .panel {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--paper);
+    }
+
+    .metric-card { padding: 19px; }
+    .metric-card .label { display: flex; justify-content: space-between; gap: 8px; color: var(--muted); font-size: 13px; }
+    .metric-card .label em { color: var(--green); font-style: normal; font-weight: 700; }
+    .metric-card strong { display: block; margin-top: 10px; font-size: 27px; letter-spacing: -0.04em; }
+    .metric-card small { display: block; margin-top: 5px; color: var(--muted); }
+
+    .dashboard-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.25fr) minmax(300px, 0.75fr);
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .panel { padding: 21px; min-width: 0; }
+    .panel-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; margin-bottom: 20px; }
+    .panel-heading h2 { margin: 0; font-size: 18px; letter-spacing: -0.025em; }
+    .panel-heading p { margin: 4px 0 0; color: var(--muted); font-size: 13px; }
+    .panel-badge { flex: none; border-radius: 999px; padding: 5px 9px; background: var(--blue-soft); color: var(--blue); font-size: 12px; font-weight: 800; }
+
+    .budget-summary { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+    .budget-summary strong { font-size: 22px; }
+    .budget-summary span { color: var(--muted); font-size: 13px; }
+    .budget-track { overflow: hidden; height: 11px; border-radius: 999px; background: #ecece7; }
+    .budget-track > span { display: block; width: 0; height: 100%; border-radius: inherit; background: var(--blue); transition: width 220ms ease; }
+    .budget-scale { display: flex; justify-content: space-between; margin-top: 7px; color: var(--muted); font-size: 11px; }
+
+    .cost-chart {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      align-items: end;
+      gap: 8px;
+      height: 174px;
+      margin-top: 24px;
+      padding-top: 10px;
+      border-bottom: 1px solid var(--line);
+      background: linear-gradient(to bottom, transparent 49.5%, var(--line-soft) 50%, transparent 50.5%);
+    }
+
+    .cost-column { display: flex; height: 100%; flex-direction: column; justify-content: flex-end; align-items: center; gap: 6px; }
+    .cost-value { color: var(--muted); font-size: 11px; }
+    .cost-bar { width: min(28px, 66%); min-height: 3px; border-radius: 6px 6px 0 0; background: var(--ink); transition: height 220ms ease; }
+    .cost-day { transform: translateY(26px); color: var(--muted); font-size: 11px; }
+    .chart-caption { display: flex; justify-content: space-between; margin-top: 34px; color: var(--muted); font-size: 12px; }
+
+    .guardrail-list { display: grid; gap: 15px; }
+    .guardrail { display: grid; grid-template-columns: 1fr auto; gap: 8px 14px; align-items: center; }
+    .guardrail-name strong { display: block; font-size: 14px; }
+    .guardrail-name span { color: var(--muted); font-size: 12px; }
+    .guardrail-value { font-size: 13px; font-weight: 800; }
+    .mini-track { grid-column: 1 / -1; height: 5px; overflow: hidden; border-radius: 999px; background: #ededE8; }
+    .mini-track span { display: block; height: 100%; border-radius: inherit; background: var(--green); }
+    .guardrail.warning .mini-track span { background: var(--amber); }
+    .guardrail.warning .guardrail-value { color: var(--amber); }
+
+    .quality-funnel { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px; align-items: stretch; }
+    .funnel-step { position: relative; border: 1px solid var(--line-soft); border-radius: 13px; padding: 15px 12px; background: #fafaf8; }
+    .funnel-step:not(:last-child)::after { content: "→"; position: absolute; right: -10px; top: calc(50% - 13px); z-index: 2; display: grid; width: 20px; height: 26px; place-items: center; background: var(--paper); color: #9b9b96; }
+    .funnel-step span { display: block; color: var(--muted); font-size: 11px; }
+    .funnel-step strong { display: block; margin: 5px 0 2px; font-size: 23px; }
+    .funnel-step small { color: var(--muted); }
+    .funnel-step.reject { border-color: #f0c8bd; background: var(--orange-soft); }
+    .funnel-step.accept { border-color: #bcd8fa; background: var(--blue-soft); }
+
+    .quality-details { display: grid; grid-template-columns: repeat(4, 1fr); gap: 9px; margin-top: 15px; }
+    .quality-detail { border-left: 3px solid var(--line); padding: 5px 9px; }
+    .quality-detail.warning { border-color: var(--orange); }
+    .quality-detail.good { border-color: var(--green); }
+    .quality-detail span { display: block; color: var(--muted); font-size: 11px; }
+    .quality-detail strong { font-size: 15px; }
+
+    .signal-list { display: grid; gap: 9px; }
+    .signal {
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 10px;
+      align-items: start;
+      border-bottom: 1px solid var(--line-soft);
+      padding: 0 0 12px;
+    }
+    .signal:last-child { border-bottom: 0; padding-bottom: 0; }
+    .signal-icon { display: grid; width: 28px; height: 28px; place-items: center; border-radius: 8px; background: var(--green-soft); color: var(--green); font-size: 12px; font-weight: 900; }
+    .signal.attention .signal-icon { background: var(--amber-soft); color: var(--amber); }
+    .signal strong { display: block; font-size: 13px; }
+    .signal p { margin: 2px 0 0; color: var(--muted); font-size: 12px; }
+    .signal time { color: var(--muted); font-size: 11px; }
+
+    .full-width { margin-bottom: 14px; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { padding: 0 12px 10px; color: var(--muted); font-size: 11px; font-weight: 700; text-align: left; }
+    td { padding: 13px 12px; border-top: 1px solid var(--line-soft); white-space: nowrap; }
+    tbody tr[data-detail] { cursor: pointer; }
+    tbody tr[data-detail]:hover { background: #fafaf8; }
+    .result { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 4px 8px; background: var(--green-soft); color: var(--green); font-size: 11px; font-weight: 800; }
+    .result.warn { background: var(--amber-soft); color: var(--amber); }
+    .request-detail td { padding: 0; border-top: 0; }
+    .detail-box { display: none; margin: 0 12px 12px; border-radius: 10px; padding: 12px 14px; background: #f4f4f1; color: var(--muted); white-space: normal; }
+    .request-detail.open .detail-box { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+    .detail-box span { display: block; font-size: 11px; }
+    .detail-box strong { color: var(--ink); font-size: 13px; }
+
+    .reading-guide { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+    .guide-item { border-radius: 13px; padding: 15px; background: #f5f5f2; }
+    .guide-item b { display: block; margin-bottom: 4px; font-size: 13px; }
+    .guide-item span { color: var(--muted); font-size: 12px; }
+
+    @media (max-width: 900px) {
+      .main-nav { display: none; }
+      .metric-grid { grid-template-columns: repeat(2, 1fr); }
+      .dashboard-grid { grid-template-columns: 1fr; }
+      .quality-funnel { grid-template-columns: 1fr 1fr; }
+      .funnel-step:not(:last-child)::after { display: none; }
+      .quality-details { grid-template-columns: 1fr 1fr; }
+    }
+
+    @media (max-width: 580px) {
+      .topbar { padding: 0 18px; }
+      main { padding: 26px 16px 48px; }
+      .page-heading { align-items: flex-start; flex-direction: column; }
+      .period-control { width: 100%; }
+      .period-control button { flex: 1; }
+      .status-strip { align-items: flex-start; flex-direction: column; }
+      .metric-grid { grid-template-columns: 1fr; gap: 9px; }
+      .metric-card { padding: 15px; }
+      .metric-card strong { font-size: 22px; }
+      .panel { padding: 17px; }
+      .quality-funnel, .quality-details, .reading-guide { grid-template-columns: 1fr; }
+      .request-detail.open .detail-box { grid-template-columns: 1fr 1fr; }
+      .sample-label { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">A</span>Auknowlog</div>
+      <nav class="main-nav" aria-label="주요 메뉴">
+        <button type="button">문제 생성</button>
+        <button type="button">풀이 기록</button>
+        <button type="button">복습</button>
+        <button type="button">로드맵</button>
+        <button type="button" class="active">대시보드</button>
+      </nav>
+      <span class="sample-label">SAMPLE DATA</span>
+    </header>
+
+    <main>
+      <div class="page-heading">
+        <div>
+          <p class="eyebrow">AI OPERATIONS</p>
+          <h1>AI 비용·문제 품질 관측</h1>
+          <p>AI를 얼마나 썼는지와 생성된 문제가 얼마나 걸러졌는지를 함께 확인합니다.</p>
+        </div>
+        <div class="period-control" aria-label="조회 기간">
+          <button type="button" data-period="7" aria-pressed="true">7일</button>
+          <button type="button" data-period="30" aria-pressed="false">30일</button>
+        </div>
+      </div>
+
+      <section class="status-strip" aria-label="현재 운영 상태">
+        <div class="status-copy">
+          <span class="status-dot" aria-hidden="true"></span>
+          <div><strong>현재 통제 범위 안에서 동작하고 있습니다</strong><span>비용 한도 초과와 연속 실패가 없고, 생성 문제의 최종 채택률이 목표 이상입니다.</span></div>
+        </div>
+        <span class="status-time">마지막 생성 18분 전</span>
+      </section>
+
+      <section class="metric-grid" aria-label="핵심 지표">
+        <article class="metric-card"><span class="label">추정 사용 비용 <em>한도 내</em></span><strong id="metric-cost">₩74</strong><small id="metric-cost-sub">월 한도 ₩5,000의 1.5%</small></article>
+        <article class="metric-card"><span class="label">총 AI 호출</span><strong id="metric-calls">4회</strong><small id="metric-call-sub">문제 생성 3 · 임베딩 1</small></article>
+        <article class="metric-card"><span class="label">사용 토큰</span><strong id="metric-tokens">24,820</strong><small id="metric-token-sub">호출당 평균 6,205</small></article>
+        <article class="metric-card"><span class="label">문제 최종 채택률</span><strong id="metric-acceptance">83%</strong><small id="metric-acceptance-sub">생성 12개 중 10개 저장</small></article>
+      </section>
+
+      <section class="dashboard-grid">
+        <article class="panel" aria-labelledby="cost-title">
+          <div class="panel-heading">
+            <div><h2 id="cost-title">비용 사용 현황</h2><p>실제 토큰 수 × 설정된 모델 단가로 계산한 추정치</p></div>
+            <span class="panel-badge">월 예산 ₩5,000</span>
+          </div>
+          <div class="budget-summary"><strong id="budget-value">₩74 사용</strong><span id="budget-remaining">₩4,926 남음</span></div>
+          <div class="budget-track" role="progressbar" aria-label="월 예산 사용률" aria-valuemin="0" aria-valuemax="100" aria-valuenow="1.5"><span id="budget-bar"></span></div>
+          <div class="budget-scale"><span>₩0</span><span>경고 80%</span><span>₩5,000</span></div>
+          <div id="cost-chart" class="cost-chart" role="img" aria-label="기간별 AI 비용 막대 차트"></div>
+          <div class="chart-caption"><span>■ 일별 추정 비용</span><span id="cost-chart-total">7일 합계 ₩74</span></div>
+        </article>
+
+        <article class="panel" aria-labelledby="guardrail-title">
+          <div class="panel-heading">
+            <div><h2 id="guardrail-title">비용·안정성 제어선</h2><p>설정값을 넘기기 전에 경고하거나 요청을 중단합니다.</p></div>
+          </div>
+          <div class="guardrail-list">
+            <div class="guardrail"><div class="guardrail-name"><strong>월 비용 한도</strong><span>한도 도달 시 새 AI 생성 차단</span></div><span class="guardrail-value" id="guard-budget-value">1.5%</span><div class="mini-track"><span id="guard-budget-bar" style="width:1.5%"></span></div></div>
+            <div class="guardrail"><div class="guardrail-name"><strong>호출 성공률</strong><span>연속 3회 실패 시 생성 일시 중단</span></div><span class="guardrail-value" id="guard-success">100%</span><div class="mini-track"><span id="guard-success-bar" style="width:100%"></span></div></div>
+            <div class="guardrail warning"><div class="guardrail-name"><strong>호출당 토큰</strong><span>목표 상한 8,000 tokens</span></div><span class="guardrail-value" id="guard-token">6,205</span><div class="mini-track"><span id="guard-token-bar" style="width:78%"></span></div></div>
+            <div class="guardrail"><div class="guardrail-name"><strong>평균 응답 시간</strong><span>목표 상한 15초</span></div><span class="guardrail-value" id="guard-latency">8.2초</span><div class="mini-track"><span id="guard-latency-bar" style="width:55%"></span></div></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="dashboard-grid">
+        <article class="panel" aria-labelledby="quality-title">
+          <div class="panel-heading">
+            <div><h2 id="quality-title">문제 생성 품질 퍼널</h2><p>AI가 만든 원본 문제가 사용자에게 전달되기까지의 필터링 과정</p></div>
+            <span class="panel-badge" id="quality-target">최종 목표 10문제</span>
+          </div>
+          <div class="quality-funnel">
+            <div class="funnel-step"><span>사용자 요청</span><strong id="q-requested">10</strong><small>필요 문제</small></div>
+            <div class="funnel-step"><span>AI 원본 생성</span><strong id="q-generated">12</strong><small>보충 생성 포함</small></div>
+            <div class="funnel-step reject"><span>중복·오류 제외</span><strong id="q-rejected">2</strong><small>사용자 미노출</small></div>
+            <div class="funnel-step"><span>검증 통과</span><strong id="q-validated">10</strong><small>계약 형식 정상</small></div>
+            <div class="funnel-step accept"><span>최종 저장</span><strong id="q-stored">10</strong><small>사용자에게 표시</small></div>
+          </div>
+          <div class="quality-details">
+            <div class="quality-detail"><span>SHA-256 정확 중복</span><strong id="q-hash">0개</strong></div>
+            <div class="quality-detail warning"><span>pgvector 의미 중복</span><strong id="q-vector">2개</strong></div>
+            <div class="quality-detail"><span>응답 형식 오류</span><strong id="q-invalid">0개</strong></div>
+            <div class="quality-detail good"><span>해시 폴백</span><strong id="q-fallback">0회</strong></div>
+          </div>
+        </article>
+
+        <article class="panel" aria-labelledby="signal-title">
+          <div class="panel-heading"><div><h2 id="signal-title">확인할 운영 신호</h2><p>조치가 필요한 항목만 짧게 보여줍니다.</p></div></div>
+          <div class="signal-list">
+            <div class="signal attention"><span class="signal-icon">!</span><div><strong>쿠버네티스 유사 문제 2개 차단</strong><p>유사도 0.91 이상으로 재생성했으며 최종 5문제를 확보했습니다.</p></div><time>18분 전</time></div>
+            <div class="signal"><span class="signal-icon">✓</span><div><strong>임베딩 API 정상</strong><p>최근 요청에서 pgvector 검사와 저장이 모두 완료됐습니다.</p></div><time>18분 전</time></div>
+            <div class="signal"><span class="signal-icon">✓</span><div><strong>비용 증가 이상 없음</strong><p>최근 평균 대비 토큰 급증이 감지되지 않았습니다.</p></div><time>오늘</time></div>
+          </div>
+        </article>
+      </section>
+
+      <section class="panel full-width" aria-labelledby="request-title">
+        <div class="panel-heading"><div><h2 id="request-title">최근 AI 요청</h2><p>행을 누르면 해당 요청의 품질 검사 결과를 볼 수 있습니다.</p></div><span class="panel-badge">샘플 요청 4건</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>시간</th><th>작업</th><th>모델</th><th>토큰</th><th>추정 비용</th><th>응답 시간</th><th>결과</th></tr></thead>
+            <tbody id="request-table"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="reading-title">
+        <div class="panel-heading"><div><h2 id="reading-title">이 화면에서 판단할 수 있는 것</h2><p>사용량이 적어도 아래 세 가지 운영 질문에는 답할 수 있습니다.</p></div></div>
+        <div class="reading-guide">
+          <div class="guide-item"><b>과소비하고 있는가?</b><span>예산 사용률, 호출당 토큰, 재생성 비용으로 판단</span></div>
+          <div class="guide-item"><b>문제가 제대로 걸러지는가?</b><span>정확 중복·의미 중복·형식 오류와 최종 채택률로 판단</span></div>
+          <div class="guide-item"><b>어디서 실패했는가?</b><span>AI 생성·임베딩·pgvector·폴백 단계를 요청별로 확인</span></div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script>
+    const datasets = {
+      7: {
+        cost: 74, calls: 4, tokens: 24820, accepted: 83, generated: 12, stored: 10,
+        costByDay: [{d:'09/04',v:0},{d:'09/05',v:18},{d:'09/06',v:0},{d:'09/07',v:21},{d:'09/08',v:0},{d:'09/09',v:0},{d:'09/10',v:35}],
+        requested:10, rejected:2, validated:10, hash:0, vector:2, invalid:0, fallback:0,
+        success:100, latency:8.2
+      },
+      30: {
+        cost: 286, calls: 17, tokens: 96340, accepted: 81, generated: 47, stored: 38,
+        costByDay: [{d:'1주',v:52},{d:'2주',v:81},{d:'3주',v:79},{d:'4주',v:74}],
+        requested:38, rejected:9, validated:38, hash:2, vector:6, invalid:1, fallback:1,
+        success:94, latency:9.6
+      }
+    };
+
+    const requests = [
+      {time:'오늘 14:22', task:'퀴즈 생성 · 쿠버네티스', model:'gpt-5.4-mini', tokens:'8,140', cost:'₩35', latency:'11.4초', result:'보충 완료', warn:true, detail:['최초 5개 생성','의미 중복 2개 차단','4개 보충 요청','최종 5개 저장']},
+      {time:'09/07 20:14', task:'퀴즈 생성 · PostgreSQL', model:'gpt-5.4-mini', tokens:'6,920', cost:'₩21', latency:'8.8초', result:'성공', detail:['최초 5개 생성','중복 0개','형식 오류 0개','최종 5개 저장']},
+      {time:'09/05 08:31', task:'로드맵 생성 · 네트워크', model:'gpt-5.4-mini', tokens:'5,930', cost:'₩18', latency:'7.2초', result:'성공', detail:['대주제 4개','소주제 17개','JSON 검증 통과','로드맵 저장']},
+      {time:'09/05 08:30', task:'문제 임베딩', model:'text-embedding-3-small', tokens:'3,830', cost:'< ₩1', latency:'0.4초', result:'성공', detail:['512차원 생성','pgvector 연결 정상','유사도 검색 완료','폴백 미사용']}
+    ];
+
+    const format = value => new Intl.NumberFormat('ko-KR').format(value);
+
+    function renderCostChart(data) {
+      const chart = document.getElementById('cost-chart');
+      const max = Math.max(...data.costByDay.map(item => item.v), 1);
+      chart.style.gridTemplateColumns = `repeat(${data.costByDay.length}, 1fr)`;
+      chart.innerHTML = data.costByDay.map(item => `
+        <div class="cost-column" title="${item.d}: ₩${format(item.v)}">
+          <span class="cost-value">${item.v ? `₩${format(item.v)}` : '-'}</span>
+          <span class="cost-bar" style="height:${Math.max((item.v / max) * 112, 3)}px"></span>
+          <span class="cost-day">${item.d}</span>
+        </div>`).join('');
+    }
+
+    function renderPeriod(period) {
+      const data = datasets[period];
+      const budgetPercent = Math.min((data.cost / 5000) * 100, 100);
+      const averageTokens = Math.round(data.tokens / data.calls);
+      document.getElementById('metric-cost').textContent = `₩${format(data.cost)}`;
+      document.getElementById('metric-cost-sub').textContent = `월 한도 ₩5,000의 ${budgetPercent.toFixed(1)}%`;
+      document.getElementById('metric-calls').textContent = `${format(data.calls)}회`;
+      document.getElementById('metric-call-sub').textContent = period === '7' ? '문제 생성 3 · 임베딩 1' : '문제 생성 12 · 로드맵 2 · 임베딩 3';
+      document.getElementById('metric-tokens').textContent = format(data.tokens);
+      document.getElementById('metric-token-sub').textContent = `호출당 평균 ${format(averageTokens)}`;
+      document.getElementById('metric-acceptance').textContent = `${data.accepted}%`;
+      document.getElementById('metric-acceptance-sub').textContent = `생성 ${data.generated}개 중 ${data.stored}개 저장`;
+      document.getElementById('budget-value').textContent = `₩${format(data.cost)} 사용`;
+      document.getElementById('budget-remaining').textContent = `₩${format(5000 - data.cost)} 남음`;
+      document.getElementById('budget-bar').style.width = `${Math.max(budgetPercent, 1)}%`;
+      document.getElementById('budget-bar').parentElement.setAttribute('aria-valuenow', budgetPercent.toFixed(1));
+      document.getElementById('cost-chart-total').textContent = `${period}일 합계 ₩${format(data.cost)}`;
+      document.getElementById('guard-budget-value').textContent = `${budgetPercent.toFixed(1)}%`;
+      document.getElementById('guard-budget-bar').style.width = `${Math.max(budgetPercent, 1)}%`;
+      document.getElementById('guard-success').textContent = `${data.success}%`;
+      document.getElementById('guard-success-bar').style.width = `${data.success}%`;
+      document.getElementById('guard-token').textContent = format(averageTokens);
+      document.getElementById('guard-token-bar').style.width = `${Math.min((averageTokens / 8000) * 100, 100)}%`;
+      document.getElementById('guard-latency').textContent = `${data.latency.toFixed(1)}초`;
+      document.getElementById('guard-latency-bar').style.width = `${Math.min((data.latency / 15) * 100, 100)}%`;
+      document.getElementById('q-requested').textContent = data.requested;
+      document.getElementById('q-generated').textContent = data.generated;
+      document.getElementById('q-rejected').textContent = data.rejected;
+      document.getElementById('q-validated').textContent = data.validated;
+      document.getElementById('q-stored').textContent = data.stored;
+      document.getElementById('q-hash').textContent = `${data.hash}개`;
+      document.getElementById('q-vector').textContent = `${data.vector}개`;
+      document.getElementById('q-invalid').textContent = `${data.invalid}개`;
+      document.getElementById('q-fallback').textContent = `${data.fallback}회`;
+      document.getElementById('quality-target').textContent = `최종 목표 ${data.requested}문제`;
+      renderCostChart(data);
+    }
+
+    function renderRequestTable() {
+      const body = document.getElementById('request-table');
+      body.innerHTML = requests.map((request, index) => `
+        <tr data-detail="detail-${index}" tabindex="0" aria-expanded="false">
+          <td>${request.time}</td><td>${request.task}</td><td>${request.model}</td><td>${request.tokens}</td><td>${request.cost}</td><td>${request.latency}</td>
+          <td><span class="result ${request.warn ? 'warn' : ''}">${request.result}</span></td>
+        </tr>
+        <tr id="detail-${index}" class="request-detail"><td colspan="7"><div class="detail-box">${request.detail.map((item, step) => `<div><span>STEP ${step + 1}</span><strong>${item}</strong></div>`).join('')}</div></td></tr>`).join('');
+
+      body.querySelectorAll('tr[data-detail]').forEach(row => {
+        const toggle = () => {
+          const detail = document.getElementById(row.dataset.detail);
+          const open = detail.classList.toggle('open');
+          row.setAttribute('aria-expanded', String(open));
+        };
+        row.addEventListener('click', toggle);
+        row.addEventListener('keydown', event => {
+          if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); toggle(); }
+        });
+      });
+    }
+
+    document.querySelectorAll('[data-period]').forEach(button => {
+      button.addEventListener('click', () => {
+        document.querySelectorAll('[data-period]').forEach(item => item.setAttribute('aria-pressed', String(item === button)));
+        renderPeriod(button.dataset.period);
+      });
+    });
+
+    renderRequestTable();
+    renderPeriod('7');
+  </script>
+</body>
+</html>

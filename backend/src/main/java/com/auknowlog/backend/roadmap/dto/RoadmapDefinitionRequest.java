@@ -28,7 +28,7 @@ public record RoadmapDefinitionRequest(
         @Max(value = 52, message = "학습 기간은 52주 이하여야 합니다.")
         Integer durationWeeks,
         @NotEmpty(message = "학습 단계를 한 개 이상 입력해주세요.")
-        @Size(max = 20, message = "학습 단계는 최대 20개까지 만들 수 있습니다.")
+        @Size(max = 10, message = "대주제는 최대 10개까지 만들 수 있습니다.")
         List<@Valid RoadmapStepDefinition> steps
 ) {
 }

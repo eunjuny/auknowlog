@@ -1,4 +1,12 @@
 package com.auknowlog.backend.source.dto;
 
-public record SourceCreateResponse(Long sourceId, String title, int chunkCount) {
+import com.auknowlog.backend.source.entity.SourceType;
+
+public record SourceCreateResponse(
+        Long sourceId,
+        String title,
+        int chunkCount,
+        SourceType sourceType,
+        boolean reused
+) {
 }

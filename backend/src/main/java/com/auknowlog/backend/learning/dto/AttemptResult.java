@@ -1,6 +1,7 @@
 package com.auknowlog.backend.learning.dto;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 public record AttemptResult(
         Long attemptId,
@@ -8,6 +9,7 @@ public record AttemptResult(
         int correctAnswers,
         int wrongAnswers,
         int reviewScheduledCount,
-        LocalDateTime nextReviewAt
+        LocalDateTime nextReviewAt,
+        List<LearningAttemptQuestionResult> questions
 ) {
 }

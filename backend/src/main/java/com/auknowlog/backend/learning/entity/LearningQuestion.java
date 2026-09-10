@@ -58,6 +58,10 @@ public class LearningQuestion {
         return id;
     }
 
+    public LearningQuiz getQuiz() {
+        return quiz;
+    }
+
     public int getQuestionOrder() {
         return questionOrder;
     }

@@ -80,7 +80,7 @@ cd backend
 `PgvectorIntegrationTest`는 다음 순서로 실행된다.
 
 1. `pgvector/pgvector:0.8.6-pg16-bookworm` 컨테이너를 임의 포트에 시작한다.
-2. 비어 있는 DB에 Flyway V1~V3를 모두 적용한다.
+2. 비어 있는 DB에 현재 Flyway V1~V11을 모두 적용하고, 그중 V3의 pgvector 구성을 중점 확인한다.
 3. PostgreSQL 카탈로그에서 V3 성공, vector 확장, `vector(512)`와 HNSW 인덱스를 확인한다.
 4. 실제 `QuestionVectorRepository.upsert`로 512차원 벡터를 저장한다.
 5. 가까운 고정 벡터의 코사인 유사도가 0.90 이상이라 중복으로 차단되는지 확인한다.

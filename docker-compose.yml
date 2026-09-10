@@ -8,7 +8,7 @@ services:
       POSTGRES_USER: auknowlog
       POSTGRES_PASSWORD: auknowlog123
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -17,5 +17,26 @@ services:
       timeout: 5s
       retries: 5
 
+  # 필요할 때만 실행하는 로컬 관측 스택입니다.
+  # 호스트에서 실행 중인 Spring Boot의 /actuator/prometheus를 15초마다 수집합니다.
+  prometheus:
+    image: prom/prometheus:v3.13.1
+    container_name: auknowlog-prometheus
+    profiles: ["monitoring"]
+    ports:
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+    restart: unless-stopped
+
 volumes:
   postgres_data:
+  prometheus_data:

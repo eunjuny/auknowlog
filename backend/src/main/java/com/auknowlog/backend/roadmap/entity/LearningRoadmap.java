@@ -5,7 +5,11 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import com.auknowlog.backend.source.entity.SourceDocument;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -48,6 +52,10 @@ public class LearningRoadmap {
     @Column(columnDefinition = "TEXT")
     private String definitionJson;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "source_document_id")
+    private SourceDocument sourceDocument;
+
     @Column(nullable = false)
     private LocalDateTime createdAt;
 
@@ -60,6 +68,12 @@ public class LearningRoadmap {
 
     public LearningRoadmap(String title, String topic, String description, String sourceType, String definitionJson,
                            LocalDate startDate, int durationWeeks, int questionsPerWeek) {
+        this(title, topic, description, sourceType, definitionJson, startDate, durationWeeks, questionsPerWeek, null);
+    }
+
+    public LearningRoadmap(String title, String topic, String description, String sourceType, String definitionJson,
+                           LocalDate startDate, int durationWeeks, int questionsPerWeek,
+                           SourceDocument sourceDocument) {
         this.title = title;
         this.topic = topic;
         this.description = description;
@@ -69,12 +83,17 @@ public class LearningRoadmap {
         this.endDate = startDate.plusWeeks(durationWeeks).minusDays(1);
         this.durationWeeks = durationWeeks;
         this.questionsPerWeek = questionsPerWeek;
+        this.sourceDocument = sourceDocument;
         this.status = "ACTIVE";
         this.createdAt = LocalDateTime.now();
     }
 
     public void archive() {
         this.status = "ARCHIVED";
+    }
+
+    public void complete() {
+        this.status = "COMPLETED";
     }
 
     public Long getId() {
@@ -119,6 +138,10 @@ public class LearningRoadmap {
 
     public String getDefinitionJson() {
         return definitionJson;
+    }
+
+    public SourceDocument getSourceDocument() {
+        return sourceDocument;
     }
 
     public LocalDateTime getCreatedAt() {

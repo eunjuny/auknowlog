@@ -217,10 +217,12 @@ start_quick_tunnel() {
     fail "인증 프록시 자체 테스트에 실패했습니다."
 
   username="${AUKNOWLOG_TUNNEL_USERNAME:-eunjuny}"
+  username="$(printf '%s' "${username}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
   [[ "${username}" =~ ^[A-Za-z0-9._-]+$ ]] ||
     fail "사용자명에는 영문, 숫자, 점, 밑줄, 하이픈만 사용할 수 있습니다."
 
   password="${AUKNOWLOG_TUNNEL_PASSWORD:-$(openssl rand -hex 16)}"
+  password="$(printf '%s' "${password}" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
   [[ ${#password} -ge 20 ]] || fail "터널 비밀번호는 20자 이상이어야 합니다."
   [[ "${password}" != *:* ]] || fail "터널 비밀번호에는 콜론(:)을 사용할 수 없습니다."
   session_token="$(openssl rand -hex 32)"
@@ -232,7 +234,8 @@ start_quick_tunnel() {
     "${AUTH_PROXY_LOG_FILE}" "${CLOUDFLARED_LOG_FILE}" "${STOP_REQUESTED_FILE}"
 
   umask 077
-  printf '사용자명: %s\n비밀번호: %s\n' "${username}" "${password}" > "${CREDENTIALS_FILE}"
+  # 값을 라벨 다음 줄에 단독으로 출력해 드래그·더블클릭 복사 시 앞 공백이 섞이지 않게 한다.
+  printf '사용자명:\n%s\n비밀번호:\n%s\n' "${username}" "${password}" > "${CREDENTIALS_FILE}"
 
   nohup env \
     AUKNOWLOG_TUNNEL_USERNAME="${username}" \

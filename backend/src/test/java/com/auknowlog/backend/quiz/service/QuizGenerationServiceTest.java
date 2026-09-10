@@ -1,6 +1,9 @@
 package com.auknowlog.backend.quiz.service;
 
 import com.auknowlog.backend.embedding.service.SemanticDuplicateService;
+import com.auknowlog.backend.embedding.service.EmbeddingResult;
+import com.auknowlog.backend.common.observability.QuizGenerationMetrics;
+import com.auknowlog.backend.feedback.service.QuestionFeedbackService;
 import com.auknowlog.backend.learning.service.LearningService;
 import com.auknowlog.backend.observability.LangfuseTracingService;
 import com.auknowlog.backend.question.repository.QuestionHistoryRepository;
@@ -44,6 +47,9 @@ class QuizGenerationServiceTest {
     private SemanticDuplicateService semanticDuplicateService;
 
     @Mock
+    private QuestionFeedbackService questionFeedbackService;
+
+    @Mock
     private LearningService learningService;
 
     @Mock
@@ -51,6 +57,9 @@ class QuizGenerationServiceTest {
 
     @Mock
     private LangfuseTracingService langfuseTracingService;
+
+    @Mock
+    private QuizGenerationMetrics quizGenerationMetrics;
 
     @InjectMocks
     private QuizGenerationService quizGenerationService;
@@ -61,6 +70,7 @@ class QuizGenerationServiceTest {
                 .thenReturn(LangfuseTracingService.noopScope());
         when(langfuseTracingService.startOperation(any(), ArgumentMatchers.anyMap()))
                 .thenReturn(LangfuseTracingService.noopScope());
+        when(questionFeedbackService.getSimilarityAvoidanceQuestions(any(), anyInt())).thenReturn(List.of());
     }
 
     @Test
@@ -109,9 +119,11 @@ class QuizGenerationServiceTest {
                 openAiQuizService,
                 exactHashService,
                 semanticDuplicateService,
+                questionFeedbackService,
                 sourceService,
                 learningService,
-                langfuseTracingService
+                langfuseTracingService,
+                quizGenerationMetrics
         );
 
         when(exactHashRepository.findByTopic("Spring")).thenReturn(List.of());
@@ -133,5 +145,53 @@ class QuizGenerationServiceTest {
                 savedQuestion -> expectedHash.equals(savedQuestion.getQuestionHash())));
         verify(semanticDuplicateService).indexSavedQuestion(
                 question.questionText(), SemanticDuplicateService.SemanticCheck.notAvailable());
+    }
+
+    @Test
+    void prioritizesSimilarityFeedbackInPromptAndAppliesLowerSemanticThreshold() {
+        String feedbackQuestion = "JVM이 바이트코드를 실행하는 이유는 무엇인가요?";
+        Question repetitive = new Question(
+                "JVM의 바이트코드 실행 역할은 무엇인가요?",
+                List.of("실행", "압축", "전송", "복제"),
+                "실행",
+                "JVM은 바이트코드를 실행합니다."
+        );
+        Question novel = new Question(
+                "JIT 컴파일이 자주 실행되는 코드를 최적화하는 방식은 무엇인가요?",
+                List.of("런타임 컴파일", "파일 압축", "DNS 조회", "메시지 복제"),
+                "런타임 컴파일",
+                "JIT는 런타임에 자주 실행되는 코드를 컴파일합니다."
+        );
+        SemanticDuplicateService.SemanticCheck standardCheck = new SemanticDuplicateService.SemanticCheck(
+                false, 0, Optional.of(new EmbeddingResult("fixture", new float[512], 0)));
+        SemanticDuplicateService.SemanticCheck feedbackDuplicate = new SemanticDuplicateService.SemanticCheck(
+                true, 0.85, standardCheck.embedding());
+
+        when(questionFeedbackService.getSimilarityAvoidanceQuestions("Java", 10))
+                .thenReturn(List.of(feedbackQuestion));
+        when(questionHistoryService.generateHash(feedbackQuestion)).thenReturn("f".repeat(64));
+        when(questionHistoryService.getRecentQuestionPreviews("Java", 30)).thenReturn(List.of("최근 Java 문제"));
+        when(openAiQuizService.generateQuiz(eq("Java"), eq(1), ArgumentMatchers.anyList(), ArgumentMatchers.anyList()))
+                .thenReturn(new QuizResponse("Java 퀴즈", List.of(repetitive)));
+        when(openAiQuizService.generateQuiz(eq("Java"), eq(2), ArgumentMatchers.anyList(), ArgumentMatchers.anyList()))
+                .thenReturn(new QuizResponse("Java 퀴즈", List.of(novel)));
+        when(questionHistoryService.isDuplicate(any())).thenReturn(false);
+        when(semanticDuplicateService.check(any())).thenReturn(standardCheck);
+        when(semanticDuplicateService.checkAgainstQuestionHashes(
+                eq(standardCheck), eq(List.of("f".repeat(64))), eq(0.82)))
+                .thenReturn(feedbackDuplicate, standardCheck);
+        when(questionHistoryService.saveQuestion("Java", novel)).thenReturn(true);
+        when(learningService.storeGeneratedQuiz(eq("Java"), eq(null), eq(null), eq(null),
+                ArgumentMatchers.any(QuizResponse.class)))
+                .thenAnswer(invocation -> ((QuizResponse) invocation.getArgument(4)).withQuizId(9L));
+
+        QuizResponse response = quizGenerationService.createQuiz(new QuizRequest("Java", 1));
+
+        assertThat(response.questions()).containsExactly(novel);
+        verify(openAiQuizService).generateQuiz(
+                eq("Java"), eq(1),
+                ArgumentMatchers.argThat(questions -> questions.getFirst().startsWith("JVM이 바이트코드")),
+                ArgumentMatchers.anyList());
+        verify(questionHistoryService).saveQuestion("Java", novel);
     }
 }

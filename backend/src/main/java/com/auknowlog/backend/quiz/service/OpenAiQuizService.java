@@ -104,7 +104,7 @@ public class OpenAiQuizService {
                         token(response.path("usage"), "total_tokens")
                 );
                 trace.complete(Map.of("returnedQuestionCount", quiz.questions().size()));
-                aiGenerationMetrics.recordSuccess(resolvedModel, response.path("usage"), duration);
+                aiGenerationMetrics.recordSuccess("quiz", resolvedModel, response.path("usage"), duration);
                 aiGenerationLedgerService.recordQuizSuccess(resolvedModel, response.path("usage"), duration);
                 return quiz;
             } catch (RuntimeException e) {
@@ -114,7 +114,7 @@ public class OpenAiQuizService {
         } catch (RuntimeException e) {
             Duration duration = Duration.ofNanos(System.nanoTime() - startedAt);
             String failureType = classifyFailure(e);
-            aiGenerationMetrics.recordFailure(modelName, failureType, duration);
+            aiGenerationMetrics.recordFailure("quiz", modelName, failureType, duration);
             aiGenerationLedgerService.recordQuizFailure(modelName, failureType, duration);
             throw e;
         }

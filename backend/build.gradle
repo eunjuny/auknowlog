@@ -23,7 +23,11 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-web'
 	implementation 'org.springframework.boot:spring-boot-starter-validation'
 	implementation 'org.springframework.boot:spring-boot-starter-actuator'
+	runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.5.0'
+	implementation 'org.jsoup:jsoup:1.23.2'
+	implementation 'org.apache.tika:tika-core:3.3.2'
+	implementation 'org.apache.tika:tika-parsers-standard-package:3.3.2'
 
 	// Langfuse는 OpenTelemetry 표준 OTLP로 선택적으로 연동한다. 키가 없으면 exporter를 만들지 않는다.
 	implementation 'io.opentelemetry:opentelemetry-api'

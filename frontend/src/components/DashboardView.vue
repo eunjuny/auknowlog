@@ -80,14 +80,14 @@ function renderCharts() {
 
   if (hasLearningActivity.value) {
     learningChart = chartFor(learningChart, learningChartElement.value, {
-      color: ['#667eea', '#13a37f'],
+      color: ['#171717', '#c64e32'],
       grid: { top: 42, right: 20, bottom: 28, left: 42 },
-      legend: { top: 4, textStyle: { color: '#475569' } },
+      legend: { top: 4, textStyle: { color: '#303030' } },
       tooltip: { trigger: 'axis' },
-      xAxis: { type: 'category', data: labels, axisLabel: { color: '#64748b' }, axisLine: { lineStyle: { color: '#cbd5e1' } } },
+      xAxis: { type: 'category', data: labels, axisLabel: { color: '#6b6b66' }, axisLine: { lineStyle: { color: '#deded8' } } },
       yAxis: [
-        { type: 'value', name: '풀이 수', minInterval: 1, axisLabel: { color: '#64748b' }, splitLine: { lineStyle: { color: '#eef2f7' } } },
-        { type: 'value', name: '정답률', min: 0, max: 100, axisLabel: { formatter: '{value}%', color: '#64748b' }, splitLine: { show: false } }
+        { type: 'value', name: '풀이 수', minInterval: 1, axisLabel: { color: '#6b6b66' }, splitLine: { lineStyle: { color: '#efefeb' } } },
+        { type: 'value', name: '정답률', min: 0, max: 100, axisLabel: { formatter: '{value}%', color: '#6b6b66' }, splitLine: { show: false } }
       ],
       series: [
         { name: '풀이', type: 'bar', data: learning.dailyActivity.map((item) => item.attempts), barMaxWidth: 22, itemStyle: { borderRadius: [5, 5, 0, 0] } },
@@ -98,30 +98,30 @@ function renderCharts() {
 
   if (hasTopicData.value) {
     topicChart = chartFor(topicChart, topicChartElement.value, {
-      color: ['#f59e0b'],
+      color: ['#c64e32'],
       grid: { top: 18, right: 20, bottom: 56, left: 38 },
       tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: (value) => `${value}%` },
       xAxis: {
         type: 'category',
         data: learning.topicAccuracy.map((item) => item.topic),
-        axisLabel: { color: '#64748b', interval: 0, rotate: 26, overflow: 'truncate', width: 78 },
-        axisLine: { lineStyle: { color: '#cbd5e1' } }
+        axisLabel: { color: '#6b6b66', interval: 0, rotate: 26, overflow: 'truncate', width: 78 },
+        axisLine: { lineStyle: { color: '#deded8' } }
       },
-      yAxis: { type: 'value', min: 0, max: 100, axisLabel: { formatter: '{value}%', color: '#64748b' }, splitLine: { lineStyle: { color: '#eef2f7' } } },
+      yAxis: { type: 'value', min: 0, max: 100, axisLabel: { formatter: '{value}%', color: '#6b6b66' }, splitLine: { lineStyle: { color: '#efefeb' } } },
       series: [{ name: '정답률', type: 'bar', data: learning.topicAccuracy.map((item) => item.accuracyPercent), barMaxWidth: 36, itemStyle: { borderRadius: [5, 5, 0, 0] } }]
     })
   }
 
   if (hasAiActivity.value) {
     aiChart = chartFor(aiChart, aiChartElement.value, {
-      color: ['#6d5bd0', '#0ea5e9'],
+      color: ['#171717', '#c64e32'],
       grid: { top: 42, right: 42, bottom: 28, left: 50 },
-      legend: { top: 4, textStyle: { color: '#475569' } },
+      legend: { top: 4, textStyle: { color: '#303030' } },
       tooltip: { trigger: 'axis' },
-      xAxis: { type: 'category', data: ai.dailyActivity.map((item) => dailyLabel(item.date)), axisLabel: { color: '#64748b' }, axisLine: { lineStyle: { color: '#cbd5e1' } } },
+      xAxis: { type: 'category', data: ai.dailyActivity.map((item) => dailyLabel(item.date)), axisLabel: { color: '#6b6b66' }, axisLine: { lineStyle: { color: '#deded8' } } },
       yAxis: [
-        { type: 'value', name: '토큰', axisLabel: { color: '#64748b', formatter: (value) => formatNumber(value) }, splitLine: { lineStyle: { color: '#eef2f7' } } },
-        { type: 'value', name: '호출', minInterval: 1, axisLabel: { color: '#64748b' }, splitLine: { show: false } }
+        { type: 'value', name: '토큰', axisLabel: { color: '#6b6b66', formatter: (value) => formatNumber(value) }, splitLine: { lineStyle: { color: '#efefeb' } } },
+        { type: 'value', name: '호출', minInterval: 1, axisLabel: { color: '#6b6b66' }, splitLine: { show: false } }
       ],
       series: [
         { name: '총 토큰', type: 'bar', data: ai.dailyActivity.map((item) => item.totalTokens), barMaxWidth: 22, itemStyle: { borderRadius: [5, 5, 0, 0] } },
@@ -356,79 +356,77 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.dashboard-page { max-width: 1200px; margin: 0 auto; padding: 36px 40px 52px; background: #fff; border-radius: 0 0 14px 14px; box-shadow: 0 4px 12px rgb(15 23 42 / 8%); }
+.dashboard-page { max-width: 1200px; margin: 0 auto; padding: 36px 40px 52px; background: var(--surface); }
 .dashboard-heading, .section-heading, .chart-title { display: flex; gap: 16px; align-items: flex-start; justify-content: space-between; }
-.eyebrow, .section-kicker { margin: 0 0 6px; color: #5666d9; font-size: .75rem; font-weight: 800; letter-spacing: .08em; }
+.eyebrow, .section-kicker { margin: 0 0 6px; color: var(--accent); font-size: .75rem; font-weight: 800; letter-spacing: .08em; }
 h2, h3, h4, p { margin: 0; }
-h2 { color: #20294f; font-size: clamp(1.7rem, 4vw, 2.25rem); }
-h3 { color: #26325b; font-size: 1.32rem; }
-h4 { color: #334155; font-size: 1rem; }
-.dashboard-heading > div > p:not(.eyebrow), .section-heading p:not(.section-kicker) { margin-top: 6px; color: #64748b; }
+h2 { color: var(--ink); font-size: clamp(1.7rem, 4vw, 2.25rem); }
+h3 { color: var(--ink); font-size: 1.32rem; }
+h4 { color: var(--ink-soft); font-size: 1rem; }
+.dashboard-heading > div > p:not(.eyebrow), .section-heading p:not(.section-kicker) { margin-top: 6px; color: var(--muted); }
 button { border: 0; border-radius: 8px; font: inherit; font-weight: 700; cursor: pointer; }
-button:focus-visible { outline: 3px solid rgb(102 126 234 / 45%); outline-offset: 3px; }
+button:focus-visible { outline: 3px solid rgb(198 78 50 / 24%); outline-offset: 3px; }
 button:disabled { cursor: not-allowed; opacity: .55; }
-.refresh-button { flex: 0 0 auto; padding: 11px 16px; color: #fff; background: #667eea; }
+.refresh-button { flex: 0 0 auto; padding: 11px 16px; color: #fff; background: var(--ink); }
 .message { margin-top: 20px; padding: 14px 16px; border-radius: 8px; }
 .error-message { color: #b42318; background: #fef3f2; border: 1px solid #fecdca; }
-.page-loading { display: grid; min-height: 320px; place-items: center; color: #64748b; }
-.dashboard-section { margin-top: 34px; padding: 28px; border: 1px solid #e2e8f0; border-radius: 14px; }
-.learning-section { background: linear-gradient(135deg, #fbfcff, #f7faff); }
-.ai-section { background: linear-gradient(135deg, #fdfcff, #f8fbff); }
-.feedback-section { background: linear-gradient(135deg, #fffdf9, #fffaf1); }
+.page-loading { display: grid; min-height: 320px; place-items: center; color: var(--muted); }
+.dashboard-section { margin-top: 34px; padding: 28px; border: 1px solid var(--line); border-radius: 14px; }
+.learning-section, .ai-section, .feedback-section { background: var(--surface); }
 .review-notice, .source-label { flex: 0 0 auto; border-radius: 10px; font-weight: 700; }
-.review-notice { display: grid; min-width: 112px; padding: 10px 12px; color: #4c51bf; text-align: center; background: #eef0ff; }
+.review-notice { display: grid; min-width: 112px; padding: 10px 12px; color: var(--accent-strong); text-align: center; background: var(--accent-soft); }
 .review-notice.due { color: #a04910; background: #fff1df; }
 .review-notice strong { font-size: 1.1rem; }
 .review-notice span { font-size: .74rem; }
-.source-label { padding: 8px 10px; color: #526079; background: #eef2f7; font-size: .78rem; }
+.source-label { padding: 8px 10px; color: var(--ink-soft); background: var(--surface-subtle); font-size: .78rem; }
 .metric-grid { display: grid; gap: 12px; margin-top: 22px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .ai-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .feedback-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 560px; }
-.metric-card { display: grid; gap: 3px; min-width: 0; padding: 18px; border: 1px solid #e2e8f0; border-radius: 10px; background: #fff; }
-.metric-card span { color: #64748b; font-size: .82rem; font-weight: 700; }
-.metric-card strong { overflow: hidden; color: #283456; font-size: clamp(1.15rem, 2.4vw, 1.6rem); text-overflow: ellipsis; white-space: nowrap; }
-.accent-card { border-color: #d8ddff; background: #f5f6ff; }
+.metric-card { display: grid; gap: 3px; min-width: 0; padding: 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+.metric-card span { color: var(--muted); font-size: .82rem; font-weight: 700; }
+.metric-card strong { overflow: hidden; color: var(--ink); font-size: clamp(1.15rem, 2.4vw, 1.6rem); text-overflow: ellipsis; white-space: nowrap; }
+.accent-card { border-color: var(--line-strong); background: var(--surface-subtle); }
 .chart-grid, .operations-layout { display: grid; gap: 18px; margin-top: 20px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .operations-layout { grid-template-columns: minmax(0, 1.2fr) minmax(360px, .8fr); }
-.chart-card, .model-card { min-width: 0; padding: 20px; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; }
+.chart-card, .model-card { min-width: 0; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .chart-title { align-items: baseline; }
-.chart-title span { flex: 0 0 auto; color: #7b8798; font-size: .75rem; }
+.chart-title span { flex: 0 0 auto; color: var(--muted); font-size: .75rem; }
 .chart { width: 100%; height: 270px; margin-top: 12px; }
-.chart-empty { display: grid; min-height: 270px; place-content: center; gap: 6px; color: #64748b; text-align: center; }
-.chart-empty strong { color: #334155; }
+.chart-empty { display: grid; min-height: 270px; place-content: center; gap: 6px; color: var(--muted); text-align: center; }
+.chart-empty strong { color: var(--ink-soft); }
 .chart-empty span { max-width: 280px; font-size: .88rem; }
 .chart-empty.compact { min-height: 220px; }
-.recommendation-card { margin-top: 20px; padding: 20px; border: 1px solid #dce3f4; border-radius: 12px; background: #fff; }
+.recommendation-card { margin-top: 20px; padding: 20px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .recommendation-list { display: grid; gap: 10px; margin-top: 14px; }
-.recommendation-item { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 15px; border: 1px solid #e4e8f4; border-radius: 10px; background: #fbfcff; }
+.recommendation-item { display: flex; align-items: center; justify-content: space-between; gap: 18px; padding: 15px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-subtle); }
 .recommendation-copy { min-width: 0; }
-.recommendation-copy h5 { display: inline; margin: 0 0 0 8px; color: #2e3e67; font-size: 1rem; }
-.recommendation-copy p { margin: 7px 0 4px; color: #526079; font-size: .88rem; }
-.recommendation-metric { color: #7a879d; font-size: .78rem; font-weight: 700; }
+.recommendation-copy h5 { display: inline; margin: 0 0 0 8px; color: var(--ink); font-size: 1rem; }
+.recommendation-copy p { margin: 7px 0 4px; color: var(--ink-soft); font-size: .88rem; }
+.recommendation-metric { color: var(--muted); font-size: .78rem; font-weight: 700; }
 .recommendation-badge { display: inline-block; padding: 3px 7px; border-radius: 999px; font-size: .72rem; font-weight: 800; }
 .recommendation-badge.weakness { color: #b54708; background: #fff1df; }
-.recommendation-badge.reinforce { color: #4c51bf; background: #eef0ff; }
+.recommendation-badge.reinforce { color: var(--accent-strong); background: var(--accent-soft); }
 .recommendation-badge.review { color: #1f6b51; background: #e7f7ef; }
 .recommendation-actions { display: grid; flex: 0 0 auto; gap: 7px; }
-.recommendation-action { padding: 10px 12px; color: #fff; background: #667eea; font-size: .82rem; white-space: nowrap; }
-.recommendation-action.secondary { color: #4c51bf; border: 1px solid #cbd2ff; background: #fff; }
-.recommendation-empty { display: grid; min-height: 118px; place-content: center; gap: 5px; margin-top: 10px; color: #64748b; text-align: center; }
-.recommendation-empty strong { color: #334155; }
+.recommendation-action { padding: 10px 12px; color: #fff; background: var(--ink); font-size: .82rem; white-space: nowrap; }
+.recommendation-action.secondary { color: var(--ink); border: 1px solid var(--line-strong); background: var(--surface); }
+.recommendation-empty { display: grid; min-height: 118px; place-content: center; gap: 5px; margin-top: 10px; color: var(--muted); text-align: center; }
+.recommendation-empty strong { color: var(--ink-soft); }
 .recommendation-empty span { font-size: .88rem; }
 .model-table-wrap { overflow-x: auto; margin-top: 14px; }
-table { width: 100%; border-collapse: collapse; color: #475569; font-size: .82rem; }
-th, td { padding: 11px 8px; border-bottom: 1px solid #edf1f5; text-align: right; white-space: nowrap; }
-th { color: #64748b; font-size: .72rem; }
+table { width: 100%; border-collapse: collapse; color: var(--ink-soft); font-size: .82rem; }
+th, td { padding: 11px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+th { color: var(--muted); font-size: .72rem; }
 th:first-child, td:first-child { max-width: 120px; overflow: hidden; text-align: left; text-overflow: ellipsis; }
 tbody tr:last-child td { border-bottom: 0; }
-.operation-note { margin-top: 18px; padding: 15px 17px; color: #526079; border: 1px solid #dce5f4; border-radius: 10px; background: #f5f8fd; font-size: .87rem; }
-.operation-note strong { color: #334155; }
+.operation-note { margin-top: 18px; padding: 15px 17px; color: var(--ink-soft); border: 1px solid var(--line); border-radius: 10px; background: var(--surface-subtle); font-size: .87rem; }
+.operation-note strong { color: var(--ink); }
 .operation-note p { margin-top: 4px; }
 .feedback-type-list { display: grid; gap: 8px; margin-top: 18px; max-width: 560px; }
-.feedback-type-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; color: #526079; border: 1px solid #f0dfbc; border-radius: 9px; background: #fff; }
+.feedback-type-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 14px; color: var(--ink-soft); border: 1px solid #f0dfbc; border-radius: 9px; background: var(--surface); }
 .feedback-type-row strong { color: #8a5712; }
-.feedback-empty { display: grid; min-height: 112px; place-content: center; gap: 5px; margin-top: 18px; color: #64748b; text-align: center; }
-.feedback-empty strong { color: #334155; }
+.feedback-empty { display: grid; min-height: 112px; place-content: center; gap: 5px; margin-top: 18px; color: var(--muted); text-align: center; }
+.feedback-empty strong { color: var(--ink-soft); }
 .feedback-empty span { font-size: .88rem; }
 @media (max-width: 850px) { .dashboard-page { padding: 28px 22px 42px; } .metric-grid, .ai-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .operations-layout { grid-template-columns: 1fr; } }
 @media (max-width: 680px) { .dashboard-page { padding: 25px 16px 34px; border-radius: 0; } .dashboard-heading, .section-heading, .recommendation-item { flex-direction: column; align-items: flex-start; } .refresh-button, .recommendation-actions, .recommendation-action { width: 100%; } .dashboard-section { margin-top: 23px; padding: 17px; } .review-notice { width: 100%; } .source-label { align-self: flex-start; } .metric-grid, .ai-metrics, .chart-grid { grid-template-columns: 1fr; } .chart-card, .model-card, .recommendation-card { padding: 16px; } .chart-title { align-items: flex-start; flex-direction: column; gap: 3px; } .chart { height: 244px; } }

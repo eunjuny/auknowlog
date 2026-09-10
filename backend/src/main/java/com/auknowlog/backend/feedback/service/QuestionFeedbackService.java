@@ -9,7 +9,9 @@ import com.auknowlog.backend.learning.entity.LearningQuestion;
 import com.auknowlog.backend.learning.repository.LearningQuestionRepository;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.domain.PageRequest;
 
+import java.util.List;
 import java.util.NoSuchElementException;
 
 @Service
@@ -52,5 +54,17 @@ public class QuestionFeedbackService {
         }
         String trimmed = comment.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    @Transactional(readOnly = true)
+    public List<String> getSimilarityAvoidanceQuestions(String topic, int limit) {
+        if (topic == null || topic.isBlank() || limit <= 0) {
+            return List.of();
+        }
+        return questionFeedbackRepository.findQuestionTextsByTypeAndTopic(
+                QuestionFeedbackType.TOO_SIMILAR,
+                topic.trim(),
+                PageRequest.of(0, Math.min(limit, 10))
+        );
     }
 }

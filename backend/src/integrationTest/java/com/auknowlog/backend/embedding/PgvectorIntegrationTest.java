@@ -57,7 +57,7 @@ class PgvectorIntegrationTest {
     }
 
     @Test
-    void appliesFlywayMigrationsAndCreatesVectorHnswAndFeedbackSchema() {
+    void appliesFlywayMigrationsAndCreatesVectorHnswFeedbackReviewAndSourceSchema() {
         Integer successfulMigration = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
                 FROM flyway_schema_history
@@ -110,7 +110,7 @@ class PgvectorIntegrationTest {
         Integer roadmapMigration = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
                 FROM flyway_schema_history
-                WHERE version IN ('5', '6', '7', '8') AND success = TRUE
+                WHERE version IN ('5', '6', '7', '8', '9', '10') AND success = TRUE
                 """, Integer.class);
         Integer roadmapTable = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
@@ -141,13 +141,87 @@ class PgvectorIntegrationTest {
                   AND table_name = 'learning_quiz'
                   AND column_name = 'roadmap_step_id'
                 """, Integer.class);
+        Integer roadmapMajorTopicColumn = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'learning_roadmap_step'
+                  AND column_name = 'major_topic_key'
+                """, Integer.class);
+        Integer roadmapSubtopicColumn = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'learning_roadmap_step'
+                  AND column_name = 'subtopic_key'
+                """, Integer.class);
+        Integer reviewAttemptTable = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM information_schema.tables
+                WHERE table_schema = 'public' AND table_name = 'review_attempt'
+                """, Integer.class);
+        Integer pendingReviewIndex = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM pg_indexes
+                WHERE schemaname = 'public' AND indexname = 'uk_review_schedule_pending_question'
+                """, Integer.class);
 
-        assertThat(roadmapMigration).isEqualTo(4);
+        assertThat(roadmapMigration).isEqualTo(6);
         assertThat(roadmapTable).isEqualTo(1);
         assertThat(roadmapLinkColumn).isEqualTo(1);
         assertThat(roadmapStepTable).isEqualTo(1);
         assertThat(roadmapStepDependencyTable).isEqualTo(1);
         assertThat(roadmapStepLinkColumn).isEqualTo(1);
+        assertThat(roadmapMajorTopicColumn).isEqualTo(1);
+        assertThat(roadmapSubtopicColumn).isEqualTo(1);
+        assertThat(reviewAttemptTable).isEqualTo(1);
+        assertThat(pendingReviewIndex).isEqualTo(1);
+
+        Integer sourceMigration = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM flyway_schema_history
+                WHERE version IN ('11', '12') AND success = TRUE
+                """, Integer.class);
+        Integer sourceMetadataColumns = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'source_document'
+                  AND column_name IN ('source_type', 'source_uri', 'original_name', 'mime_type',
+                                      'content_hash', 'processing_status', 'fetched_at')
+                """, Integer.class);
+        String sourceHashIndex = jdbcTemplate.queryForObject("""
+                SELECT indexdef
+                FROM pg_indexes
+                WHERE schemaname = 'public' AND indexname = 'uk_source_document_content_hash'
+                """, String.class);
+        Integer roadmapSourceColumn = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'learning_roadmap'
+                  AND column_name = 'source_document_id'
+                """, Integer.class);
+        Integer roadmapSourceForeignKey = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM pg_constraint constraint_info
+                JOIN pg_class table_info ON table_info.oid = constraint_info.conrelid
+                WHERE table_info.relname = 'learning_roadmap'
+                  AND constraint_info.contype = 'f'
+                  AND pg_get_constraintdef(constraint_info.oid) LIKE '%source_document_id%'
+                """, Integer.class);
+        String roadmapSourceIndex = jdbcTemplate.queryForObject("""
+                SELECT indexdef
+                FROM pg_indexes
+                WHERE schemaname = 'public' AND indexname = 'idx_learning_roadmap_source_document'
+                """, String.class);
+
+        assertThat(sourceMigration).isEqualTo(2);
+        assertThat(sourceMetadataColumns).isEqualTo(7);
+        assertThat(sourceHashIndex).containsIgnoringCase("UNIQUE").contains("content_hash");
+        assertThat(roadmapSourceColumn).isEqualTo(1);
+        assertThat(roadmapSourceForeignKey).isEqualTo(1);
+        assertThat(roadmapSourceIndex).contains("source_document_id");
     }
 
     @Test
@@ -164,9 +238,18 @@ class PgvectorIntegrationTest {
         SemanticDuplicateService.SemanticCheck similar = similarQuestionService.check("표현만 바꾼 JVM 문제");
         SemanticDuplicateService.SemanticCheck different = differentQuestionService.check("전혀 다른 SQL 문제");
 
+        SemanticDuplicateService feedbackSensitiveService = semanticService(
+                embedding("fixture-embedding", vector(0.85f, 0.5268f)));
+        SemanticDuplicateService.SemanticCheck standardThreshold = feedbackSensitiveService.check("사용자가 반복적이라고 느낀 유사 문제");
+        SemanticDuplicateService.SemanticCheck feedbackThreshold = feedbackSensitiveService.checkAgainstQuestionHashes(
+                standardThreshold, java.util.List.of("a".repeat(64)), 0.82);
+
         assertThat(similar.duplicate()).isTrue();
         assertThat(similar.similarity()).isGreaterThanOrEqualTo(0.90);
         assertThat(different.duplicate()).isFalse();
+        assertThat(standardThreshold.duplicate()).isFalse();
+        assertThat(feedbackThreshold.duplicate()).isTrue();
+        assertThat(feedbackThreshold.similarity()).isBetween(0.82, 0.90);
     }
 
     private long insertQuestionHistory() {

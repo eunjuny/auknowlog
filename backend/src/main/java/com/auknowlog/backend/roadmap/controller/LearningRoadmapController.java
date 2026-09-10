@@ -2,7 +2,10 @@ package com.auknowlog.backend.roadmap.controller;
 
 import com.auknowlog.backend.roadmap.dto.ActiveLearningRoadmapResponse;
 import com.auknowlog.backend.roadmap.dto.AiRoadmapCreateRequest;
+import com.auknowlog.backend.roadmap.dto.AiRoadmapConfirmRequest;
+import com.auknowlog.backend.roadmap.dto.AiRoadmapPreviewResponse;
 import com.auknowlog.backend.roadmap.dto.LearningRoadmapSummary;
+import com.auknowlog.backend.roadmap.dto.LearningRoadmapCollectionResponse;
 import com.auknowlog.backend.roadmap.dto.RoadmapCreateRequest;
 import com.auknowlog.backend.roadmap.dto.RoadmapDefinitionRequest;
 import com.auknowlog.backend.roadmap.service.LearningRoadmapService;
@@ -47,14 +50,24 @@ public class LearningRoadmapController {
         return learningRoadmapService.importStageBased(file.getOriginalFilename(), file.getBytes());
     }
 
-    @PostMapping("/ai")
-    public LearningRoadmapSummary createWithAi(@Valid @RequestBody AiRoadmapCreateRequest request) {
-        return aiRoadmapGenerationService.generate(request);
+    @PostMapping("/ai/previews")
+    public AiRoadmapPreviewResponse previewWithAi(@Valid @RequestBody AiRoadmapCreateRequest request) {
+        return aiRoadmapGenerationService.generatePreview(request);
+    }
+
+    @PostMapping("/ai/confirm")
+    public LearningRoadmapSummary confirmAiRoadmap(@Valid @RequestBody AiRoadmapConfirmRequest request) {
+        return aiRoadmapGenerationService.confirm(request);
     }
 
     @GetMapping("/active")
     public ActiveLearningRoadmapResponse active() {
         return learningRoadmapService.getActive();
+    }
+
+    @GetMapping
+    public LearningRoadmapCollectionResponse roadmaps() {
+        return learningRoadmapService.getRoadmaps();
     }
 
     @GetMapping("/{roadmapId}")

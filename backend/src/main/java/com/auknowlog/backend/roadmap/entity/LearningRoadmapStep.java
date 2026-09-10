@@ -45,6 +45,23 @@ public class LearningRoadmapStep {
     @Column(nullable = false)
     private int stepOrder;
 
+    @Column(nullable = false, length = 64)
+    private String majorTopicKey;
+
+    @Column(nullable = false)
+    private String majorTopicTitle;
+
+    @Column(columnDefinition = "TEXT")
+    private String majorTopicDescription;
+
+    @Column(nullable = false)
+    private String majorTopicTopic;
+
+    @Column(length = 48)
+    private String subtopicKey;
+
+    private String subtopicTitle;
+
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
             name = "learning_roadmap_step_dependency",
@@ -58,6 +75,14 @@ public class LearningRoadmapStep {
 
     public LearningRoadmapStep(LearningRoadmap roadmap, String stepKey, String title, String description,
                                String topic, int questionTarget, int stepOrder) {
+        this(roadmap, stepKey, title, description, topic, questionTarget, stepOrder,
+                stepKey, title, description, topic, null, null);
+    }
+
+    public LearningRoadmapStep(LearningRoadmap roadmap, String stepKey, String title, String description,
+                               String topic, int questionTarget, int stepOrder,
+                               String majorTopicKey, String majorTopicTitle, String majorTopicDescription,
+                               String majorTopicTopic, String subtopicKey, String subtopicTitle) {
         this.roadmap = roadmap;
         this.stepKey = stepKey;
         this.title = title;
@@ -65,6 +90,12 @@ public class LearningRoadmapStep {
         this.topic = topic;
         this.questionTarget = questionTarget;
         this.stepOrder = stepOrder;
+        this.majorTopicKey = majorTopicKey;
+        this.majorTopicTitle = majorTopicTitle;
+        this.majorTopicDescription = majorTopicDescription;
+        this.majorTopicTopic = majorTopicTopic;
+        this.subtopicKey = subtopicKey;
+        this.subtopicTitle = subtopicTitle;
     }
 
     public void addPrerequisite(LearningRoadmapStep prerequisite) {
@@ -79,5 +110,11 @@ public class LearningRoadmapStep {
     public String getTopic() { return topic; }
     public int getQuestionTarget() { return questionTarget; }
     public int getStepOrder() { return stepOrder; }
+    public String getMajorTopicKey() { return majorTopicKey; }
+    public String getMajorTopicTitle() { return majorTopicTitle; }
+    public String getMajorTopicDescription() { return majorTopicDescription; }
+    public String getMajorTopicTopic() { return majorTopicTopic; }
+    public String getSubtopicKey() { return subtopicKey; }
+    public String getSubtopicTitle() { return subtopicTitle; }
     public Set<LearningRoadmapStep> getPrerequisites() { return prerequisites; }
 }

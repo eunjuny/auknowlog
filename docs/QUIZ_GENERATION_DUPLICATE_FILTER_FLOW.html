@@ -669,7 +669,7 @@
         <p class="eyebrow">Auknowlog · Request to Screen</p>
         <h1>퀴즈 생성과<br>중복 필터링 흐름</h1>
         <p class="hero-copy">
-          사용자가 “쿠버네티스 5문제”를 요청한 순간부터 최근 문제 조회, GPT 생성,
+          사용자가 “쿠버네티스 5문제”를 요청한 순간부터 최근 문제와 사용자 유사 피드백 조회, GPT 생성,
           SHA-256·pgvector 중복 검사, 부족분 보충, DB 저장과 Vue 화면 표시까지 실제 코드의 실행 순서를 설명합니다.
         </p>
       </div>
@@ -679,10 +679,12 @@
           <h2>먼저 피하고,<br>다시 검사하고,<br>부족하면 보충한다.</h2>
         </div>
         <div class="metric-grid">
-          <div class="metric"><b>30</b><span>최근 문제 최대 개수</span></div>
+          <div class="metric"><b>30</b><span>프롬프트 회피 목록 상한</span></div>
+          <div class="metric"><b>10</b><span>유사 피드백 우선 문항</span></div>
           <div class="metric"><b>50자</b><span>프롬프트 미리보기</span></div>
           <div class="metric"><b>3회</b><span>생성 라운드 상한</span></div>
           <div class="metric"><b>0.90</b><span>의미 중복 임계값</span></div>
+          <div class="metric"><b>0.82</b><span>피드백 문항 임계값</span></div>
         </div>
       </aside>
     </div>
@@ -693,6 +695,7 @@
       <a href="#overview">전체 흐름</a>
       <a href="#request">요청</a>
       <a href="#generation">GPT 생성</a>
+      <a href="#feedback-loop">유사 피드백</a>
       <a href="#filter">중복 필터</a>
       <a href="#example">5개 요청 예시</a>
       <a href="#storage">저장·표시</a>
@@ -712,7 +715,7 @@
 
       <div class="flow-strip" aria-label="퀴즈 생성 전체 처리 단계">
         <article class="flow-node"><span class="num">1</span><h3>화면 요청</h3><small>주제와 문제 수 입력</small></article>
-        <article class="flow-node"><span class="num">2</span><h3>최근 이력</h3><small>같은 주제 최근 30개</small></article>
+        <article class="flow-node"><span class="num">2</span><h3>이력·피드백</h3><small>최근 문제 + 유사 피드백</small></article>
         <article class="flow-node"><span class="num">3</span><h3>GPT 생성</h3><small>구조화된 문제 후보</small></article>
         <article class="flow-node"><span class="num">4</span><h3>정확 중복</h3><small>정규화 + SHA-256</small></article>
         <article class="flow-node"><span class="num">5</span><h3>의미 중복</h3><small>임베딩 + pgvector</small></article>
@@ -721,9 +724,9 @@
       </div>
 
       <div class="callout">
-        <strong>세 겹의 방어선</strong><br>
-        생성 전에는 최근 문제를 GPT에게 알려 중복 가능성을 낮추고, 생성 후에는 SHA-256으로 동일 표현을,
-        임베딩이 활성화된 경우 pgvector로 의미가 비슷한 표현을 다시 검사합니다.
+        <strong>사용자 피드백까지 포함한 네 겹의 방어선</strong><br>
+        생성 전에는 최근 문제와 반복적이라고 표시된 문제를 GPT에게 알려 중복 가능성을 낮춥니다. 생성 후에는 SHA-256으로 동일 표현을,
+        pgvector로 일반 의미 중복을 검사하고, 사용자 표시 문항에는 더 엄격한 유사도 기준을 한 번 더 적용합니다.
       </div>
     </section>
 
@@ -779,21 +782,21 @@
       <div class="section-head">
         <div>
           <p class="section-kicker">02 · Generate candidates</p>
-          <h2>최근 문제를 먼저 보여주고 후보를 생성한다</h2>
+          <h2>최근 문제와 유사 피드백을 먼저 보여주고 후보를 생성한다</h2>
         </div>
-        <p class="section-summary">첫 번째 생성 라운드에서만 같은 주제의 최근 이력을 프롬프트에 포함합니다.</p>
+        <p class="section-summary">첫 번째 생성 라운드에서만 같은 주제의 사용자 피드백 문항을 우선하고 최근 이력을 합쳐 최대 30개까지 프롬프트에 포함합니다.</p>
       </div>
 
       <div class="three-col">
         <article class="card">
           <span class="step-num">1</span>
-          <h3>최근 문제 조회</h3>
-          <p><code>findByTopic("쿠버네티스")</code> 결과를 최신순으로 정렬하고 최대 30개를 선택합니다.</p>
+          <h3>회피 문항 조회</h3>
+          <p><code>TOO_SIMILAR</code> 피드백 최신 10개를 먼저 조회한 뒤 같은 주제의 최근 문제와 합칩니다.</p>
         </article>
         <article class="card">
           <span class="step-num">2</span>
           <h3>토큰 절약</h3>
-          <p>문제 전체가 아니라 각 문제의 앞 50자만 GPT 프롬프트에 넣습니다.</p>
+          <p>피드백 문항을 우선 배치하고 전체 30개, 각 50자로 제한해 입력 토큰 증가를 통제합니다.</p>
         </article>
         <article class="card">
           <span class="step-num">3</span>
@@ -813,7 +816,7 @@ Create questions materially different from these existing questions:
 &lt;existing_questions&gt;
 - 쿠버네티스에서 Pod의 역할은 무엇인가요?...
 - Deployment와 StatefulSet의 차이는 무엇인가요?...
-... 최대 30개, 각 50자
+... 유사 피드백 우선, 합계 최대 30개, 각 50자
 &lt;/existing_questions&gt;</div>
 
       <div class="callout">
@@ -822,10 +825,42 @@ Create questions materially different from these existing questions:
       </div>
     </section>
 
+    <section id="feedback-loop" class="panel">
+      <div class="section-head">
+        <div>
+          <p class="section-kicker">03 · User feedback loop</p>
+          <h2>“비슷한 문제가 자주 나와요”가 다음 생성에 반영되는 과정</h2>
+        </div>
+        <p class="section-summary">피드백은 단순 통계가 아니라 다음 AI 생성의 회피 데이터와 서버 필터 기준으로 사용됩니다.</p>
+      </div>
+
+      <div class="final-flow">
+        <article class="final-step"><h3>1. 사용자가 선택</h3><p>채점 뒤 문항 피드백에서 <code>비슷한 문제가 자주 나와요</code>를 선택합니다.</p></article>
+        <article class="final-step"><h3>2. 피드백 저장</h3><p><code>question_feedback.feedback_type = TOO_SIMILAR</code>로 문항과 연결해 저장합니다.</p></article>
+        <article class="final-step"><h3>3. 같은 주제 재요청</h3><p>다음 생성에서 같은 주제의 최신 피드백 문항을 최대 10개 조회합니다.</p></article>
+        <article class="final-step"><h3>4. 생성·필터 반영</h3><p>프롬프트 회피 목록에 우선 포함하고 해당 문항과 <code>0.82</code> 이상 유사한 후보를 제외합니다.</p></article>
+      </div>
+
+      <div class="two-col" style="margin-top: 18px;">
+        <article class="card">
+          <h3>왜 일반 기준 0.90보다 낮은가?</h3>
+          <p>일반 문제는 매우 가까운 의미만 중복으로 보지만, 사용자가 직접 반복적이라고 표시한 영역은 더 넓게 회피해야 체감 다양성이 높아집니다. 그래서 피드백 문항에만 <code>0.82</code>를 적용합니다.</p>
+        </article>
+        <article class="card">
+          <h3>임베딩 비용이 더 드나?</h3>
+          <p>아닙니다. 일반 의미 검사에서 이미 생성한 후보 벡터를 재사용해 PostgreSQL을 한 번 더 조회합니다. 추가 Embeddings API 호출은 없습니다.</p>
+        </article>
+      </div>
+
+      <div class="callout warn">
+        임베딩이 비활성화되거나 실패하면 <code>0.82</code> 사후 검사는 생략됩니다. 그래도 피드백 문항은 첫 생성 프롬프트의 회피 목록에 계속 포함되며, SHA-256 정확 중복 방지도 유지됩니다.
+      </div>
+    </section>
+
     <section id="filter" class="panel">
       <div class="section-head">
         <div>
-          <p class="section-kicker">03 · Filter every question</p>
+          <p class="section-kicker">04 · Filter every question</p>
           <h2>후보 문제를 하나씩 통과시킨다</h2>
         </div>
         <p class="section-summary">한 개라도 조건을 통과하지 못하면 해당 후보만 버리고 다음 후보를 검사합니다.</p>
@@ -853,6 +888,11 @@ Create questions materially different from these existing questions:
       </div>
       <div class="gate">
         <div class="gate-icon">E</div>
+        <div><h3>사용자 피드백 유사도 검사</h3><p>일반 검사를 통과한 후보를 <code>TOO_SIMILAR</code> 문항 벡터와 비교하고 코사인 유사도 <code>0.82</code> 이상인지 검사합니다.</p></div>
+        <div class="decision block">0.82 이상 → 후보 제외</div>
+      </div>
+      <div class="gate">
+        <div class="gate-icon">F</div>
         <div><h3>문제·벡터 저장</h3><p><code>question_history</code>에 원문과 해시를 저장하고, 검사에 사용한 벡터를 재호출 없이 <code>question_embedding</code>에 저장합니다.</p></div>
         <div class="decision pass">통과 → 수집 목록 추가</div>
       </div>
@@ -866,7 +906,7 @@ Create questions materially different from these existing questions:
     <section id="example" class="panel">
       <div class="section-head">
         <div>
-          <p class="section-kicker">04 · Concrete simulation</p>
+          <p class="section-kicker">05 · Concrete simulation</p>
           <h2>5개 중 2개가 중복이면 왜 4개를 더 요청할까?</h2>
         </div>
         <p class="section-summary">보충 요청에서도 다시 중복이 나올 수 있으므로 필요한 개수의 두 배를 후보로 요청합니다.</p>
@@ -922,14 +962,14 @@ remaining = 5 - 3 = 2</div>
 
       <div class="callout warn">
         최근 30개 문제 미리보기는 1차 GPT 요청에만 포함합니다. 2·3차 보충 요청에서는 다시 보내지 않지만,
-        SHA-256과 pgvector 사후 필터는 모든 라운드의 모든 처리 후보에 계속 적용됩니다.
+        SHA-256과 pgvector 일반·피드백 사후 필터는 모든 라운드의 모든 처리 후보에 계속 적용됩니다.
       </div>
     </section>
 
     <section id="storage" class="panel">
       <div class="section-head">
         <div>
-          <p class="section-kicker">05 · Persist and render</p>
+          <p class="section-kicker">06 · Persist and render</p>
           <h2>통과한 문제를 저장하고 화면에 표시한다</h2>
         </div>
         <p class="section-summary">중복 검색용 이력과 실제 퀴즈 풀이용 데이터는 목적이 달라 별도 테이블에 저장됩니다.</p>
@@ -950,8 +990,6 @@ remaining = 5 - 3 = 2</div>
     {
       "questionText": "쿠버네티스에서 Readiness Probe의 역할은?",
       "options": ["...", "...", "...", "..."],
-      "correctAnswer": "...",
-      "explanation": "...",
       "sourceReferences": []
     }
     // 최종 통과한 문제들
@@ -962,15 +1000,15 @@ Vue: quizResult.value = response.data
 화면: quizResult.questions를 순서대로 렌더링</div>
 
       <div class="callout">
-        화면 표시 시에는 정답과 해설 데이터도 응답에 포함되지만, 사용자가 답안을 제출하기 전까지 Vue가 정답 영역을 숨깁니다.
-        풀이 이력 저장과 오답 복습 예약은 이후 사용자가 별도로 “풀이 기록 저장”을 눌렀을 때 실행됩니다.
+        생성 응답에는 정답과 해설을 포함하지 않습니다. 사용자가 답안을 제출하면 서버가 채점하고,
+        같은 트랜잭션에서 풀이 이력 저장과 오답 복습 예약을 완료한 뒤에만 문항별 정답과 해설을 반환합니다.
       </div>
     </section>
 
     <section id="exceptions" class="panel">
       <div class="section-head">
         <div>
-          <p class="section-kicker">06 · Boundaries</p>
+          <p class="section-kicker">07 · Boundaries</p>
           <h2>재시도, 비용, 보장 범위를 구분한다</h2>
         </div>
         <p class="section-summary">“생성 라운드 재시도”와 “같은 HTTP 요청의 일시 장애 재시도”는 서로 다른 장치입니다.</p>
@@ -989,7 +1027,7 @@ Vue: quizResult.value = response.data
       </div>
 
       <div class="truth-grid" style="margin-top: 20px;">
-        <div class="truth yes"><strong>보장하는 것</strong><br>동일 해시 저장 차단, 통과 후보만 반환, 응답 구조 검증, 임베딩 장애 시 핵심 생성 경로 유지</div>
+        <div class="truth yes"><strong>보장하는 것</strong><br>동일 해시 저장 차단, 피드백 문항 우선 회피, 통과 후보만 반환, 생성 응답의 정답 비공개, 임베딩 장애 시 핵심 생성 경로 유지</div>
         <div class="truth no"><strong>보장하지 않는 것</strong><br>항상 정확히 5개 반환, 모든 의미 중복 탐지, 0.90 임계값의 절대적 정확성, 외부 API 무장애</div>
       </div>
 

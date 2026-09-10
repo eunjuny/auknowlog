@@ -21,6 +21,10 @@ public record LearningRoadmapSummary(
         String sourceType,
         String description,
         String currentStepKey,
-        List<RoadmapStepProgress> steps
+        List<RoadmapStepProgress> steps,
+        List<RoadmapMajorTopicProgress> majorTopics,
+        Long sourceDocumentId,
+        String sourceDocumentTitle,
+        String sourceDocumentUri
 ) {
 }

@@ -11,12 +11,10 @@ import com.auknowlog.backend.learning.entity.LearningAttempt;
 import com.auknowlog.backend.learning.entity.LearningAttemptAnswer;
 import com.auknowlog.backend.learning.entity.LearningQuestion;
 import com.auknowlog.backend.learning.entity.LearningQuiz;
-import com.auknowlog.backend.learning.entity.ReviewSchedule;
 import com.auknowlog.backend.learning.repository.LearningAttemptAnswerRepository;
 import com.auknowlog.backend.learning.repository.LearningAttemptRepository;
 import com.auknowlog.backend.learning.repository.LearningQuestionRepository;
 import com.auknowlog.backend.learning.repository.LearningQuizRepository;
-import com.auknowlog.backend.learning.repository.ReviewScheduleRepository;
 import com.auknowlog.backend.quiz.dto.Question;
 import com.auknowlog.backend.quiz.dto.QuizResponse;
 import com.auknowlog.backend.source.entity.SourceDocument;
@@ -25,6 +23,7 @@ import com.auknowlog.backend.roadmap.entity.LearningRoadmap;
 import com.auknowlog.backend.roadmap.entity.LearningRoadmapStep;
 import com.auknowlog.backend.roadmap.repository.LearningRoadmapRepository;
 import com.auknowlog.backend.roadmap.repository.LearningRoadmapStepRepository;
+import com.auknowlog.backend.roadmap.service.LearningRoadmapService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.domain.Page;
@@ -33,6 +32,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -45,29 +45,32 @@ public class LearningService {
     private final LearningQuestionRepository learningQuestionRepository;
     private final LearningAttemptRepository learningAttemptRepository;
     private final LearningAttemptAnswerRepository learningAttemptAnswerRepository;
-    private final ReviewScheduleRepository reviewScheduleRepository;
+    private final ReviewService reviewService;
     private final SourceDocumentRepository sourceDocumentRepository;
     private final LearningRoadmapRepository learningRoadmapRepository;
     private final LearningRoadmapStepRepository learningRoadmapStepRepository;
+    private final LearningRoadmapService learningRoadmapService;
     private final ObjectMapper objectMapper;
 
     public LearningService(LearningQuizRepository learningQuizRepository,
                            LearningQuestionRepository learningQuestionRepository,
                            LearningAttemptRepository learningAttemptRepository,
                            LearningAttemptAnswerRepository learningAttemptAnswerRepository,
-                           ReviewScheduleRepository reviewScheduleRepository,
+                           ReviewService reviewService,
                            SourceDocumentRepository sourceDocumentRepository,
                            LearningRoadmapRepository learningRoadmapRepository,
                            LearningRoadmapStepRepository learningRoadmapStepRepository,
+                           LearningRoadmapService learningRoadmapService,
                            ObjectMapper objectMapper) {
         this.learningQuizRepository = learningQuizRepository;
         this.learningQuestionRepository = learningQuestionRepository;
         this.learningAttemptRepository = learningAttemptRepository;
         this.learningAttemptAnswerRepository = learningAttemptAnswerRepository;
-        this.reviewScheduleRepository = reviewScheduleRepository;
+        this.reviewService = reviewService;
         this.sourceDocumentRepository = sourceDocumentRepository;
         this.learningRoadmapRepository = learningRoadmapRepository;
         this.learningRoadmapStepRepository = learningRoadmapStepRepository;
+        this.learningRoadmapService = learningRoadmapService;
         this.objectMapper = objectMapper;
     }
 
@@ -143,14 +146,28 @@ public class LearningService {
         // 현재 생성 퀴즈는 한 번만 제출하는 UX이므로, 이미 저장됐다면 기존 결과를 돌려준다.
         LearningAttempt existingAttempt = learningAttemptRepository.findByQuizId(quiz.getId()).orElse(null);
         if (existingAttempt != null) {
+            completeRoadmapIfNecessary(quiz);
+            List<LearningAttemptQuestionResult> existingResults = learningAttemptAnswerRepository
+                    .findByAttemptIdOrderByQuestionQuestionOrderAsc(existingAttempt.getId())
+                    .stream()
+                    .map(this::toQuestionResult)
+                    .toList();
             return new AttemptResult(
                     existingAttempt.getId(),
                     existingAttempt.getTotalQuestions(),
                     existingAttempt.getCorrectAnswers(),
                     existingAttempt.getTotalQuestions() - existingAttempt.getCorrectAnswers(),
                     existingAttempt.getTotalQuestions() - existingAttempt.getCorrectAnswers(),
-                    null
+                    null,
+                    existingResults
             );
+        }
+
+        for (LearningQuestion question : questions) {
+            String selectedAnswer = answersByOrder.get(question.getQuestionOrder()).selectedAnswer().trim();
+            if (!readStringList(question.getOptions()).contains(selectedAnswer)) {
+                throw new IllegalArgumentException("문항의 선택지 중 하나를 제출해주세요.");
+            }
         }
 
         int correctAnswers = (int) questions.stream()
@@ -160,17 +177,21 @@ public class LearningService {
 
         int reviewScheduledCount = 0;
         LocalDateTime nextReviewAt = null;
+        List<LearningAttemptAnswer> storedAnswers = new ArrayList<>();
         for (LearningQuestion question : questions) {
             String selectedAnswer = answersByOrder.get(question.getQuestionOrder()).selectedAnswer().trim();
             boolean correct = isCorrect(question, selectedAnswer);
-            learningAttemptAnswerRepository.save(new LearningAttemptAnswer(attempt, question, selectedAnswer, correct));
+            storedAnswers.add(learningAttemptAnswerRepository.save(
+                    new LearningAttemptAnswer(attempt, question, selectedAnswer, correct)));
             if (!correct) {
                 LocalDateTime reviewAt = LocalDateTime.now().plusDays(1);
-                reviewScheduleRepository.save(new ReviewSchedule(question, reviewAt));
+                reviewService.scheduleWrongAnswer(question, reviewAt);
                 reviewScheduledCount++;
                 nextReviewAt = reviewAt;
             }
         }
+
+        completeRoadmapIfNecessary(quiz);
 
         return new AttemptResult(
                 attempt.getId(),
@@ -178,8 +199,15 @@ public class LearningService {
                 correctAnswers,
                 questions.size() - correctAnswers,
                 reviewScheduledCount,
-                nextReviewAt
+                nextReviewAt,
+                storedAnswers.stream().map(this::toQuestionResult).toList()
         );
+    }
+
+    private void completeRoadmapIfNecessary(LearningQuiz quiz) {
+        if (quiz.getRoadmap() != null) {
+            learningRoadmapService.completeIfSatisfied(quiz.getRoadmap().getId());
+        }
     }
 
     @Transactional(readOnly = true)

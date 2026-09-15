@@ -2,6 +2,7 @@ package com.auknowlog.backend.quiz.service;
 
 import com.auknowlog.backend.ai.service.AiGenerationLedgerService;
 import com.auknowlog.backend.quiz.dto.Question;
+import com.auknowlog.backend.quiz.dto.QuizObjectiveAllocation;
 import com.auknowlog.backend.quiz.dto.QuizResponse;
 import com.auknowlog.backend.common.observability.AiGenerationMetrics;
 import com.auknowlog.backend.observability.LangfuseTracingService;
@@ -159,6 +160,60 @@ class OpenAiQuizServiceTest {
         );
 
         assertThat(quiz.questions().getFirst().sourceReferences()).containsExactly("source-7-chunk-1");
+        server.verify();
+    }
+
+    @Test
+    void enforcesTheExactLearningObjectiveAllocation() throws Exception {
+        String quizJson = objectMapper.writeValueAsString(new QuizResponse("Pod 핵심 퀴즈", List.of(
+                new Question("Pod가 Pending 상태인 이유는?", List.of("스케줄링 대기", "이미지 편집", "DNS 생성", "로그 삭제"),
+                        "스케줄링 대기", "Pending은 아직 노드에 배치되지 않은 상태일 수 있습니다.", List.of(), "pod-lifecycle"),
+                new Question("readiness probe 실패 시 동작은?", List.of("Service 엔드포인트 제외", "Pod 즉시 삭제", "노드 종료", "이미지 삭제"),
+                        "Service 엔드포인트 제외", "준비되지 않은 Pod는 Service 트래픽 대상에서 제외됩니다.", List.of(), "pod-probe")
+        )));
+        String responseBody = objectMapper.writeValueAsString(Map.of(
+                "status", "completed",
+                "output", List.of(Map.of("type", "message", "content",
+                        List.of(Map.of("type", "output_text", "text", quizJson))))
+        ));
+
+        server.expect(requestTo("https://api.openai.com/v1/responses"))
+                .andExpect(jsonPath("$.input[0].content[0].text", containsString("key=pod-lifecycle; importance=CORE; questionCount=1")))
+                .andExpect(jsonPath("$.input[0].content[0].text", containsString("key=pod-probe; importance=CORE; questionCount=1")))
+                .andExpect(jsonPath("$.text.format.schema.properties.questions.items.properties.objectiveKey.type[1]").value("null"))
+                .andRespond(withSuccess(responseBody, MediaType.APPLICATION_JSON));
+
+        QuizResponse quiz = service.generateQuiz("Kubernetes Pod", 2, List.of(), List.of(), List.of(
+                new QuizObjectiveAllocation(1L, "pod-lifecycle", "Pod 생명주기", "상태 전이를 판단합니다.", "CORE", 1),
+                new QuizObjectiveAllocation(2L, "pod-probe", "상태 프로브", "프로브별 동작을 구분합니다.", "CORE", 1)
+        ));
+
+        assertThat(quiz.questions()).extracting(Question::objectiveKey)
+                .containsExactly("pod-lifecycle", "pod-probe");
+        server.verify();
+    }
+
+    @Test
+    void rejectsAResponseThatOmitsAnAllocatedLearningObjective() throws Exception {
+        String quizJson = objectMapper.writeValueAsString(new QuizResponse("Pod 핵심 퀴즈", List.of(
+                new Question("Pod 상태는?", List.of("Pending", "Ready", "Done", "Gone"),
+                        "Pending", "Pod 상태입니다.", List.of(), "pod-lifecycle"),
+                new Question("Pod 재시작은?", List.of("정책 사용", "DNS 사용", "볼륨 삭제", "노드 삭제"),
+                        "정책 사용", "재시작 정책을 사용합니다.", List.of(), "pod-lifecycle")
+        )));
+        String responseBody = objectMapper.writeValueAsString(Map.of(
+                "status", "completed",
+                "output", List.of(Map.of("type", "message", "content",
+                        List.of(Map.of("type", "output_text", "text", quizJson))))
+        ));
+        server.expect(requestTo("https://api.openai.com/v1/responses"))
+                .andRespond(withSuccess(responseBody, MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> service.generateQuiz("Kubernetes Pod", 2, List.of(), List.of(), List.of(
+                new QuizObjectiveAllocation(1L, "pod-lifecycle", "Pod 생명주기", null, "CORE", 1),
+                new QuizObjectiveAllocation(2L, "pod-probe", "상태 프로브", null, "CORE", 1)
+        ))).isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("learning-objective allocation");
         server.verify();
     }
 }

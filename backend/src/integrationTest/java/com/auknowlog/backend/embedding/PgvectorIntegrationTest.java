@@ -5,12 +5,15 @@ import com.auknowlog.backend.embedding.service.EmbeddingResult;
 import com.auknowlog.backend.embedding.service.SemanticDuplicateService;
 import com.auknowlog.backend.question.repository.QuestionHistoryRepository;
 import com.auknowlog.backend.question.service.QuestionHistoryService;
+import com.auknowlog.backend.quality.repository.QualityEvaluationRepository;
+import com.auknowlog.backend.quality.repository.DuplicateEvaluationDatasetRepository;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.dao.DataAccessException;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.postgresql.PostgreSQLContainer;
@@ -20,6 +23,7 @@ import java.util.Arrays;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
 @Testcontainers
@@ -36,6 +40,8 @@ class PgvectorIntegrationTest {
 
     private static JdbcTemplate jdbcTemplate;
     private static QuestionVectorRepository questionVectorRepository;
+    private static QualityEvaluationRepository qualityEvaluationRepository;
+    private static DuplicateEvaluationDatasetRepository duplicateEvaluationDatasetRepository;
 
     @BeforeAll
     static void migrateDatabase() {
@@ -49,15 +55,17 @@ class PgvectorIntegrationTest {
                 POSTGRES.getJdbcUrl(), POSTGRES.getUsername(), POSTGRES.getPassword());
         jdbcTemplate = new JdbcTemplate(dataSource);
         questionVectorRepository = new QuestionVectorRepository(jdbcTemplate);
+        qualityEvaluationRepository = new QualityEvaluationRepository(jdbcTemplate);
+        duplicateEvaluationDatasetRepository = new DuplicateEvaluationDatasetRepository(jdbcTemplate);
     }
 
     @BeforeEach
     void resetData() {
-        jdbcTemplate.execute("TRUNCATE TABLE question_history RESTART IDENTITY CASCADE");
+        jdbcTemplate.execute("TRUNCATE TABLE duplicate_evaluation_dataset, quality_evaluation_run, question_history RESTART IDENTITY CASCADE");
     }
 
     @Test
-    void appliesFlywayMigrationsAndCreatesVectorHnswFeedbackReviewAndSourceSchema() {
+    void appliesFlywayMigrationsAndCreatesVectorHnswFeedbackReviewSourceAndObjectiveSchema() {
         Integer successfulMigration = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
                 FROM flyway_schema_history
@@ -222,6 +230,89 @@ class PgvectorIntegrationTest {
         assertThat(roadmapSourceColumn).isEqualTo(1);
         assertThat(roadmapSourceForeignKey).isEqualTo(1);
         assertThat(roadmapSourceIndex).contains("source_document_id");
+
+        Integer objectiveMigration = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM flyway_schema_history
+                WHERE version = '13' AND success = TRUE
+                """, Integer.class);
+        Integer objectiveTable = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM information_schema.tables
+                WHERE table_schema = 'public' AND table_name = 'learning_objective'
+                """, Integer.class);
+        Integer questionObjectiveColumn = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'learning_question'
+                  AND column_name = 'learning_objective_id'
+                """, Integer.class);
+        String questionObjectiveIndex = jdbcTemplate.queryForObject("""
+                SELECT indexdef
+                FROM pg_indexes
+                WHERE schemaname = 'public' AND indexname = 'idx_learning_question_objective'
+                """, String.class);
+
+        assertThat(objectiveMigration).isEqualTo(1);
+        assertThat(objectiveTable).isEqualTo(1);
+        assertThat(questionObjectiveColumn).isEqualTo(1);
+        assertThat(questionObjectiveIndex).contains("learning_objective_id");
+
+        Integer qualityMigration = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM flyway_schema_history
+                WHERE version = '14' AND success = TRUE
+                """, Integer.class);
+        Integer qualityTables = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM information_schema.tables
+                WHERE table_schema = 'public'
+                  AND table_name IN ('quality_evaluation_run', 'duplicate_question_pair',
+                                     'duplicate_evaluation_result', 'objective_evaluation_case')
+                """, Integer.class);
+
+        assertThat(qualityMigration).isEqualTo(1);
+        assertThat(qualityTables).isEqualTo(4);
+
+        Integer datasetMigration = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM flyway_schema_history
+                WHERE version = '15' AND success = TRUE
+                """, Integer.class);
+        Integer datasetTables = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM information_schema.tables
+                WHERE table_schema = 'public'
+                  AND table_name IN ('duplicate_evaluation_dataset', 'duplicate_evaluation_dataset_sample')
+                """, Integer.class);
+        String datasetEmbeddingColumn = jdbcTemplate.queryForObject("""
+                SELECT format_type(attribute.atttypid, attribute.atttypmod)
+                FROM pg_attribute attribute
+                JOIN pg_class table_info ON table_info.oid = attribute.attrelid
+                WHERE table_info.relname = 'duplicate_evaluation_dataset_sample'
+                  AND attribute.attname = 'embedding_a'
+                """, String.class);
+
+        assertThat(datasetMigration).isEqualTo(1);
+        assertThat(datasetTables).isEqualTo(2);
+        assertThat(datasetEmbeddingColumn).isEqualTo("vector(512)");
+
+        Integer roadmapAdvanceMigration = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM flyway_schema_history
+                WHERE version = '16' AND success = TRUE
+                """, Integer.class);
+        Integer roadmapAdvanceColumn = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'learning_roadmap_step'
+                  AND column_name = 'advance_confirmed_at'
+                """, Integer.class);
+
+        assertThat(roadmapAdvanceMigration).isEqualTo(1);
+        assertThat(roadmapAdvanceColumn).isEqualTo(1);
     }
 
     @Test
@@ -250,6 +341,76 @@ class PgvectorIntegrationTest {
         assertThat(standardThreshold.duplicate()).isFalse();
         assertThat(feedbackThreshold.duplicate()).isTrue();
         assertThat(feedbackThreshold.similarity()).isBetween(0.82, 0.90);
+    }
+
+    @Test
+    void rejectsAnEmbeddingWhoseDimensionDoesNotMatchTheDatabaseContract() {
+        long questionHistoryId = insertQuestionHistory();
+
+        assertThatThrownBy(() -> questionVectorRepository.upsert(
+                questionHistoryId,
+                embedding("fixture-embedding", new float[EMBEDDING_DIMENSIONS - 1])
+        )).isInstanceOf(DataAccessException.class)
+                .hasMessageContaining("expected 512 dimensions, not 511");
+    }
+
+    @Test
+    void storesAReproducibleDuplicateEvaluationUsingRealVectorDistances() {
+        long firstQuestionId = insertQuestionHistory();
+        long secondQuestionId = jdbcTemplate.queryForObject("""
+                INSERT INTO question_history
+                    (topic, question_text, question_hash, options, correct_answer, explanation)
+                VALUES
+                    ('Java', 'JVM이 수행하는 핵심 기능은 무엇인가요?', ?, '["A","B"]', 'A', '바이트코드를 실행합니다.')
+                RETURNING id
+                """, Long.class, "b".repeat(64));
+        questionVectorRepository.upsert(firstQuestionId,
+                embedding("fixture-embedding", vector(1.0f, 0.0f)));
+        questionVectorRepository.upsert(secondQuestionId,
+                embedding("fixture-embedding", vector(0.95f, 0.10f)));
+
+        var candidates = qualityEvaluationRepository.findDuplicateCandidates(0.75, 20);
+        long runId = qualityEvaluationRepository.createRun(
+                "DUPLICATE_THRESHOLD", "question_history", "pgvector-cosine", "duplicate-threshold-v1");
+        long pairId = qualityEvaluationRepository.upsertDuplicatePair(firstQuestionId, secondQuestionId);
+        qualityEvaluationRepository.insertDuplicateResult(
+                runId, pairId, candidates.getFirst().similarity(), "fixture-embedding", "REVIEW_REQUIRED");
+        qualityEvaluationRepository.completeRun(runId, 1, 1, null, null, 0L, null);
+        qualityEvaluationRepository.reviewDuplicatePair(pairId, "DUPLICATE");
+
+        assertThat(candidates).hasSize(1);
+        assertThat(candidates.getFirst().similarity()).isGreaterThan(0.99);
+        assertThat(qualityEvaluationRepository.findLatestLabeledDuplicateSamples())
+                .singleElement()
+                .satisfies(sample -> {
+                    assertThat(sample.humanVerdict()).isEqualTo("DUPLICATE");
+                    assertThat(sample.similarity()).isGreaterThan(0.99);
+                });
+    }
+
+    @Test
+    void storesIsolatedReferenceDatasetVectorsWithoutTouchingLearningHistory() {
+        long datasetId = duplicateEvaluationDatasetRepository.createDataset(
+                "fixture-reference-v1", "Fixture", "1.0", 1);
+        duplicateEvaluationDatasetRepository.insertSample(datasetId, 1, "Kubernetes",
+                "Pod의 역할은 무엇인가요?", "Kubernetes Pod가 수행하는 역할은 무엇인가요?",
+                "DUPLICATE", "표현만 바꾼 같은 질문입니다.");
+        var sample = duplicateEvaluationDatasetRepository.findPendingEmbeddings(datasetId).getFirst();
+        duplicateEvaluationDatasetRepository.saveEmbedding(sample.id(),
+                embedding("fixture-embedding", vector(1.0f, 0.0f)),
+                embedding("fixture-embedding", vector(0.99f, 0.10f)));
+        duplicateEvaluationDatasetRepository.markReady(datasetId, "fixture-embedding", 0);
+
+        assertThat(jdbcTemplate.queryForObject("SELECT COUNT(*) FROM question_history", Integer.class)).isZero();
+        assertThat(duplicateEvaluationDatasetRepository.findEmbeddedSamples(datasetId))
+                .singleElement()
+                .satisfies(value -> {
+                    assertThat(value.referenceVerdict()).isEqualTo("DUPLICATE");
+                    assertThat(value.similarity()).isGreaterThan(0.99);
+                });
+        assertThat(duplicateEvaluationDatasetRepository.findAllSummaries())
+                .singleElement()
+                .satisfies(value -> assertThat(value.embeddedSamples()).isEqualTo(1));
     }
 
     private long insertQuestionHistory() {

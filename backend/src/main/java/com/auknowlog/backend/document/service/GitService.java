@@ -57,7 +57,7 @@ public class GitService {
                 }
             }
             
-            String prefix = determinePrefixPath(absoluteFilePath, repoTop);
+            String prefix = determineNotesPrefix(absoluteFilePath, repoTop);
             runGit(List.of("git", "subtree", "split", "--prefix=" + prefix, "-b", "tmp-notes-split"), repoTop);
             
             try {
@@ -86,15 +86,17 @@ public class GitService {
         }
     }
 
-    private String determinePrefixPath(String absoluteFilePath, File repoTop) throws IOException {
+    private String determineNotesPrefix(String absoluteFilePath, File repoTop) throws IOException {
         String rootPath = runGit(List.of("git", "rev-parse", "--show-toplevel"), repoTop);
         Path root = Paths.get(rootPath).normalize();
         Path file = Paths.get(absoluteFilePath).normalize();
-        Path parent = file.getParent();
-        if (parent == null) throw new IllegalStateException("Invalid file path: " + absoluteFilePath);
-        Path rel = root.relativize(parent);
+        Path notesRoot = root.resolve("backend/src/main/resources/saved_quizzes").normalize();
+        if (!file.startsWith(notesRoot)) {
+            throw new IllegalArgumentException("Git 저장 파일은 saved_quizzes 디렉터리 안에 있어야 합니다.");
+        }
+        Path rel = root.relativize(notesRoot);
         String prefix = rel.toString().replace(File.separatorChar, '/');
-        if (prefix.isBlank()) throw new IllegalStateException("Cannot compute subtree prefix for: " + absoluteFilePath);
+        if (prefix.isBlank()) throw new IllegalStateException("Cannot compute notes prefix");
         return prefix;
     }
 

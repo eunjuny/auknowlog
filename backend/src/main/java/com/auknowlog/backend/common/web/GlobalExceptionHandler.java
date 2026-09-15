@@ -1,6 +1,7 @@
 package com.auknowlog.backend.common.web;
 
 import com.auknowlog.backend.common.exception.OpenAiUnavailableException;
+import com.auknowlog.backend.notification.RemoteAccessMailUnavailableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -22,6 +23,12 @@ public class GlobalExceptionHandler {
                         "message", e.getMessage(),
                         "code", 503
                 ));
+    }
+
+    @ExceptionHandler(RemoteAccessMailUnavailableException.class)
+    public ResponseEntity<Map<String, Object>> handleRemoteAccessMailUnavailable(RemoteAccessMailUnavailableException e) {
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(Map.of("message", e.getMessage(), "code", 503));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

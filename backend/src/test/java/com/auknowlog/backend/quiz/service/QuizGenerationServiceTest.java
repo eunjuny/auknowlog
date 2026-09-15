@@ -9,9 +9,12 @@ import com.auknowlog.backend.observability.LangfuseTracingService;
 import com.auknowlog.backend.question.repository.QuestionHistoryRepository;
 import com.auknowlog.backend.question.service.QuestionHistoryService;
 import com.auknowlog.backend.quiz.dto.Question;
+import com.auknowlog.backend.quiz.dto.QuizObjectiveAllocation;
 import com.auknowlog.backend.quiz.dto.QuizRequest;
 import com.auknowlog.backend.quiz.dto.QuizResponse;
 import com.auknowlog.backend.source.service.SourceService;
+import com.auknowlog.backend.roadmap.service.RoadmapQuizPlanningService;
+import com.auknowlog.backend.quiz.dto.RoadmapQuizPlan;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.BeforeEach;
@@ -53,6 +56,9 @@ class QuizGenerationServiceTest {
     private LearningService learningService;
 
     @Mock
+    private RoadmapQuizPlanningService roadmapQuizPlanningService;
+
+    @Mock
     private SourceService sourceService;
 
     @Mock
@@ -66,6 +72,11 @@ class QuizGenerationServiceTest {
 
     @BeforeEach
     void setUpTracing() {
+        when(roadmapQuizPlanningService.plan(any())).thenAnswer(invocation -> {
+            QuizRequest request = invocation.getArgument(0);
+            return RoadmapQuizPlan.standard(request.sourceId(),
+                    request.numberOfQuestions() == null ? 5 : request.numberOfQuestions());
+        });
         when(langfuseTracingService.startQuizGeneration(any(), anyInt(), anyBoolean()))
                 .thenReturn(LangfuseTracingService.noopScope());
         when(langfuseTracingService.startOperation(any(), ArgumentMatchers.anyMap()))
@@ -122,6 +133,7 @@ class QuizGenerationServiceTest {
                 questionFeedbackService,
                 sourceService,
                 learningService,
+                roadmapQuizPlanningService,
                 langfuseTracingService,
                 quizGenerationMetrics
         );
@@ -193,5 +205,38 @@ class QuizGenerationServiceTest {
                 ArgumentMatchers.argThat(questions -> questions.getFirst().startsWith("JVM이 바이트코드")),
                 ArgumentMatchers.anyList());
         verify(questionHistoryService).saveQuestion("Java", novel);
+    }
+
+    @Test
+    void generatesAndStoresQuestionsAccordingToTheRoadmapObjectivePlan() {
+        QuizRequest request = new QuizRequest("Kubernetes Pod", 2, null, 3L, 7L);
+        List<QuizObjectiveAllocation> allocations = List.of(
+                new QuizObjectiveAllocation(101L, "lifecycle", "Pod 생명주기", "상태 전이", "CORE", 1),
+                new QuizObjectiveAllocation(102L, "probe", "상태 프로브", "프로브 역할", "CORE", 1)
+        );
+        Question lifecycle = new Question("Pending 상태는?", List.of("대기", "완료", "삭제", "종료"),
+                "대기", "스케줄링을 기다립니다.", List.of("source-44-chunk-1"), "lifecycle");
+        Question probe = new Question("readiness 실패는?", List.of("트래픽 제외", "노드 종료", "이미지 삭제", "DNS 삭제"),
+                "트래픽 제외", "Service 대상에서 제외됩니다.", List.of("source-44-chunk-1"), "probe");
+
+        when(roadmapQuizPlanningService.plan(request)).thenReturn(new RoadmapQuizPlan(44L, 2, allocations));
+        when(sourceService.getQuizContext(44L)).thenReturn(List.of());
+        when(questionHistoryService.getRecentQuestionPreviews("Kubernetes Pod", 30)).thenReturn(List.of());
+        when(openAiQuizService.generateQuiz(eq("Kubernetes Pod"), eq(2), ArgumentMatchers.anyList(),
+                ArgumentMatchers.anyList(), eq(allocations)))
+                .thenReturn(new QuizResponse("Pod 핵심 퀴즈", List.of(lifecycle, probe)));
+        when(questionHistoryService.isDuplicate(any())).thenReturn(false);
+        when(semanticDuplicateService.check(any())).thenReturn(SemanticDuplicateService.SemanticCheck.notAvailable());
+        when(questionHistoryService.saveQuestion(eq("Kubernetes Pod"), any())).thenReturn(true);
+        when(learningService.storeGeneratedQuiz(eq("Kubernetes Pod"), eq(44L), eq(3L), eq(7L),
+                ArgumentMatchers.any(QuizResponse.class)))
+                .thenAnswer(invocation -> ((QuizResponse) invocation.getArgument(4)).withQuizId(10L));
+
+        QuizResponse response = quizGenerationService.createQuiz(request);
+
+        assertThat(response.questions()).extracting(Question::objectiveKey)
+                .containsExactly("lifecycle", "probe");
+        verify(learningService).storeGeneratedQuiz(eq("Kubernetes Pod"), eq(44L), eq(3L), eq(7L),
+                ArgumentMatchers.argThat(quiz -> quiz.questions().size() == 2));
     }
 }

@@ -3,6 +3,7 @@ package com.auknowlog.backend.quiz.controller;
 import com.auknowlog.backend.learning.service.LearningService;
 import com.auknowlog.backend.quiz.service.OpenAiQuizService;
 import com.auknowlog.backend.quiz.service.QuizGenerationService;
+import com.auknowlog.backend.roadmap.service.RoadmapQuizPlanningService;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -28,6 +29,9 @@ class QuizControllerValidationTest {
 
     @MockitoBean
     private LearningService learningService;
+
+    @MockitoBean
+    private RoadmapQuizPlanningService roadmapQuizPlanningService;
 
     @Test
     void rejectsBlankTopicsBeforeCallingTheModel() throws Exception {

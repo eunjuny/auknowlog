@@ -21,7 +21,7 @@ public class AiGenerationMetrics {
 
     private static final String REQUEST_DURATION = "auknowlog.ai.request.duration";
     private static final String TOKEN_USAGE = "auknowlog.ai.tokens";
-    private static final Set<String> OPERATIONS = Set.of("quiz", "roadmap");
+    private static final Set<String> OPERATIONS = Set.of("quiz", "roadmap", "quality");
     private static final Set<String> OUTCOMES = Set.of(
             "success", "unavailable", "upstream_rejected", "configuration", "invalid_response", "unexpected"
     );

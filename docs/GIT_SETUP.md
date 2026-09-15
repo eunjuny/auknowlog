@@ -20,11 +20,11 @@ cd /Users/yeob-eunjun/eunjuny/project/auknowlog
 
 # 전역(Global) 설정 - 모든 레포에 적용
 git config --global user.name "eunjuny"
-git config --global user.email "joon2di@gmail.com"
+git config --global user.email "developer@example.com"
 
 # 현재 레포에만 적용하고 싶다면 --global 제거
 # git config user.name "eunjuny"
-# git config user.email "joon2di@gmail.com"
+# git config user.email "developer@example.com"
 ```
 
 macOS에서 권한 오류 예방을 위해 안전 디렉터리를 등록합니다.
@@ -64,7 +64,7 @@ git remote add notes https://github.com/eunjuny/auknowlog_note.git
 
 ```bash
 # SSH 키 생성 (없다면)
-ssh-keygen -t ed25519 -C "joon2di@gmail.com"
+ssh-keygen -t ed25519 -C "developer@example.com"
 
 # 에이전트 실행 및 키 등록 (macOS)
 eval "$(ssh-agent -s)"
@@ -129,13 +129,13 @@ git push -u origin main
 - 프런트 버튼: "Git에 저장" → `POST /api/documents/save-quiz-git`
 - 백엔드 처리 흐름:
   1) 퀴즈 결과를 마크다운으로 렌더링
-  2) 파일 저장: `backend/src/main/resources/saved_quizzes/` (레포 기준)
+  2) 파일 저장: `backend/src/main/resources/saved_quizzes/` (레포 기준). 로드맵 퀴즈는 `roadmaps/roadmap-{id}-{제목}/step-{순서}-{제목}/` 아래에 정리됩니다.
   3) 커밋: `git add <절대경로>` → `git commit -m "chore: save quiz markdown (제목)"`
   4) 서브트리 푸시: 레포 최상위에서 `git subtree split --prefix=backend/src/main/resources/saved_quizzes -b tmp-notes-split`
      → `git push notes tmp-notes-split:main --force-with-lease` → 임시 브랜치 삭제
 
 - 보장 사항:
-  - notes에는 `saved_quizzes` 디렉터리 히스토리만 반영(전체 레포 푸시 방지)
+  - notes에는 `saved_quizzes` **전체** 디렉터리 히스토리만 반영(전체 레포 푸시 방지). 파일이 속한 하위 디렉터리만 split하지 않으므로, 다른 로드맵 노트가 새 저장으로 사라지지 않습니다.
   - 서브트리 실패 시 전체 HEAD 강제 푸시 대신 에러 반환 (안전)
 
 - 사전 조건:
@@ -178,8 +178,6 @@ git push -u origin main
 ### 7) 운영 팁
 
 - 커밋 메시지 포맷은 `GitService`에서 중앙관리(필요 시 규칙 반영)
-- 별도 디렉터리에 저장하고 싶다면 `DocumentService`의 저장 경로와 `GitService`의 `--prefix`를 함께 변경 (레포 루트 기준)
+- 로드맵 저장 경로는 서버가 `quizId`로 조회한 DB 관계에서 계산합니다. 브라우저가 보낸 제목·경로로 임의의 Git 대상 파일을 고를 수 없습니다.
 - 경로 기준: `backend/src/main/resources/saved_quizzes`
 - 초기 빈 저장소에 첫 푸시가 완료되면 원격에 파일이 보입니다: [auknowlog_note 저장소](https://github.com/eunjuny/auknowlog_note.git)
-
-

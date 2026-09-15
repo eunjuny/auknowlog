@@ -21,16 +21,24 @@ public record RoadmapStepDefinition(
         @Size(max = 120, message = "단계 학습 주제는 120자 이하여야 합니다.")
         String topic,
         @Min(value = 1, message = "단계별 목표 문제 수는 1개 이상이어야 합니다.")
-        @Max(value = 200, message = "대주제 목표 문제 수는 200개 이하여야 합니다.")
+        @Max(value = 300, message = "대주제 목표 문제 수는 300개 이하여야 합니다.")
         Integer questionTarget,
         @Size(max = 10, message = "선행 대주제는 최대 10개까지 지정할 수 있습니다.")
         List<String> dependsOn,
         @Size(max = 10, message = "대주제별 소주제는 최대 10개까지 만들 수 있습니다.")
-        List<@Valid RoadmapSubtopicDefinition> subtopics
+        List<@Valid RoadmapSubtopicDefinition> subtopics,
+        @Size(max = 10, message = "학습 목표는 대주제별 최대 10개까지 만들 수 있습니다.")
+        List<@Valid RoadmapLearningObjectiveDefinition> learningObjectives
 ) {
     public RoadmapStepDefinition(String key, String title, String description, String topic,
                                  Integer questionTarget, List<String> dependsOn) {
-        this(key, title, description, topic, questionTarget, dependsOn, List.of());
+        this(key, title, description, topic, questionTarget, dependsOn, List.of(), List.of());
+    }
+
+    public RoadmapStepDefinition(String key, String title, String description, String topic,
+                                 Integer questionTarget, List<String> dependsOn,
+                                 List<RoadmapSubtopicDefinition> subtopics) {
+        this(key, title, description, topic, questionTarget, dependsOn, subtopics, List.of());
     }
 
     public List<String> safeDependsOn() {
@@ -39,5 +47,9 @@ public record RoadmapStepDefinition(
 
     public List<RoadmapSubtopicDefinition> safeSubtopics() {
         return subtopics == null ? List.of() : subtopics;
+    }
+
+    public List<RoadmapLearningObjectiveDefinition> safeLearningObjectives() {
+        return learningObjectives == null ? List.of() : learningObjectives;
     }
 }

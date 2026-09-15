@@ -21,6 +21,8 @@ import com.auknowlog.backend.source.entity.SourceDocument;
 import com.auknowlog.backend.source.repository.SourceDocumentRepository;
 import com.auknowlog.backend.roadmap.entity.LearningRoadmap;
 import com.auknowlog.backend.roadmap.entity.LearningRoadmapStep;
+import com.auknowlog.backend.roadmap.entity.LearningObjective;
+import com.auknowlog.backend.roadmap.repository.LearningObjectiveRepository;
 import com.auknowlog.backend.roadmap.repository.LearningRoadmapRepository;
 import com.auknowlog.backend.roadmap.repository.LearningRoadmapStepRepository;
 import com.auknowlog.backend.roadmap.service.LearningRoadmapService;
@@ -49,6 +51,7 @@ public class LearningService {
     private final SourceDocumentRepository sourceDocumentRepository;
     private final LearningRoadmapRepository learningRoadmapRepository;
     private final LearningRoadmapStepRepository learningRoadmapStepRepository;
+    private final LearningObjectiveRepository learningObjectiveRepository;
     private final LearningRoadmapService learningRoadmapService;
     private final ObjectMapper objectMapper;
 
@@ -60,6 +63,7 @@ public class LearningService {
                            SourceDocumentRepository sourceDocumentRepository,
                            LearningRoadmapRepository learningRoadmapRepository,
                            LearningRoadmapStepRepository learningRoadmapStepRepository,
+                           LearningObjectiveRepository learningObjectiveRepository,
                            LearningRoadmapService learningRoadmapService,
                            ObjectMapper objectMapper) {
         this.learningQuizRepository = learningQuizRepository;
@@ -70,6 +74,7 @@ public class LearningService {
         this.sourceDocumentRepository = sourceDocumentRepository;
         this.learningRoadmapRepository = learningRoadmapRepository;
         this.learningRoadmapStepRepository = learningRoadmapStepRepository;
+        this.learningObjectiveRepository = learningObjectiveRepository;
         this.learningRoadmapService = learningRoadmapService;
         this.objectMapper = objectMapper;
     }
@@ -77,11 +82,18 @@ public class LearningService {
     @Transactional
     public QuizResponse storeGeneratedQuiz(String topic, Long sourceId, Long roadmapId, Long roadmapStepId,
                                            QuizResponse response) {
-        SourceDocument sourceDocument = sourceId == null ? null : sourceDocumentRepository.findById(sourceId)
-                .orElseThrow(() -> new java.util.NoSuchElementException("학습 자료를 찾을 수 없습니다."));
         LearningRoadmap roadmap = roadmapId == null ? null : learningRoadmapRepository.findById(roadmapId)
                 .filter(candidate -> "ACTIVE".equals(candidate.getStatus()))
                 .orElseThrow(() -> new java.util.NoSuchElementException("활성 학습 로드맵을 찾을 수 없습니다."));
+        Long roadmapSourceId = roadmap != null && roadmap.getSourceDocument() != null
+                ? roadmap.getSourceDocument().getId()
+                : null;
+        if (roadmapSourceId != null && sourceId != null && !roadmapSourceId.equals(sourceId)) {
+            throw new IllegalArgumentException("자료 기반 로드맵은 연결된 학습 자료만 사용할 수 있습니다.");
+        }
+        Long effectiveSourceId = roadmapSourceId != null ? roadmapSourceId : sourceId;
+        SourceDocument sourceDocument = effectiveSourceId == null ? null : sourceDocumentRepository.findById(effectiveSourceId)
+                .orElseThrow(() -> new java.util.NoSuchElementException("학습 자료를 찾을 수 없습니다."));
         LearningRoadmapStep roadmapStep = roadmapStepId == null ? null : learningRoadmapStepRepository.findById(roadmapStepId)
                 .orElseThrow(() -> new java.util.NoSuchElementException("학습 로드맵 단계를 찾을 수 없습니다."));
         if (roadmapStep != null) {
@@ -93,11 +105,16 @@ public class LearningService {
             }
             ensureStepAvailable(roadmap, roadmapStep);
         }
+        Map<String, LearningObjective> objectivesByKey = roadmapStep == null
+                ? Map.of()
+                : learningObjectiveRepository.findByRoadmapStepIdOrderByObjectiveOrder(roadmapStep.getId()).stream()
+                .collect(Collectors.toMap(LearningObjective::getObjectiveKey, objective -> objective));
         LearningQuiz quiz = learningQuizRepository.save(new LearningQuiz(
                 sourceDocument, roadmap, roadmapStep, topic, response.quizTitle()));
 
         for (int index = 0; index < response.questions().size(); index++) {
             Question question = response.questions().get(index);
+            LearningObjective learningObjective = resolveLearningObjective(question, objectivesByKey);
             learningQuestionRepository.save(new LearningQuestion(
                     quiz,
                     index + 1,
@@ -105,10 +122,26 @@ public class LearningService {
                     writeJson(question.options()),
                     question.correctAnswer(),
                     question.explanation(),
-                    writeJson(question.sourceReferences())
+                    writeJson(question.sourceReferences()),
+                    learningObjective
             ));
         }
         return response.withQuizId(quiz.getId());
+    }
+
+    private LearningObjective resolveLearningObjective(Question question,
+                                                        Map<String, LearningObjective> objectivesByKey) {
+        if (objectivesByKey.isEmpty()) {
+            return null;
+        }
+        if (question.objectiveKey() == null || question.objectiveKey().isBlank()) {
+            throw new IllegalArgumentException("로드맵 문제에는 필수 학습 목표가 지정되어야 합니다.");
+        }
+        LearningObjective objective = objectivesByKey.get(question.objectiveKey());
+        if (objective == null) {
+            throw new IllegalArgumentException("선택한 학습 단계에 없는 학습 목표입니다: " + question.objectiveKey());
+        }
+        return objective;
     }
 
     private void ensureStepAvailable(LearningRoadmap roadmap, LearningRoadmapStep roadmapStep) {
@@ -119,12 +152,11 @@ public class LearningService {
                         row -> ((Number) row[0]).longValue(),
                         row -> ((Number) row[1]).longValue()
                 ));
-        if (completedByStepId.getOrDefault(roadmapStep.getId(), 0L) >= roadmapStep.getQuestionTarget()) {
-            throw new IllegalArgumentException("이미 완료한 학습 단계입니다.");
+        if (roadmapStep.getAdvanceConfirmedAt() != null) {
+            throw new IllegalArgumentException("다음 단계 진행을 확정한 학습 단계입니다.");
         }
         boolean locked = roadmapStep.getPrerequisites().stream()
-                .anyMatch(prerequisite -> completedByStepId.getOrDefault(prerequisite.getId(), 0L)
-                        < prerequisite.getQuestionTarget());
+                .anyMatch(prerequisite -> prerequisite.getAdvanceConfirmedAt() == null);
         if (locked) {
             throw new IllegalArgumentException("선행 학습 단계를 먼저 완료해주세요.");
         }

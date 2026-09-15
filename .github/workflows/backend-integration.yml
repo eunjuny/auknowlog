@@ -4,10 +4,16 @@ on:
   push:
     paths:
       - "backend/**"
+      - "docker-compose.yml"
+      - "ops/prometheus/**"
+      - "scripts/verify-prometheus.sh"
       - ".github/workflows/backend-integration.yml"
   pull_request:
     paths:
       - "backend/**"
+      - "docker-compose.yml"
+      - "ops/prometheus/**"
+      - "scripts/verify-prometheus.sh"
       - ".github/workflows/backend-integration.yml"
 
 permissions:
@@ -31,6 +37,15 @@ jobs:
           distribution: temurin
           java-version: "21"
           cache: gradle
+
+      - name: Validate Prometheus configuration
+        working-directory: ${{ github.workspace }}
+        run: >-
+          docker run --rm
+          --entrypoint /bin/promtool
+          -v "$GITHUB_WORKSPACE/ops/prometheus:/etc/prometheus:ro"
+          prom/prometheus:v3.13.1
+          check config /etc/prometheus/prometheus.yml
 
       - name: Run unit and pgvector integration tests
         run: ./gradlew check --no-daemon

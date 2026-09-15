@@ -5,6 +5,8 @@ import com.auknowlog.backend.common.exception.OpenAiUnavailableException;
 import com.auknowlog.backend.common.observability.AiGenerationMetrics;
 import com.auknowlog.backend.observability.LangfuseTracingService;
 import com.auknowlog.backend.roadmap.dto.RoadmapDefinitionRequest;
+import com.auknowlog.backend.roadmap.dto.RoadmapStepDefinition;
+import com.auknowlog.backend.roadmap.dto.RoadmapSubtopicDefinition;
 import com.auknowlog.backend.source.dto.SourceRoadmapContext;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -172,7 +174,10 @@ public class OpenAiRoadmapService {
                 + "and choose the lowest questionTarget that can reasonably verify mastery without repetitive practice. Never treat schema maxima as targets. "
                 + "Use the topic language. Make major-topic dependencies point only to earlier major-topic keys. "
                 + "Give every major topic as many concrete sequential subtopics as the content genuinely needs. "
-                + "Choose each questionTarget according to concept breadth and difficulty, and vary it when appropriate. "
+                + "For every subtopic, analyze the essential knowledge and practical decisions a learner must master, then express them as concrete learningObjectives. "
+                + "Mark indispensable objectives CORE and useful context SUPPORTING. Allocate 1 to 5 questions to each objective according to its breadth and difficulty. "
+                + "Set each subtopic questionTarget to the exact sum of targetQuestionCount across its learningObjectives, never exceeding 30, and set major-topic learningObjectives to an empty array. "
+                + "Do not use generic objectives, random trivia, or duplicate objectives. Each objective must describe something that can be verified with a quiz. "
                 + "questionTarget is a total mastery goal that may be completed across multiple quiz sessions, not a single-batch size. "
                 + "Set each major topic questionTarget to the sum of its subtopics. "
                 + "Descriptions must explain what the learner should understand or practice.";
@@ -193,6 +198,19 @@ public class OpenAiRoadmapService {
     }
 
     static Map<String, Object> schema() {
+        Map<String, Object> objective = new LinkedHashMap<>();
+        objective.put("type", "object");
+        objective.put("additionalProperties", false);
+        objective.put("properties", Map.of(
+                "key", Map.of("type", "string", "pattern", "^[A-Za-z0-9_-]{1,48}$"),
+                "title", Map.of("type", "string"),
+                "description", Map.of("type", "string"),
+                "importance", Map.of("type", "string", "enum", List.of("CORE", "SUPPORTING")),
+                "targetQuestionCount", Map.of("type", "integer", "minimum", 1, "maximum", 5)
+        ));
+        objective.put("required", List.of(
+                "key", "title", "description", "importance", "targetQuestionCount"));
+
         Map<String, Object> subtopic = new LinkedHashMap<>();
         subtopic.put("type", "object");
         subtopic.put("additionalProperties", false);
@@ -201,9 +219,12 @@ public class OpenAiRoadmapService {
                 "title", Map.of("type", "string"),
                 "description", Map.of("type", "string"),
                 "topic", Map.of("type", "string"),
-                "questionTarget", Map.of("type", "integer", "minimum", 1, "maximum", 20)
+                "questionTarget", Map.of("type", "integer", "minimum", 1, "maximum", 30),
+                "learningObjectives", Map.of(
+                        "type", "array", "minItems", 1, "maxItems", 10, "items", objective)
         ));
-        subtopic.put("required", List.of("key", "title", "description", "topic", "questionTarget"));
+        subtopic.put("required", List.of(
+                "key", "title", "description", "topic", "questionTarget", "learningObjectives"));
 
         Map<String, Object> step = new LinkedHashMap<>();
         step.put("type", "object");
@@ -213,17 +234,21 @@ public class OpenAiRoadmapService {
                 "title", Map.of("type", "string"),
                 "description", Map.of("type", "string"),
                 "topic", Map.of("type", "string"),
-                "questionTarget", Map.of("type", "integer", "minimum", 1, "maximum", 200),
+                "questionTarget", Map.of("type", "integer", "minimum", 1, "maximum", 300),
                 "dependsOn", Map.of("type", "array", "items", Map.of("type", "string")),
-                "subtopics", Map.of("type", "array", "minItems", 1, "maxItems", 10, "items", subtopic)
+                "subtopics", Map.of("type", "array", "minItems", 1, "maxItems", 10, "items", subtopic),
+                "learningObjectives", Map.of(
+                        "type", "array", "minItems", 0, "maxItems", 0, "items", objective)
         ));
-        step.put("required", List.of("key", "title", "description", "topic", "questionTarget", "dependsOn", "subtopics"));
+        step.put("required", List.of(
+                "key", "title", "description", "topic", "questionTarget", "dependsOn", "subtopics",
+                "learningObjectives"));
 
         Map<String, Object> schema = new LinkedHashMap<>();
         schema.put("type", "object");
         schema.put("additionalProperties", false);
         schema.put("properties", Map.of(
-                "version", Map.of("type", "string", "enum", List.of("1.1")),
+                "version", Map.of("type", "string", "enum", List.of("1.2")),
                 "title", Map.of("type", "string"),
                 "topic", Map.of("type", "string"),
                 "description", Map.of("type", "string"),
@@ -254,11 +279,35 @@ public class OpenAiRoadmapService {
             if (generated.steps() == null || generated.steps().isEmpty()) {
                 throw new IllegalStateException("OpenAI가 학습 단계를 반환하지 않았습니다.");
             }
+            List<RoadmapStepDefinition> normalizedSteps = generated.steps().stream()
+                    .map(this::normalizeGeneratedStepTargets)
+                    .toList();
             return new RoadmapDefinitionRequest(
-                    "1.1", generated.title(), topic.trim(), generated.description(), durationWeeks, generated.steps());
+                    "1.2", generated.title(), topic.trim(), generated.description(), durationWeeks, normalizedSteps);
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("OpenAI 로드맵 응답이 올바른 JSON이 아닙니다.", exception);
         }
+    }
+
+    private RoadmapStepDefinition normalizeGeneratedStepTargets(RoadmapStepDefinition step) {
+        List<RoadmapSubtopicDefinition> subtopics = step.safeSubtopics().stream()
+                .map(subtopic -> new RoadmapSubtopicDefinition(
+                        subtopic.key(), subtopic.title(), subtopic.description(), subtopic.topic(),
+                        subtopic.safeLearningObjectives().stream()
+                                .mapToInt(objective -> objective.targetQuestionCount())
+                                .sum(),
+                        subtopic.safeLearningObjectives()
+                ))
+                .toList();
+        int questionTarget = subtopics.isEmpty()
+                ? step.safeLearningObjectives().stream()
+                .mapToInt(objective -> objective.targetQuestionCount())
+                .sum()
+                : subtopics.stream().mapToInt(RoadmapSubtopicDefinition::questionTarget).sum();
+        return new RoadmapStepDefinition(
+                step.key(), step.title(), step.description(), step.topic(), questionTarget,
+                step.safeDependsOn(), subtopics, step.safeLearningObjectives()
+        );
     }
 
     private long token(JsonNode usage, String field) {

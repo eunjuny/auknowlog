@@ -183,6 +183,7 @@ wait_for_public_url() {
 }
 
 start_quick_tunnel() {
+  local send_access_email="${1:-no}"
   local username
   local password
   local session_token
@@ -272,9 +273,17 @@ start_quick_tunnel() {
   wait_for_http_status "${public_url}" "200" "${session_cookie}" "20" ||
     fail "공개 URL의 인증 성공(200) 검증에 실패했습니다."
 
-  log "Quick Tunnel을 시작하고 인증 동작을 검증했습니다."
-  log "외부 URL: ${public_url}"
-  show_credentials
+  if [[ "${send_access_email}" == "yes" ]]; then
+    node "${SCRIPT_DIR}/send-remote-access-email.mjs" \
+      --lifetime-seconds "${max_lifetime_seconds}" ||
+      fail "원격 접속 정보 이메일 전송에 실패했습니다. 보안을 위해 시작한 터널을 종료합니다."
+    log "Quick Tunnel을 시작하고 인증 동작을 검증했습니다."
+    log "원격 URL과 임시 인증 정보는 설정된 수신 메일에서 확인하세요."
+  else
+    log "Quick Tunnel을 시작하고 인증 동작을 검증했습니다."
+    log "외부 URL: ${public_url}"
+    show_credentials
+  fi
   log "자동 종료: $((max_lifetime_seconds / 3600))시간 후"
   log "이 터미널을 유지합니다. 종료하려면 Ctrl+C 또는 다른 터미널에서 './scripts/remote-access.sh stop'을 실행하세요."
 
@@ -313,15 +322,17 @@ show_menu() {
   log "접속 모드를 선택하세요."
   log "1) local         - 외부 공개 끄기"
   log "2) quick-tunnel  - 임시 인증 URL 열기"
-  log "3) status        - 현재 상태 확인"
-  log "4) stop          - 외부 공개 종료"
+  log "3) quick-email   - 임시 인증 URL을 열고 접속 정보를 메일로 보내기"
+  log "4) status        - 현재 상태 확인"
+  log "5) stop          - 외부 공개 종료"
   read -r -p "> " choice
 
   case "${choice}" in
     1) request_tunnel_stop; show_status ;;
     2) start_quick_tunnel ;;
-    3) show_status ;;
-    4) request_tunnel_stop; show_status ;;
+    3) start_quick_tunnel "yes" ;;
+    4) show_status ;;
+    5) request_tunnel_stop; show_status ;;
     *) fail "올바른 번호를 선택하세요." ;;
   esac
 }
@@ -333,6 +344,7 @@ usage() {
 명령:
   local          외부 터널을 종료하고 로컬 전용 모드로 전환
   quick-tunnel   로그인·세션 인증 프록시와 Cloudflare Quick Tunnel 시작
+  quick-email    Quick Tunnel을 인증 검증한 뒤 접속 정보를 설정된 수신 메일로 1회 전송
   status         현재 접속 모드와 URL 확인
   credentials    활성 터널의 임시 사용자명과 비밀번호 확인
   stop           Quick Tunnel과 인증 프록시 종료
@@ -349,6 +361,9 @@ case "${1:-menu}" in
     ;;
   quick-tunnel|quick)
     start_quick_tunnel
+    ;;
+  quick-tunnel-email|quick-email)
+    start_quick_tunnel "yes"
     ;;
   status)
     show_status

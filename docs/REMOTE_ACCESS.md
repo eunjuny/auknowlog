@@ -46,6 +46,16 @@ brew install cloudflared
 
 `cloudflared`는 Homebrew 서비스로 등록하지 않는다. 인증 프록시와 터널 모두 스크립트가 선택한 시간 동안만 일반 사용자 프로세스로 실행한다.
 
+원격 접속 정보를 본인 메일로 받으려면 Git에서 제외되는 `backend/application-api.properties`에 아래 세 값도 넣는다. Gmail 계정은 2단계 인증 후 만든 **앱 비밀번호**를 사용하며 일반 Google 계정 비밀번호를 넣지 않는다.
+
+```properties
+auknowlog.mail.username=sender@example.com
+auknowlog.mail.app-password=generated-gmail-app-password
+auknowlog.mail.recipient=receiver@example.com
+```
+
+`username`은 Gmail SMTP 발신 계정, `recipient`는 고정된 본인 수신 주소다. 요청 본문으로 수신자를 받지 않으므로 Quick Tunnel 사용자가 임의 수신자에게 메일을 보낼 수 없다.
+
 ## 사용법
 
 선택 메뉴:
@@ -59,6 +69,9 @@ brew install cloudflared
 ```bash
 # 외부 공개 시작
 ./scripts/remote-access.sh quick-tunnel
+
+# 새 터널을 열고 인증 동작을 검증한 뒤, URL·임시 인증 정보를 설정된 메일로 1회 전송
+./scripts/remote-access.sh quick-email
 
 # 상태 확인
 ./scripts/remote-access.sh status
@@ -74,6 +87,20 @@ brew install cloudflared
 ```
 
 `quick-tunnel`을 실행한 터미널은 연결을 유지하기 위해 열린 상태로 남는다. 해당 터미널에서 `Ctrl+C`를 누르거나 다른 터미널에서 `stop` 또는 `local`을 실행하면 인증 프록시와 공개 터널이 함께 종료된다. 터미널이 닫히거나 프로세스가 비정상 종료되어도 스크립트의 종료 처리에서 공개 연결을 정리한다.
+
+`quick-email`도 같은 방식으로 터널을 유지한다. 다만 터미널에는 URL·비밀번호를 다시 출력하지 않고, SMTP 서버가 발송 요청을 수락한 뒤에만 일반 성공 메시지를 출력한다. 발송 실패 시 시작한 터널을 즉시 종료한다. SMTP 수락은 수신함 도착을 보장하지 않으므로, 실제 수신 여부는 설정된 메일함에서 확인한다.
+
+## 매일 오전 8시 자동 실행
+
+Codex 로컬 자동화 `Auknowlog 원격 접속 메일`이 매일 오전 8시(현재 호스트의 `Asia/Seoul`)에 다음 순서로 실행한다.
+
+1. PostgreSQL·Spring Boot·Vite 상태를 확인하고 중단된 구성 요소를 문서화된 로컬 설정으로 기동한다.
+2. 이전 Quick Tunnel이 남아 있으면 종료해 URL과 임시 비밀번호를 폐기한다.
+3. 새 `quick-email` 흐름으로 외부 미인증 `302`·인증 성공 `200`을 검증한다.
+4. 설정된 고정 수신 주소에 새 접속 정보와 만료 시각을 한 번 전송한다.
+5. 성공한 터널은 기본 최대 8시간 유지하고, 실패한 실행에서 새로 만든 터널은 정리한다.
+
+이 자동화는 클라우드 서버가 아니라 사용자의 로컬 Codex 작업에 연결되어 있다. 따라서 예약 시각에 맥과 Codex 호스트가 실행 중이고 인터넷·Docker를 사용할 수 있어야 한다. 절전·종료·네트워크 단절 상태에서는 메일을 보낼 수 없으며, 실패 시 비밀값을 제외한 조치 정보만 남긴다. 퀴즈 생성이나 임베딩 API는 호출하지 않으므로 OpenAI API 비용은 발생하지 않는다.
 
 터널은 잊고 켜두는 상황을 줄이기 위해 기본 8시간 후 자동 종료된다. 더 짧은 시간이 필요하면 초 단위로 지정할 수 있다.
 
@@ -104,8 +131,31 @@ AUKNOWLOG_TUNNEL_PASSWORD='20자-이상의-임시-비밀번호' \
 4. 유효한 세션 요청이 `200`인지 확인
 5. Quick Tunnel URL 생성 확인
 6. 공개 URL에서도 미인증 `302`, 인증 성공 `200` 확인
+7. `quick-email`인 경우에만 URL·사용자명·임시 비밀번호·만료 시각을 localhost의 메일 API에 전달하고 SMTP 수락 확인
 
 어느 단계든 실패하면 시작한 인증 프록시와 cloudflared 프로세스를 정리한다.
+
+### 검증 결과 (2026-09-13)
+
+- 인증 프록시 자체 테스트에서 미인증 `302`, 인증 성공 `200`, 프록시 헤더·쿠키 제거, 로그인 실패 횟수 제한을 확인했다.
+- 실제 `quick-email` 실행에서 Quick Tunnel의 공개 URL 미인증 `302`·인증 성공 `200` 검증 뒤 Gmail SMTP의 발송 요청 수락을 확인했다.
+- 터널 런타임 디렉터리와 인증 정보 파일 권한은 각각 `700`, `600`이며, 터널 프로세스가 실행 중인 상태를 확인했다. URL·수신 주소·비밀번호는 검증 로그와 문서에 기록하지 않았다.
+
+## 메일 전송 경계
+
+```text
+remote-access.sh quick-email
+  -> cloudflared URL·인증 프록시 검증
+  -> .runtime/remote-access (권한 700/600)의 일회성 URL·인증 정보 읽기
+  -> localhost:8080 /api/notifications/remote-access/email
+  -> Spring Mail -> Gmail SMTP STARTTLS (587)
+  -> 설정된 단일 수신 메일함
+```
+
+- 백엔드는 `127.0.0.1`에만 바인딩한다. 외부 요청은 인증 프록시와 Vite를 거쳐야 하며, Vite는 메일 발송 API를 프록시하지 않는다.
+- 메일 API는 `trycloudflare.com` 루트 URL, 안전한 사용자명, 최소 20자 비밀번호와 미래 만료 시각만 받는다. 수신 주소·SMTP 계정·앱 비밀번호는 요청이나 응답에 포함하지 않는다.
+- 스크립트는 비밀번호를 명령행 인수로 넘기지 않고 권한 `600`인 런타임 파일에서 읽는다. 성공·실패 로그에도 URL, 수신 주소, 비밀번호를 남기지 않는다.
+- URL과 비밀번호가 같은 평문 메일에 포함되므로 이 기능은 개인 임시 접속 전용이다. 메일을 전달하지 말고, 사용 뒤 `stop`으로 터널을 끈다. 정식 서비스에서는 일회성 링크·계정 인증·감사 이력으로 교체한다.
 
 ## 한계와 다음 단계
 
@@ -114,3 +164,4 @@ AUKNOWLOG_TUNNEL_PASSWORD='20자-이상의-임시-비밀번호' \
 - 임시 인증 프록시는 단일 사용자용이며 사용자별 권한과 계정 복구 기능은 없다.
 - 외부 공개 중에는 OpenAI 생성 API도 인증 뒤에서 접근 가능하므로 API 사용 한도와 애플리케이션 레벨 요청 제한이 별도로 필요하다.
 - 개인 상시 접속은 Tailscale, 공개 포트폴리오는 정식 배포와 애플리케이션 인증을 사용한다.
+- 메일은 사용자가 `quick-email`을 실행하거나 등록된 오전 8시 Codex 자동화가 실행될 때만 전송된다. 장기 운영에서는 로컬 호스트 의존성을 제거한 정식 배포·스케줄러·비밀 저장소가 필요하다.

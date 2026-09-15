@@ -14,6 +14,7 @@ import jakarta.persistence.Table;
 
 import java.util.LinkedHashSet;
 import java.util.Set;
+import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "learning_roadmap_step")
@@ -62,6 +63,9 @@ public class LearningRoadmapStep {
 
     private String subtopicTitle;
 
+    /** 목표 문항을 채운 뒤 사용자가 다음 단계 진행을 명시적으로 승인한 시각이다. */
+    private LocalDateTime advanceConfirmedAt;
+
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
             name = "learning_roadmap_step_dependency",
@@ -102,6 +106,12 @@ public class LearningRoadmapStep {
         prerequisites.add(prerequisite);
     }
 
+    public void confirmAdvance() {
+        if (advanceConfirmedAt == null) {
+            advanceConfirmedAt = LocalDateTime.now();
+        }
+    }
+
     public Long getId() { return id; }
     public LearningRoadmap getRoadmap() { return roadmap; }
     public String getStepKey() { return stepKey; }
@@ -116,5 +126,6 @@ public class LearningRoadmapStep {
     public String getMajorTopicTopic() { return majorTopicTopic; }
     public String getSubtopicKey() { return subtopicKey; }
     public String getSubtopicTitle() { return subtopicTitle; }
+    public LocalDateTime getAdvanceConfirmedAt() { return advanceConfirmedAt; }
     public Set<LearningRoadmapStep> getPrerequisites() { return prerequisites; }
 }

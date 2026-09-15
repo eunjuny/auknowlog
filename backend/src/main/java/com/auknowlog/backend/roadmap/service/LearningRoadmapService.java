@@ -2,10 +2,13 @@ package com.auknowlog.backend.roadmap.service;
 
 import com.auknowlog.backend.learning.entity.LearningAttempt;
 import com.auknowlog.backend.learning.repository.LearningAttemptRepository;
+import com.auknowlog.backend.learning.repository.LearningAttemptAnswerRepository;
 import com.auknowlog.backend.roadmap.dto.ActiveLearningRoadmapResponse;
 import com.auknowlog.backend.roadmap.dto.LearningRoadmapCollectionResponse;
 import com.auknowlog.backend.roadmap.dto.LearningRoadmapSummary;
 import com.auknowlog.backend.roadmap.dto.RoadmapMajorTopicProgress;
+import com.auknowlog.backend.roadmap.dto.RoadmapLearningObjectiveDefinition;
+import com.auknowlog.backend.roadmap.dto.RoadmapLearningObjectiveProgress;
 import com.auknowlog.backend.roadmap.dto.RoadmapCreateRequest;
 import com.auknowlog.backend.roadmap.dto.RoadmapDefinitionRequest;
 import com.auknowlog.backend.roadmap.dto.RoadmapStepDefinition;
@@ -16,6 +19,8 @@ import com.auknowlog.backend.roadmap.dto.RoadmapWeekProgress;
 import com.auknowlog.backend.roadmap.entity.LearningRoadmap;
 import com.auknowlog.backend.roadmap.entity.LearningRoadmapStep;
 import com.auknowlog.backend.roadmap.entity.LearningRoadmapWeek;
+import com.auknowlog.backend.roadmap.entity.LearningObjective;
+import com.auknowlog.backend.roadmap.repository.LearningObjectiveRepository;
 import com.auknowlog.backend.roadmap.repository.LearningRoadmapRepository;
 import com.auknowlog.backend.roadmap.repository.LearningRoadmapStepRepository;
 import com.auknowlog.backend.roadmap.repository.LearningRoadmapWeekRepository;
@@ -48,15 +53,20 @@ public class LearningRoadmapService {
     private static final int SAFETY_MAX_MAJOR_TOPICS = 10;
     private static final int SAFETY_MAX_SUBTOPICS_PER_MAJOR = 10;
     private static final int SAFETY_MAX_ATOMIC_STEPS = 100;
-    private static final int SAFETY_MAX_QUESTION_TARGET_PER_UNIT = 20;
+    private static final int SAFETY_MAX_QUESTION_TARGET_PER_UNIT = 30;
+    private static final int SAFETY_MAX_OBJECTIVES_PER_UNIT = 10;
+    private static final int SAFETY_MAX_QUESTIONS_PER_OBJECTIVE = 5;
     private static final int SAFETY_MAX_MAJOR_TOPIC_QUESTION_TARGET =
             SAFETY_MAX_SUBTOPICS_PER_MAJOR * SAFETY_MAX_QUESTION_TARGET_PER_UNIT;
     private static final Pattern STEP_KEY = Pattern.compile("[A-Za-z0-9_-]{1,64}");
+    private static final Pattern OBJECTIVE_KEY = Pattern.compile("[A-Za-z0-9_-]{1,48}");
 
     private final LearningRoadmapRepository learningRoadmapRepository;
     private final LearningRoadmapWeekRepository learningRoadmapWeekRepository;
     private final LearningRoadmapStepRepository learningRoadmapStepRepository;
     private final LearningAttemptRepository learningAttemptRepository;
+    private final LearningAttemptAnswerRepository learningAttemptAnswerRepository;
+    private final LearningObjectiveRepository learningObjectiveRepository;
     private final SourceDocumentRepository sourceDocumentRepository;
     private final ObjectMapper objectMapper;
 
@@ -64,12 +74,16 @@ public class LearningRoadmapService {
                                   LearningRoadmapWeekRepository learningRoadmapWeekRepository,
                                   LearningRoadmapStepRepository learningRoadmapStepRepository,
                                   LearningAttemptRepository learningAttemptRepository,
+                                  LearningAttemptAnswerRepository learningAttemptAnswerRepository,
+                                  LearningObjectiveRepository learningObjectiveRepository,
                                   SourceDocumentRepository sourceDocumentRepository,
                                   ObjectMapper objectMapper) {
         this.learningRoadmapRepository = learningRoadmapRepository;
         this.learningRoadmapWeekRepository = learningRoadmapWeekRepository;
         this.learningRoadmapStepRepository = learningRoadmapStepRepository;
         this.learningAttemptRepository = learningAttemptRepository;
+        this.learningAttemptAnswerRepository = learningAttemptAnswerRepository;
+        this.learningObjectiveRepository = learningObjectiveRepository;
         this.sourceDocumentRepository = sourceDocumentRepository;
         this.objectMapper = objectMapper;
     }
@@ -179,6 +193,52 @@ public class LearningRoadmapService {
         return toSummary(roadmap);
     }
 
+    /**
+     * 목표 문항을 모두 푼 뒤에만 다음 단계를 명시적으로 연다.
+     * 추가 학습을 하더라도 이 승인이 있기 전에는 선행 조건이 충족되지 않는다.
+     */
+    @Transactional
+    public LearningRoadmapSummary confirmStepAdvance(Long roadmapId, Long stepId) {
+        LearningRoadmap roadmap = learningRoadmapRepository.findById(roadmapId)
+                .filter(candidate -> "ACTIVE".equals(candidate.getStatus()))
+                .orElseThrow(() -> new NoSuchElementException("진행 중인 학습 로드맵을 찾을 수 없습니다."));
+        LearningRoadmapStep step = learningRoadmapStepRepository.findById(stepId)
+                .filter(candidate -> candidate.getRoadmap().getId().equals(roadmap.getId()))
+                .orElseThrow(() -> new NoSuchElementException("선택한 로드맵에 속한 학습 단계를 찾을 수 없습니다."));
+        long completedQuestions = learningAttemptRepository.findRoadmapStepCompletedQuestions(roadmapId).stream()
+                .filter(row -> ((Number) row[0]).longValue() == stepId)
+                .mapToLong(row -> ((Number) row[1]).longValue())
+                .findFirst()
+                .orElse(0);
+        if (completedQuestions < step.getQuestionTarget()) {
+            throw new IllegalArgumentException("완료 기준 문제를 모두 푼 뒤 다음 단계로 진행할 수 있습니다.");
+        }
+        boolean prerequisitesConfirmed = step.getPrerequisites().stream()
+                .allMatch(prerequisite -> prerequisite.getAdvanceConfirmedAt() != null);
+        if (!prerequisitesConfirmed) {
+            throw new IllegalArgumentException("선행 학습 단계를 먼저 완료해주세요.");
+        }
+        step.confirmAdvance();
+        LearningRoadmapSummary summary = toSummary(roadmap);
+        if (summary.completed()) {
+            roadmap.complete();
+            return toSummary(roadmap);
+        }
+        return summary;
+    }
+
+    /**
+     * 로드맵 정의와 단계만 삭제한다. 이미 저장된 풀이 이력은 학습 기록으로 남기고
+     * DB FK의 ON DELETE SET NULL 규칙으로 로드맵 연결만 해제한다.
+     */
+    @Transactional
+    public void deleteRoadmap(Long roadmapId) {
+        LearningRoadmap roadmap = learningRoadmapRepository.findById(roadmapId)
+                .orElseThrow(() -> new NoSuchElementException("삭제할 학습 로드맵을 찾을 수 없습니다."));
+        learningRoadmapRepository.delete(roadmap);
+        learningRoadmapRepository.flush();
+    }
+
     @Transactional
     public void completeIfSatisfied(Long roadmapId) {
         LearningRoadmap roadmap = learningRoadmapRepository.findById(roadmapId)
@@ -232,18 +292,20 @@ public class LearningRoadmapService {
             String majorTopicValue = blankToNull(majorTopic.topic()) == null ? topic : majorTopic.topic().trim();
             List<LearningRoadmapStep> atomicSteps;
             if (majorTopic.safeSubtopics().isEmpty()) {
-                atomicSteps = List.of(learningRoadmapStepRepository.save(new LearningRoadmapStep(
+                LearningRoadmapStep storedStep = learningRoadmapStepRepository.save(new LearningRoadmapStep(
                         roadmap, majorKey, majorTitle, majorDescription, majorTopicValue,
                         majorTopic.questionTarget(), stepOrder++, majorKey, majorTitle, majorDescription,
                         majorTopicValue, null, null
-                )));
+                ));
+                saveLearningObjectives(storedStep, majorTopic.safeLearningObjectives());
+                atomicSteps = List.of(storedStep);
             } else {
                 java.util.ArrayList<LearningRoadmapStep> expanded = new java.util.ArrayList<>();
                 for (RoadmapSubtopicDefinition subtopic : majorTopic.safeSubtopics()) {
                     String subtopicTopic = blankToNull(subtopic.topic()) == null
                             ? majorTopicValue + " " + subtopic.title().trim()
                             : subtopic.topic().trim();
-                    expanded.add(learningRoadmapStepRepository.save(new LearningRoadmapStep(
+                    LearningRoadmapStep storedStep = learningRoadmapStepRepository.save(new LearningRoadmapStep(
                             roadmap,
                             atomicStepKey(majorKey, subtopic.key().trim()),
                             subtopic.title().trim(),
@@ -257,7 +319,9 @@ public class LearningRoadmapService {
                             majorTopicValue,
                             subtopic.key().trim(),
                             subtopic.title().trim()
-                    )));
+                    ));
+                    saveLearningObjectives(storedStep, subtopic.safeLearningObjectives());
+                    expanded.add(storedStep);
                 }
                 atomicSteps = List.copyOf(expanded);
             }
@@ -295,15 +359,36 @@ public class LearningRoadmapService {
                         row -> ((Number) row[0]).longValue(),
                         row -> ((Number) row[1]).longValue()
                 ));
+        Map<Long, List<LearningObjective>> objectivesByStepId = learningObjectiveRepository
+                .findByRoadmapStepRoadmapIdOrderByRoadmapStepStepOrderAscObjectiveOrderAsc(roadmap.getId())
+                .stream()
+                .collect(Collectors.groupingBy(
+                        objective -> objective.getRoadmapStep().getId(),
+                        LinkedHashMap::new,
+                        Collectors.toList()
+                ));
+        Map<Long, long[]> objectiveProgressById = learningAttemptAnswerRepository
+                .findRoadmapObjectiveProgress(roadmap.getId())
+                .stream()
+                .collect(Collectors.toMap(
+                        row -> ((Number) row[0]).longValue(),
+                        row -> new long[]{((Number) row[1]).longValue(), ((Number) row[2]).longValue()}
+                ));
         Set<String> completedKeys = steps.stream()
-                .filter(step -> completedByStepId.getOrDefault(step.getId(), 0L) >= step.getQuestionTarget())
+                .filter(step -> step.getAdvanceConfirmedAt() != null)
                 .map(LearningRoadmapStep::getStepKey)
                 .collect(Collectors.toSet());
 
         List<RoadmapStepProgress> stepProgress = steps.stream()
-                .map(step -> toStepProgress(step, completedByStepId.getOrDefault(step.getId(), 0L), completedKeys))
+                .map(step -> toStepProgress(
+                        step,
+                        completedByStepId.getOrDefault(step.getId(), 0L),
+                        completedKeys,
+                        objectivesByStepId.getOrDefault(step.getId(), List.of()),
+                        objectiveProgressById
+                ))
                 .toList();
-        List<RoadmapMajorTopicProgress> majorTopics = toMajorTopicProgress(steps, completedByStepId, completedKeys);
+        List<RoadmapMajorTopicProgress> majorTopics = toMajorTopicProgress(steps, stepProgress);
         long totalPlanned = steps.stream().mapToLong(LearningRoadmapStep::getQuestionTarget).sum();
         long completed = stepProgress.stream().mapToLong(RoadmapStepProgress::completedQuestions).sum();
         String currentStepKey = stepProgress.stream()
@@ -316,23 +401,30 @@ public class LearningRoadmapService {
                 roadmap.getId(), roadmap.getTitle(), roadmap.getTopic(), roadmap.getStatus(),
                 roadmap.getStartDate(), roadmap.getEndDate(), roadmap.getDurationWeeks(), roadmap.getQuestionsPerWeek(),
                 totalPlanned, completed, percentage(completed, totalPlanned), null,
-                totalPlanned > 0 && completed >= totalPlanned, List.of(),
+                !stepProgress.isEmpty() && stepProgress.stream().allMatch(step -> "COMPLETED".equals(step.status())), List.of(),
                 roadmap.getSourceType(), roadmap.getDescription(), currentStepKey, stepProgress, majorTopics,
                 sourceDocumentId(roadmap), sourceDocumentTitle(roadmap), sourceDocumentUri(roadmap)
         );
     }
 
     private RoadmapStepProgress toStepProgress(LearningRoadmapStep step, long rawCompleted,
-                                                Set<String> completedKeys) {
+                                                Set<String> completedKeys,
+                                                List<LearningObjective> objectives,
+                                                Map<Long, long[]> objectiveProgressById) {
         long completed = Math.min(rawCompleted, step.getQuestionTarget());
+        long additionalPracticeQuestions = Math.max(0, rawCompleted - step.getQuestionTarget());
         List<String> prerequisiteKeys = step.getPrerequisites().stream()
                 .map(LearningRoadmapStep::getStepKey)
                 .sorted()
                 .toList();
         boolean prerequisitesCompleted = prerequisiteKeys.stream().allMatch(completedKeys::contains);
         String status;
-        if (completed >= step.getQuestionTarget()) {
+        boolean goalsSatisfied = completed >= step.getQuestionTarget();
+        boolean advanceConfirmed = step.getAdvanceConfirmedAt() != null;
+        if (goalsSatisfied && advanceConfirmed) {
             status = "COMPLETED";
+        } else if (goalsSatisfied) {
+            status = "AWAITING_DECISION";
         } else if (!prerequisitesCompleted) {
             status = "LOCKED";
         } else if (completed == 0) {
@@ -343,7 +435,11 @@ public class LearningRoadmapService {
         return new RoadmapStepProgress(
                 step.getId(), step.getStepKey(), step.getTitle(), step.getDescription(), step.getTopic(),
                 step.getQuestionTarget(), completed, percentage(completed, step.getQuestionTarget()), status,
-                prerequisiteKeys
+                prerequisiteKeys,
+                objectives.stream()
+                        .map(objective -> toObjectiveProgress(objective, objectiveProgressById.get(objective.getId())))
+                        .toList(),
+                additionalPracticeQuestions, advanceConfirmed, "AWAITING_DECISION".equals(status)
         );
     }
 
@@ -397,8 +493,9 @@ public class LearningRoadmapService {
     }
 
     private List<RoadmapMajorTopicProgress> toMajorTopicProgress(List<LearningRoadmapStep> steps,
-                                                                 Map<Long, Long> completedByStepId,
-                                                                 Set<String> completedKeys) {
+                                                                 List<RoadmapStepProgress> stepProgress) {
+        Map<Long, RoadmapStepProgress> progressByStepId = stepProgress.stream()
+                .collect(Collectors.toMap(RoadmapStepProgress::stepId, progress -> progress));
         Map<String, List<LearningRoadmapStep>> byMajorTopic = steps.stream().collect(Collectors.groupingBy(
                 LearningRoadmapStep::getMajorTopicKey,
                 LinkedHashMap::new,
@@ -407,7 +504,7 @@ public class LearningRoadmapService {
         return byMajorTopic.values().stream().map(atomicSteps -> {
             LearningRoadmapStep first = atomicSteps.getFirst();
             List<RoadmapStepProgress> atomicProgress = atomicSteps.stream()
-                    .map(step -> toStepProgress(step, completedByStepId.getOrDefault(step.getId(), 0L), completedKeys))
+                    .map(step -> progressByStepId.get(step.getId()))
                     .toList();
             long target = atomicSteps.stream().mapToLong(LearningRoadmapStep::getQuestionTarget).sum();
             long completed = atomicProgress.stream().mapToLong(RoadmapStepProgress::completedQuestions).sum();
@@ -427,7 +524,8 @@ public class LearningRoadmapService {
                     hasSubtopics ? null : first.getId(),
                     first.getMajorTopicKey(), first.getMajorTopicTitle(), first.getMajorTopicDescription(),
                     first.getMajorTopicTopic(), (int) target, completed, percentage(completed, target), status,
-                    prerequisiteKeys, subtopics
+                    prerequisiteKeys, subtopics,
+                    hasSubtopics ? List.of() : atomicProgress.getFirst().learningObjectives()
             );
         }).toList();
     }
@@ -435,12 +533,23 @@ public class LearningRoadmapService {
     private RoadmapSubtopicProgress toSubtopicProgress(LearningRoadmapStep step, RoadmapStepProgress progress) {
         return new RoadmapSubtopicProgress(
                 step.getId(), step.getSubtopicKey(), step.getSubtopicTitle(), step.getDescription(), step.getTopic(),
-                step.getQuestionTarget(), progress.completedQuestions(), progress.progressPercent(), progress.status()
+                step.getQuestionTarget(), progress.completedQuestions(), progress.progressPercent(), progress.status(),
+                progress.learningObjectives()
+        );
+    }
+
+    private RoadmapLearningObjectiveProgress toObjectiveProgress(LearningObjective objective, long[] rawProgress) {
+        long covered = rawProgress == null ? 0 : rawProgress[0];
+        long correct = rawProgress == null ? 0 : rawProgress[1];
+        return new RoadmapLearningObjectiveProgress(
+                objective.getId(), objective.getObjectiveKey(), objective.getTitle(), objective.getDescription(),
+                objective.getImportance(), objective.getTargetQuestionCount(), covered, correct,
+                percentage(Math.min(covered, objective.getTargetQuestionCount()), objective.getTargetQuestionCount())
         );
     }
 
     private String majorTopicStatus(List<RoadmapStepProgress> atomicProgress, long completed, long target) {
-        if (completed >= target) return "COMPLETED";
+        if (atomicProgress.stream().allMatch(step -> "COMPLETED".equals(step.status()))) return "COMPLETED";
         if (atomicProgress.stream().allMatch(step -> "LOCKED".equals(step.status()))) return "LOCKED";
         if (completed > 0 || atomicProgress.stream().anyMatch(step -> "IN_PROGRESS".equals(step.status()))) {
             return "IN_PROGRESS";
@@ -471,13 +580,14 @@ public class LearningRoadmapService {
     }
 
     private void validateDefinition(RoadmapDefinitionRequest request) {
-        if (request == null || !("1.0".equals(request.version()) || "1.1".equals(request.version())) || isBlank(request.title())
+        if (request == null || !("1.0".equals(request.version()) || "1.1".equals(request.version())
+                || "1.2".equals(request.version())) || isBlank(request.title())
                 || request.title().length() > 120 || isBlank(request.topic()) || request.topic().length() > 120
                 || (request.description() != null && request.description().length() > 2000)
                 || request.durationWeeks() == null || request.durationWeeks() < 1 || request.durationWeeks() > 52
                 || request.steps() == null || request.steps().isEmpty()
                 || request.steps().size() > SAFETY_MAX_MAJOR_TOPICS) {
-            throw new IllegalArgumentException("버전 1.0 또는 1.1의 로드맵 이름, 주제, 기간과 대주제를 확인해주세요.");
+            throw new IllegalArgumentException("버전 1.0, 1.1 또는 1.2의 로드맵 이름, 주제, 기간과 대주제를 확인해주세요.");
         }
         Map<String, RoadmapStepDefinition> byKey = new LinkedHashMap<>();
         for (RoadmapStepDefinition step : request.steps()) {
@@ -497,6 +607,11 @@ public class LearningRoadmapService {
                 throw new IllegalArgumentException("단계 식별자 '" + key + "'가 중복되었습니다.");
             }
             validateSubtopics(step);
+            if (step.safeSubtopics().isEmpty()) {
+                validateLearningObjectives(step.safeLearningObjectives(), step.questionTarget(), step.key());
+            } else if (!step.safeLearningObjectives().isEmpty()) {
+                throw new IllegalArgumentException("소주제가 있는 대주제에는 대주제 학습 목표를 함께 둘 수 없습니다.");
+            }
         }
         int atomicStepCount = request.steps().stream()
                 .mapToInt(step -> Math.max(1, step.safeSubtopics().size()))
@@ -546,6 +661,10 @@ public class LearningRoadmapService {
             if (!keys.add(subtopic.key().trim())) {
                 throw new IllegalArgumentException("대주제 '" + majorTopic.key().trim() + "'의 소주제 식별자가 중복되었습니다.");
             }
+            validateLearningObjectives(
+                    subtopic.safeLearningObjectives(), subtopic.questionTarget(),
+                    majorTopic.key().trim() + "/" + subtopic.key().trim()
+            );
         }
         if (!majorTopic.safeSubtopics().isEmpty()) {
             int subtopicQuestionTarget = majorTopic.safeSubtopics().stream()
@@ -555,6 +674,51 @@ public class LearningRoadmapService {
                 throw new IllegalArgumentException("대주제 '" + majorTopic.key().trim()
                         + "'의 목표 문제 수는 소주제 목표 문제 수의 합과 같아야 합니다.");
             }
+        }
+    }
+
+    private void validateLearningObjectives(List<RoadmapLearningObjectiveDefinition> objectives,
+                                            int questionTarget, String unitKey) {
+        if (objectives.isEmpty()) return;
+        if (objectives.size() > SAFETY_MAX_OBJECTIVES_PER_UNIT) {
+            throw new IllegalArgumentException("학습 단위 '" + unitKey + "'의 학습 목표가 너무 많습니다.");
+        }
+        Set<String> keys = new HashSet<>();
+        int allocatedQuestions = 0;
+        for (RoadmapLearningObjectiveDefinition objective : objectives) {
+            if (objective == null || isBlank(objective.key()) || !OBJECTIVE_KEY.matcher(objective.key().trim()).matches()
+                    || isBlank(objective.title()) || objective.title().trim().length() > 120
+                    || (objective.description() != null && objective.description().length() > 500)
+                    || !("CORE".equals(objective.normalizedImportance())
+                    || "SUPPORTING".equals(objective.normalizedImportance()))
+                    || objective.targetQuestionCount() == null || objective.targetQuestionCount() < 1
+                    || objective.targetQuestionCount() > SAFETY_MAX_QUESTIONS_PER_OBJECTIVE) {
+                throw new IllegalArgumentException("학습 단위 '" + unitKey + "'의 필수 학습 목표를 확인해주세요.");
+            }
+            if (!keys.add(objective.key().trim())) {
+                throw new IllegalArgumentException("학습 단위 '" + unitKey + "'의 학습 목표 식별자가 중복되었습니다.");
+            }
+            allocatedQuestions += objective.targetQuestionCount();
+        }
+        if (allocatedQuestions != questionTarget) {
+            throw new IllegalArgumentException("학습 단위 '" + unitKey
+                    + "'의 목표 문제 수는 필수 학습 목표별 문제 수의 합과 같아야 합니다.");
+        }
+    }
+
+    private void saveLearningObjectives(LearningRoadmapStep step,
+                                        List<RoadmapLearningObjectiveDefinition> definitions) {
+        for (int index = 0; index < definitions.size(); index++) {
+            RoadmapLearningObjectiveDefinition definition = definitions.get(index);
+            learningObjectiveRepository.save(new LearningObjective(
+                    step,
+                    definition.key().trim(),
+                    definition.title().trim(),
+                    blankToNull(definition.description()),
+                    definition.normalizedImportance(),
+                    definition.targetQuestionCount(),
+                    index + 1
+            ));
         }
     }
 

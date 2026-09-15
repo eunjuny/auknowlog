@@ -18,7 +18,9 @@
 | 자료를 넣어도 생성 근거가 남지 않음 | 자료·청크 저장 | 입력 자료를 최대 1,200자 청크로 나누고 생성 요청의 컨텍스트로 전달. 문항은 `sourceReferences`를 반환 | OpenAI 요청은 MockRestServiceServer로 스키마와 프롬프트를 검증 |
 | AI 호출 비용·실패 원인을 운영에서 알 수 없음 | Actuator/Micrometer + AI 사용량 원장 | 지연·결과·토큰은 메트릭으로, 생성 호출은 `ai_generation_log`로 저장 | Responses API 사용량을 모킹해 토큰 메트릭과 원장 호출을 단위 테스트 |
 | 정형화된 객관식 퀴즈에 고성능 모델 비용이 과도할 수 있음 | GPT-5.4 mini + `reasoning-effort=low` | 기본 모델을 설정으로 분리하고, 구조화 출력·서버 검증·제한 재시도로 품질 하한을 유지 | Responses 요청의 모델·추론 수준, 사용량 메트릭과 원장 기록을 모킹 테스트 |
-| DDL 자동 변경은 환경별 결과가 달라짐 | Flyway | 스키마를 V1~V3 마이그레이션으로 관리하고 Hibernate는 `validate`만 수행 | H2에서 V1~V2, Testcontainers의 PostgreSQL에서 V1~V3 검증 |
+| DDL 자동 변경은 환경별 결과가 달라짐 | Flyway | 스키마를 V1~V16 마이그레이션으로 관리하고 Hibernate는 `validate`만 수행 | H2는 빠른 도메인 테스트, Testcontainers PostgreSQL은 V1~V16과 pgvector·학습 목표·평가 FK·로드맵 진행 확정 상태 검증 |
+| AI가 만든 품질 점수만으로 운영 기준을 정하면 자기평가 편향이 생김 | Human-in-the-loop 평가 저장 | AI는 기준 목표·문항 판정 초안을 만들고 애매하거나 부정적인 사례만 사람이 확정. 정밀도·재현율은 사람 라벨만 사용 | 평가 계약 모킹 테스트, 실제 pgvector 문제 쌍 저장과 화면의 잠정/검증 지표 분리 |
+| 외부 확인을 위해 URL·임시 비밀번호를 매번 수동 복사해야 함 | Spring Mail + Gmail SMTP | `quick-email`이 인증 검증을 마친 뒤 고정된 본인 수신자에게만 한 번 발송. SMTP는 STARTTLS(587), 자격 증명은 로컬 비밀 설정에 둔다 | SMTP 발송 서비스 단위 테스트, 인증 프록시 자체 테스트, 실제 Gmail SMTP 수동 발송 확인 |
 
 ## 비용 안전 장치
 

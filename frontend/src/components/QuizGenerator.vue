@@ -8,6 +8,7 @@ const props = defineProps({
     default: null
   }
 });
+const emit = defineEmits(['open-roadmap'])
 
 const topic = ref('');
 const numberOfQuestions = ref(5); // Default value
@@ -32,6 +33,8 @@ const gradingResults = ref({});
 const feedbackForms = ref({});
 const recommendationMessage = ref(null);
 const roadmapContext = ref(null);
+const roadmapDecision = ref(null);
+const roadmapDecisionLoading = ref(false);
 const reviewRegistrations = ref({});
 
 const feedbackTypes = [
@@ -71,7 +74,9 @@ watch(() => props.recommendedQuiz?.requestedAt, () => {
     ? {
         roadmapId: props.recommendedQuiz.roadmapId,
         roadmapStepId: props.recommendedQuiz.roadmapStepId || null,
-        topic: props.recommendedQuiz.topic
+        sourceId: props.recommendedQuiz.sourceId || null,
+        topic: props.recommendedQuiz.topic,
+        additionalPractice: props.recommendedQuiz.additionalPractice === true
       }
     : null;
   recommendationMessage.value = `학습 추천에 따라 “${props.recommendedQuiz.topic}” ${numberOfQuestions.value}문제를 준비했습니다. 생성 방식을 선택한 뒤 시작해주세요.`;
@@ -92,10 +97,13 @@ async function generateQuiz() {
   sourceMessage.value = null;
   feedbackForms.value = {};
   reviewRegistrations.value = {};
+  roadmapDecision.value = null;
   recommendationMessage.value = null;
 
   try {
-    let sourceId = null;
+    let sourceId = roadmapContext.value?.topic === topic.value.trim()
+      ? roadmapContext.value.sourceId
+      : null;
     if (sourceContent.value.trim()) {
       const sourceResponse = await axios.post('/api/sources', {
         title: sourceTitle.value.trim() || `${topic.value} 학습 자료`,
@@ -111,7 +119,10 @@ async function generateQuiz() {
       numberOfQuestions: numberOfQuestions.value,
       sourceId,
       roadmapId: roadmapContext.value?.topic === topic.value.trim() ? roadmapContext.value.roadmapId : null,
-      roadmapStepId: roadmapContext.value?.topic === topic.value.trim() ? roadmapContext.value.roadmapStepId : null
+      roadmapStepId: roadmapContext.value?.topic === topic.value.trim() ? roadmapContext.value.roadmapStepId : null,
+      additionalPractice: roadmapContext.value?.topic === topic.value.trim()
+        ? roadmapContext.value.additionalPractice === true
+        : false
     });
     quizResult.value = response.data;
   } catch (err) {
@@ -150,6 +161,7 @@ async function saveLearningAttempt() {
         attemptMessage.value = null;
         submissionMessage.value = `채점 완료 · ${result.correctAnswers}/${result.totalQuestions} 정답 · 풀이 기록 자동 저장됨` +
           (result.reviewScheduledCount > 0 ? ` · 오답 ${result.reviewScheduledCount}개는 내일 복습으로 예약됐습니다.` : '');
+        await loadRoadmapDecision();
         return;
       } catch (err) {
         if (retry === 0) {
@@ -163,6 +175,46 @@ async function saveLearningAttempt() {
     }
   } finally {
     attemptSaving.value = false;
+  }
+}
+
+async function loadRoadmapDecision() {
+  if (!roadmapContext.value?.roadmapId || !roadmapContext.value?.roadmapStepId) {
+    roadmapDecision.value = null;
+    return;
+  }
+  try {
+    const response = await axios.get(`/api/learning-roadmaps/${roadmapContext.value.roadmapId}`);
+    const step = (response.data.steps || []).find((item) => item.stepId === roadmapContext.value.roadmapStepId);
+    roadmapDecision.value = step?.awaitingDecision ? step : null;
+  } catch (err) {
+    console.warn('로드맵 다음 단계 선택 상태를 불러오지 못했습니다.', err);
+  }
+}
+
+async function continueRoadmapSubtopic() {
+  if (!roadmapContext.value || roadmapDecisionLoading.value) return;
+  roadmapDecisionLoading.value = true;
+  roadmapContext.value = { ...roadmapContext.value, additionalPractice: true };
+  numberOfQuestions.value = 5;
+  try {
+    await generateQuiz();
+  } finally {
+    roadmapDecisionLoading.value = false;
+  }
+}
+
+async function advanceRoadmapStep() {
+  if (!roadmapContext.value || roadmapDecisionLoading.value) return;
+  roadmapDecisionLoading.value = true;
+  try {
+    await axios.post(`/api/learning-roadmaps/${roadmapContext.value.roadmapId}/steps/${roadmapContext.value.roadmapStepId}/advance`);
+    roadmapDecision.value = null;
+    submissionMessage.value = '다음 단계 진행을 확정했습니다. 로드맵에서 다음 학습 단위를 선택해주세요.';
+  } catch (err) {
+    submissionMessage.value = '다음 단계 진행 처리 실패: ' + (err.response?.data?.message || err.message);
+  } finally {
+    roadmapDecisionLoading.value = false;
   }
 }
 
@@ -549,7 +601,7 @@ function cancelNextQuiz() {
         <div v-if="submissionMessage" class="result-summary">
           {{ submissionMessage }}
         </div>
-        <div class="quiz-actions">
+      <div class="quiz-actions">
           <button @click="submitQuiz" :disabled="loading || attemptSaving || attemptSaved || (!quizSubmitted && !isAllQuestionsAnswered())" class="submit-button">
             {{ attemptSaving ? '서버 채점 및 저장 중...' : attemptSaved ? '채점 및 기록 저장 완료' : quizSubmitted ? '채점·저장 다시 시도' : isAllQuestionsAnswered() ? '답안 제출' : `미응답 ${getUnansweredQuestionCount()}개` }}
           </button>
@@ -598,6 +650,16 @@ function cancelNextQuiz() {
           </div>
         </div>
       </div>
+      <section v-if="roadmapDecision && attemptSaved" class="roadmap-decision-card" aria-live="polite">
+        <p class="eyebrow">ROADMAP CHECKPOINT</p>
+        <h3>“{{ roadmapDecision.title }}”의 필수 학습 목표를 모두 다뤘습니다.</h3>
+        <p>같은 소주제를 더 연습하거나, 완료를 확정하고 로드맵의 다음 단계로 이동할 수 있습니다. 다음 단계는 확정하기 전까지 열리지 않습니다.</p>
+        <div class="roadmap-decision-actions">
+          <button type="button" class="secondary-button" :disabled="roadmapDecisionLoading" @click="continueRoadmapSubtopic">같은 소주제 추가 학습</button>
+          <button type="button" class="primary-button" :disabled="roadmapDecisionLoading" @click="advanceRoadmapStep">다음 단계로 진행</button>
+          <button type="button" class="text-button" :disabled="roadmapDecisionLoading" @click="emit('open-roadmap')">로드맵 보기</button>
+        </div>
+      </section>
     </div>
   </div>
 </template>
@@ -1051,6 +1113,25 @@ button:disabled {
   justify-content: center;
   margin-bottom: 20px;
 }
+
+.roadmap-decision-card {
+  display: grid;
+  gap: 9px;
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid #ebc6b8;
+  border-radius: 10px;
+  background: var(--accent-soft);
+}
+
+.roadmap-decision-card .eyebrow { margin: 0; color: var(--accent-strong); font-size: .72rem; font-weight: 800; letter-spacing: .08em; }
+.roadmap-decision-card h3, .roadmap-decision-card p:not(.eyebrow) { margin: 0; }
+.roadmap-decision-card p:not(.eyebrow) { color: var(--ink-soft); font-size: .88rem; }
+.roadmap-decision-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.roadmap-decision-actions button { width: auto; margin: 0; padding: 9px 12px; font-size: .82rem; }
+.roadmap-decision-actions .primary-button { color: #fff; border: 1px solid var(--ink); border-radius: 7px; background: var(--ink); font-weight: 750; }
+.roadmap-decision-actions .secondary-button { color: var(--ink); border: 1px solid var(--ink); border-radius: 7px; background: var(--surface); font-weight: 750; }
+.roadmap-decision-actions .text-button { padding-left: 2px; color: var(--accent-strong); border: 0; background: transparent; font-weight: 750; text-decoration: underline; }
 
 .submit-button {
   background-color: var(--ink);

@@ -18,9 +18,14 @@ public record QuizRequest(
         @Positive(message = "학습 로드맵 식별자는 양수여야 합니다.")
         Long roadmapId,
         @Positive(message = "학습 로드맵 단계 식별자는 양수여야 합니다.")
-        Long roadmapStepId
+        Long roadmapStepId,
+        Boolean additionalPractice
 ) {
     public QuizRequest(String topic, Integer numberOfQuestions) {
-        this(topic, numberOfQuestions, null, null, null);
+        this(topic, numberOfQuestions, null, null, null, false);
+    }
+
+    public QuizRequest(String topic, Integer numberOfQuestions, Long sourceId, Long roadmapId, Long roadmapStepId) {
+        this(topic, numberOfQuestions, sourceId, roadmapId, roadmapStepId, false);
     }
 }

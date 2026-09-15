@@ -1,5 +1,6 @@
 package com.auknowlog.backend.learning.entity;
 
+import com.auknowlog.backend.roadmap.entity.LearningObjective;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -40,11 +41,21 @@ public class LearningQuestion {
     @Column(name = "source_references", columnDefinition = "TEXT")
     private String sourceReferences;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "learning_objective_id")
+    private LearningObjective learningObjective;
+
     protected LearningQuestion() {
     }
 
     public LearningQuestion(LearningQuiz quiz, int questionOrder, String questionText, String options,
                             String correctAnswer, String explanation, String sourceReferences) {
+        this(quiz, questionOrder, questionText, options, correctAnswer, explanation, sourceReferences, null);
+    }
+
+    public LearningQuestion(LearningQuiz quiz, int questionOrder, String questionText, String options,
+                            String correctAnswer, String explanation, String sourceReferences,
+                            LearningObjective learningObjective) {
         this.quiz = quiz;
         this.questionOrder = questionOrder;
         this.questionText = questionText;
@@ -52,6 +63,7 @@ public class LearningQuestion {
         this.correctAnswer = correctAnswer;
         this.explanation = explanation;
         this.sourceReferences = sourceReferences;
+        this.learningObjective = learningObjective;
     }
 
     public Long getId() {
@@ -84,5 +96,9 @@ public class LearningQuestion {
 
     public String getSourceReferences() {
         return sourceReferences;
+    }
+
+    public LearningObjective getLearningObjective() {
+        return learningObjective;
     }
 }

@@ -5,8 +5,10 @@ import com.auknowlog.backend.quiz.dto.Question;
 import com.auknowlog.backend.quiz.dto.QuizRequest;
 import com.auknowlog.backend.quiz.dto.QuizResponse;
 import com.auknowlog.backend.quiz.dto.QuizViewResponse;
+import com.auknowlog.backend.quiz.dto.RoadmapQuizPlan;
 import com.auknowlog.backend.quiz.service.OpenAiQuizService;
 import com.auknowlog.backend.quiz.service.QuizGenerationService;
+import com.auknowlog.backend.roadmap.service.RoadmapQuizPlanningService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -29,13 +31,16 @@ public class QuizController {
     private final OpenAiQuizService openAiQuizService;
     private final QuizGenerationService quizGenerationService;
     private final LearningService learningService;
+    private final RoadmapQuizPlanningService roadmapQuizPlanningService;
 
     public QuizController(OpenAiQuizService openAiQuizService,
                           QuizGenerationService quizGenerationService,
-                          LearningService learningService) {
+                          LearningService learningService,
+                          RoadmapQuizPlanningService roadmapQuizPlanningService) {
         this.openAiQuizService = openAiQuizService;
         this.quizGenerationService = quizGenerationService;
         this.learningService = learningService;
+        this.roadmapQuizPlanningService = roadmapQuizPlanningService;
     }
 
     @Operation(summary = "새로운 퀴즈 생성", description = "주제와 문제 수를 기반으로 OpenAI를 통해 새로운 객관식 퀴즈를 생성합니다.")
@@ -57,24 +62,29 @@ public class QuizController {
     public QuizViewResponse createDummyQuiz(
             @Parameter(description = "퀴즈 생성 요청 객체 (주제 및 문제 수 포함)", required = true)
             @Valid @RequestBody QuizRequest request) {
-        int requested = (request.numberOfQuestions() != null) ? request.numberOfQuestions() : 5;
-        int questionsToGenerate = Math.max(1, Math.min(20, requested));
-        QuizResponse response = createDummyQuizResponse(request.topic(), questionsToGenerate);
-        QuizResponse storedQuiz = learningService.storeGeneratedQuiz(request.topic().trim(), request.sourceId(), request.roadmapId(),
+        RoadmapQuizPlan plan = roadmapQuizPlanningService.plan(request);
+        QuizResponse response = createDummyQuizResponse(request.topic(), plan);
+        QuizResponse storedQuiz = learningService.storeGeneratedQuiz(request.topic().trim(), plan.sourceId(), request.roadmapId(),
                 request.roadmapStepId(), response);
         return QuizViewResponse.from(storedQuiz);
     }
 
-    private QuizResponse createDummyQuizResponse(String topic, int numberOfQuestions) {
+    private QuizResponse createDummyQuizResponse(String topic, RoadmapQuizPlan plan) {
         String quizTitle = topic != null ? topic + " 퀴즈" : "더미 퀴즈";
+        List<String> objectiveKeys = plan.objectiveAllocations().stream()
+                .flatMap(allocation -> java.util.stream.IntStream.range(0, allocation.questionCount())
+                        .mapToObj(ignored -> allocation.key()))
+                .toList();
 
         List<Question> questions = new ArrayList<>();
-        for (int i = 1; i <= numberOfQuestions; i++) {
+        for (int i = 1; i <= plan.questionCount(); i++) {
             questions.add(new Question(
                 "더미 문제 " + i + ": " + topic + "에 대한 질문입니다.",
                 List.of("선택지 A", "선택지 B", "선택지 C", "선택지 D"),
                 "선택지 A",
-                "이것은 더미 데이터로 생성된 문제입니다. 정답은 선택지 A입니다."
+                "이것은 더미 데이터로 생성된 문제입니다. 정답은 선택지 A입니다.",
+                List.of(),
+                objectiveKeys.isEmpty() ? null : objectiveKeys.get(i - 1)
             ));
         }
 

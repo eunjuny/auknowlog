@@ -41,9 +41,8 @@ public class DocumentController {
     @PostMapping(value = "/save-quiz-markdown-raw", consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<String> saveQuizMarkdownRaw(@RequestBody java.util.Map<String, Object> payload) {
         try {
-            String title = String.valueOf(payload.getOrDefault("quizTitle", "퀴즈 결과"));
             String markdown = openAiQuizService.renderQuizMarkdownLocally(payload);
-            String filePath = documentService.saveMarkdownContent(title, markdown);
+            String filePath = documentService.saveQuizMarkdown(quizId(payload), markdown);
             return ResponseEntity.ok("Quiz saved successfully to: " + filePath);
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body("Failed to save quiz: " + e.getMessage());
@@ -71,11 +70,19 @@ public class DocumentController {
         try {
             String title = String.valueOf(payload.getOrDefault("quizTitle", "퀴즈 결과"));
             String markdown = openAiQuizService.renderQuizMarkdownLocally(payload);
-            String filePath = documentService.saveMarkdownContent(title, markdown);
+            String filePath = documentService.saveQuizMarkdown(quizId(payload), markdown);
             String msg = gitService.commitAndPush(filePath, "chore: save quiz markdown (" + title + ")", "notes", "main");
             return ResponseEntity.ok("Git 저장 완료: " + msg + " | " + filePath);
         } catch (Exception e) {
             return ResponseEntity.internalServerError().body("Git 저장 실패: " + e.getMessage());
         }
+    }
+
+    private Long quizId(java.util.Map<String, Object> payload) {
+        Object value = payload.get("quizId");
+        if (!(value instanceof Number number)) {
+            throw new IllegalArgumentException("서버에 저장된 퀴즈 식별자가 필요합니다.");
+        }
+        return number.longValue();
     }
 }

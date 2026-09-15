@@ -12,6 +12,7 @@ import com.auknowlog.backend.roadmap.service.LearningRoadmapService;
 import com.auknowlog.backend.roadmap.service.AiRoadmapGenerationService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -73,5 +74,15 @@ public class LearningRoadmapController {
     @GetMapping("/{roadmapId}")
     public LearningRoadmapSummary detail(@PathVariable Long roadmapId) {
         return learningRoadmapService.getById(roadmapId);
+    }
+
+    @PostMapping("/{roadmapId}/steps/{stepId}/advance")
+    public LearningRoadmapSummary advanceStep(@PathVariable Long roadmapId, @PathVariable Long stepId) {
+        return learningRoadmapService.confirmStepAdvance(roadmapId, stepId);
+    }
+
+    @DeleteMapping("/{roadmapId}")
+    public void delete(@PathVariable Long roadmapId) {
+        learningRoadmapService.deleteRoadmap(roadmapId);
     }
 }

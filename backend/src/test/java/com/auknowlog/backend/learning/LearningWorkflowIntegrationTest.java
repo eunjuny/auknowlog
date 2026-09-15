@@ -39,7 +39,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "spring.datasource.username=sa",
         "spring.datasource.password=",
         "spring.flyway.target=2",
-        // V3은 H2가 지원하지 않는 pgvector 확장이다. V4~V9 스키마는 H2 전용 보조 스크립트로 검증한다.
+        // V3은 H2가 지원하지 않는 pgvector 확장이다. V4~V13 관계형 스키마는 H2 전용 보조 스크립트로 검증한다.
         "spring.sql.init.mode=always",
         "spring.sql.init.schema-locations=classpath:h2-learning-schema.sql",
         "spring.jpa.hibernate.ddl-auto=validate",
@@ -540,16 +540,20 @@ class LearningWorkflowIntegrationTest {
                                 """.formatted(stageQuizId)))
                 .andExpect(status().isOk());
 
-        // 첫 소주제를 완료하면 같은 대주제의 다음 소주제만 잠금 해제된다.
+        // 목표를 채워도 사용자가 다음 단계 진행을 확정하기 전에는 다음 소주제가 잠긴다.
         mockMvc.perform(get("/api/learning-roadmaps/{roadmapId}", importedRoadmapId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.progressPercent").value(25))
-                .andExpect(jsonPath("$.steps[0].status").value("COMPLETED"))
-                .andExpect(jsonPath("$.steps[1].status").value("READY"))
+                .andExpect(jsonPath("$.steps[0].status").value("AWAITING_DECISION"))
+                .andExpect(jsonPath("$.steps[1].status").value("LOCKED"))
                 .andExpect(jsonPath("$.steps[2].status").value("LOCKED"))
                 .andExpect(jsonPath("$.majorTopics[0].status").value("IN_PROGRESS"))
-                .andExpect(jsonPath("$.majorTopics[0].subtopics[1].status").value("READY"))
-                .andExpect(jsonPath("$.currentStepKey").value("foundation__service"));
+                .andExpect(jsonPath("$.majorTopics[0].subtopics[1].status").value("LOCKED"));
+
+        mockMvc.perform(post("/api/learning-roadmaps/{roadmapId}/steps/{stepId}/advance", importedRoadmapId, podStepId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.steps[0].status").value("COMPLETED"))
+                .andExpect(jsonPath("$.steps[1].status").value("READY"));
 
         String serviceQuizResponse = mockMvc.perform(post("/api/quizzes/dummy")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -578,10 +582,16 @@ class LearningWorkflowIntegrationTest {
                                 """.formatted(serviceQuizId)))
                 .andExpect(status().isOk());
 
-        // 모든 소주제를 완료해야 다음 대주제가 잠금 해제된다.
+        // 두 번째 소주제도 명시적으로 진행을 확정해야 다음 대주제가 잠금 해제된다.
         mockMvc.perform(get("/api/learning-roadmaps/{roadmapId}", importedRoadmapId))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.progressPercent").value(50))
+                .andExpect(jsonPath("$.steps[1].status").value("AWAITING_DECISION"))
+                .andExpect(jsonPath("$.majorTopics[0].status").value("IN_PROGRESS"))
+                .andExpect(jsonPath("$.majorTopics[1].status").value("LOCKED"));
+
+        mockMvc.perform(post("/api/learning-roadmaps/{roadmapId}/steps/{stepId}/advance", importedRoadmapId, serviceStepId))
+                .andExpect(status().isOk())
                 .andExpect(jsonPath("$.majorTopics[0].status").value("COMPLETED"))
                 .andExpect(jsonPath("$.majorTopics[1].status").value("READY"))
                 .andExpect(jsonPath("$.currentStepKey").value("network"));
@@ -601,7 +611,7 @@ class LearningWorkflowIntegrationTest {
         long networkQuizId = new com.fasterxml.jackson.databind.ObjectMapper()
                 .readTree(networkQuizResponse).path("quizId").asLong();
 
-        // 마지막 학습 목표를 달성한 제출 트랜잭션에서 로드맵이 완료 상태로 전환된다.
+        // 마지막 목표도 진행을 확정한 뒤에만 로드맵 완료 상태로 전환된다.
         mockMvc.perform(post("/api/learning-attempts")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -614,6 +624,10 @@ class LearningWorkflowIntegrationTest {
                                 }
                                 """.formatted(networkQuizId)))
                 .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/learning-roadmaps/{roadmapId}/steps/{stepId}/advance", importedRoadmapId, networkStepId))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("COMPLETED"));
 
         mockMvc.perform(get("/api/learning-roadmaps"))
                 .andExpect(status().isOk())

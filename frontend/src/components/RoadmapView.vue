@@ -15,6 +15,7 @@ const durationWeeks = ref(4)
 const steps = ref(defaultSteps())
 const inProgressRoadmaps = ref([])
 const completedRoadmaps = ref([])
+const roadmapListTab = ref('in-progress')
 const expandedRoadmapId = ref(null)
 const loading = ref(false)
 const saving = ref(false)
@@ -34,37 +35,59 @@ const message = ref(null)
 
 function defaultSteps() {
   return [
-    { key: 'foundation', title: '기초', description: '', topic: '', questionTarget: 5, dependsOn: [], subtopics: [] },
-    { key: 'operations', title: '운영', description: '', topic: '', questionTarget: 5, dependsOn: ['foundation'], subtopics: [] }
+    { key: 'foundation', title: '기초', description: '', topic: '', questionTarget: 5, dependsOn: [], subtopics: [], learningObjectives: [] },
+    { key: 'operations', title: '운영', description: '', topic: '', questionTarget: 5, dependsOn: ['foundation'], subtopics: [], learningObjectives: [] }
   ]
+}
+
+function objectiveTarget(unit) {
+  return unit.learningObjectives?.length
+    ? unit.learningObjectives.reduce((sum, objective) => sum + Math.max(1, Math.min(5, Number(objective.targetQuestionCount))), 0)
+    : Math.max(1, Math.min(30, Number(unit.questionTarget)))
+}
+
+function validObjectives(unit) {
+  if (!unit.learningObjectives?.length) return true
+  return unit.learningObjectives.length <= 10
+    && unit.learningObjectives.every((objective) => objective.title.trim()
+      && Number(objective.targetQuestionCount) >= 1
+      && Number(objective.targetQuestionCount) <= 5)
+    && objectiveTarget(unit) <= 30
 }
 
 const canCreate = computed(() => topic.value.trim()
   && steps.value.length > 0
   && steps.value.every((step) => step.title.trim()
-    && (step.subtopics.length > 0 || (Number(step.questionTarget) >= 1 && Number(step.questionTarget) <= 20))
+    && (step.subtopics.length > 0 || (Number(step.questionTarget) >= 1 && Number(step.questionTarget) <= 30))
+    && (step.subtopics.length > 0 || validObjectives(step))
     && step.subtopics.every((subtopic) => subtopic.title.trim()
-      && Number(subtopic.questionTarget) >= 1 && Number(subtopic.questionTarget) <= 20)))
+      && Number(subtopic.questionTarget) >= 1 && Number(subtopic.questionTarget) <= 30
+      && validObjectives(subtopic))))
 
 const selectedSource = computed(() => learningSources.value
   .find((source) => source.sourceId === Number(selectedSourceId.value)) || null)
 
-const roadmapGroups = computed(() => [
+const roadmapListTabs = computed(() => [
   {
     key: 'in-progress',
+    label: '진행 중',
     title: '진행 중인 로드맵',
-    description: '여러 학습 로드맵을 동시에 진행할 수 있습니다.',
-    emptyMessage: '진행 중인 로드맵이 없습니다.',
+    description: '학습을 이어갈 로드맵을 선택하고, 현재 단계에서 바로 시작하세요.',
+    emptyMessage: '진행 중인 로드맵이 없습니다. 아래에서 새 로드맵을 만들어보세요.',
     items: inProgressRoadmaps.value
   },
   {
     key: 'completed',
+    label: '완료됨',
     title: '완료한 로드맵',
-    description: '전체 학습 목표를 달성한 로드맵을 따로 보관합니다.',
+    description: '완료한 학습 경로를 보관하고 진행 내용과 단계를 다시 확인할 수 있습니다.',
     emptyMessage: '완료한 로드맵이 아직 없습니다.',
     items: completedRoadmaps.value
   }
 ])
+
+const selectedRoadmapList = computed(() => roadmapListTabs.value
+  .find((tab) => tab.key === roadmapListTab.value) || roadmapListTabs.value[0])
 
 function applyInitialRoadmap() {
   if (!props.initialRoadmap?.topic) return
@@ -93,7 +116,7 @@ function formatDate(value) {
 
 function statusLabel(status) {
   return {
-    READY: '시작 가능', IN_PROGRESS: '학습 중', LOCKED: '잠김', COMPLETED: '완료',
+    READY: '시작 가능', IN_PROGRESS: '학습 중', LOCKED: '잠김', AWAITING_DECISION: '다음 단계 선택', COMPLETED: '완료',
     CURRENT: '이번 주', UPCOMING: '예정', OVERDUE: '미달성'
   }[status] ?? status
 }
@@ -150,7 +173,7 @@ function addStep() {
   const previous = steps.value.at(-1)
   steps.value.push({
     key: nextStepKey(), title: '', description: '', topic: topic.value,
-    questionTarget: 5, dependsOn: previous ? [previous.key] : [], subtopics: []
+    questionTarget: 5, dependsOn: previous ? [previous.key] : [], subtopics: [], learningObjectives: []
   })
 }
 
@@ -162,8 +185,48 @@ function nextSubtopicKey(step) {
 
 function addSubtopic(step) {
   step.subtopics.push({
-    key: nextSubtopicKey(step), title: '', description: '', topic: '', questionTarget: 5
+    key: nextSubtopicKey(step), title: '', description: '', topic: '', questionTarget: 5, learningObjectives: []
   })
+}
+
+function nextObjectiveKey(unit) {
+  let number = (unit.learningObjectives?.length || 0) + 1
+  while (unit.learningObjectives?.some((objective) => objective.key === `objective-${number}`)) number += 1
+  return `objective-${number}`
+}
+
+function addLearningObjective(unit) {
+  if (!unit.learningObjectives) unit.learningObjectives = []
+  unit.learningObjectives.push({
+    key: nextObjectiveKey(unit), title: '', description: '', importance: 'CORE', targetQuestionCount: 1
+  })
+  unit.questionTarget = objectiveTarget(unit)
+}
+
+function removeLearningObjective(unit, index) {
+  unit.learningObjectives.splice(index, 1)
+  if (unit.learningObjectives.length) unit.questionTarget = objectiveTarget(unit)
+}
+
+function moveLearningObjective(unit, index, offset) {
+  const destination = index + offset
+  if (destination < 0 || destination >= unit.learningObjectives.length) return
+  const [moved] = unit.learningObjectives.splice(index, 1)
+  unit.learningObjectives.splice(destination, 0, moved)
+}
+
+function updateObjectiveTarget(unit) {
+  if (unit.learningObjectives?.length) unit.questionTarget = objectiveTarget(unit)
+}
+
+function objectiveDefinition(objective) {
+  return {
+    key: objective.key,
+    title: objective.title.trim(),
+    description: objective.description?.trim() || null,
+    importance: objective.importance || 'CORE',
+    targetQuestionCount: Math.max(1, Math.min(5, Number(objective.targetQuestionCount)))
+  }
 }
 
 function removeSubtopic(step, index) {
@@ -206,7 +269,7 @@ function toggleDependency(step, prerequisiteKey) {
 
 function roadmapDefinition() {
   return {
-    version: '1.1',
+    version: '1.2',
     title: title.value.trim() || `${topic.value.trim()} 단계별 학습 로드맵`,
     topic: topic.value.trim(),
     description: description.value.trim() || null,
@@ -217,15 +280,19 @@ function roadmapDefinition() {
       description: step.description.trim() || null,
       topic: step.topic.trim() || topic.value.trim(),
       questionTarget: step.subtopics.length
-        ? step.subtopics.reduce((sum, subtopic) => sum + Math.max(1, Math.min(20, Number(subtopic.questionTarget))), 0)
-        : Math.max(1, Math.min(20, Number(step.questionTarget))),
+        ? step.subtopics.reduce((sum, subtopic) => sum + objectiveTarget(subtopic), 0)
+        : objectiveTarget(step),
       dependsOn: [...step.dependsOn],
+      learningObjectives: step.subtopics.length
+        ? []
+        : (step.learningObjectives || []).map(objectiveDefinition),
       subtopics: step.subtopics.map((subtopic) => ({
         key: subtopic.key,
         title: subtopic.title.trim(),
         description: subtopic.description.trim() || null,
         topic: subtopic.topic.trim() || null,
-        questionTarget: Math.max(1, Math.min(20, Number(subtopic.questionTarget)))
+        questionTarget: objectiveTarget(subtopic),
+        learningObjectives: (subtopic.learningObjectives || []).map(objectiveDefinition)
       }))
     }))
   }
@@ -321,12 +388,26 @@ function applyAiPreview(preview) {
     topic: step.topic || '',
     questionTarget: Number(step.questionTarget),
     dependsOn: [...(step.dependsOn || [])],
+    learningObjectives: (step.learningObjectives || []).map((objective) => ({
+      key: objective.key,
+      title: objective.title,
+      description: objective.description || '',
+      importance: objective.importance || 'CORE',
+      targetQuestionCount: Number(objective.targetQuestionCount)
+    })),
     subtopics: (step.subtopics || []).map((subtopic) => ({
       key: subtopic.key,
       title: subtopic.title,
       description: subtopic.description || '',
       topic: subtopic.topic || '',
-      questionTarget: Number(subtopic.questionTarget)
+      questionTarget: Number(subtopic.questionTarget),
+      learningObjectives: (subtopic.learningObjectives || []).map((objective) => ({
+        key: objective.key,
+        title: objective.title,
+        description: objective.description || '',
+        importance: objective.importance || 'CORE',
+        targetQuestionCount: Number(objective.targetQuestionCount)
+      }))
     }))
   }))
   aiPreviewSource.value = {
@@ -350,7 +431,7 @@ function cancelAiPreview() {
 
 function downloadSample() {
   const sample = {
-    version: '1.1',
+    version: '1.2',
     title: 'Kubernetes 단계별 학습 로드맵',
     topic: 'Kubernetes',
     description: '기초 개념을 완료한 뒤 네트워크와 운영 단계로 진행합니다.',
@@ -359,13 +440,24 @@ function downloadSample() {
       {
         key: 'foundation', title: 'Kubernetes 기초', description: '핵심 오브젝트 이해', topic: 'Kubernetes 기초', questionTarget: 15, dependsOn: [],
         subtopics: [
-          { key: 'pod', title: 'Pod', description: '컨테이너 실행 단위', topic: 'Kubernetes Pod', questionTarget: 5 },
-          { key: 'service', title: 'Service', description: '안정적인 네트워크 접근', topic: 'Kubernetes Service', questionTarget: 5 },
-          { key: 'deployment', title: 'Deployment', description: '선언적 배포와 복제본 관리', topic: 'Kubernetes Deployment', questionTarget: 5 }
+          { key: 'pod', title: 'Pod', description: '컨테이너 실행 단위', topic: 'Kubernetes Pod', questionTarget: 5, learningObjectives: [
+            { key: 'pod-lifecycle', title: 'Pod 생명주기', description: 'Pod 상태와 재시작 동작을 구분합니다.', importance: 'CORE', targetQuestionCount: 3 },
+            { key: 'pod-probe', title: '상태 프로브', description: 'liveness, readiness, startup probe의 역할을 구분합니다.', importance: 'CORE', targetQuestionCount: 2 }
+          ] },
+          { key: 'service', title: 'Service', description: '안정적인 네트워크 접근', topic: 'Kubernetes Service', questionTarget: 5, learningObjectives: [
+            { key: 'service-types', title: 'Service 유형', description: 'ClusterIP, NodePort, LoadBalancer의 쓰임을 판단합니다.', importance: 'CORE', targetQuestionCount: 3 },
+            { key: 'service-discovery', title: '서비스 디스커버리', description: 'DNS와 selector 기반 연결을 이해합니다.', importance: 'CORE', targetQuestionCount: 2 }
+          ] },
+          { key: 'deployment', title: 'Deployment', description: '선언적 배포와 복제본 관리', topic: 'Kubernetes Deployment', questionTarget: 5, learningObjectives: [
+            { key: 'deployment-rollout', title: '선언적 롤아웃', description: 'ReplicaSet과 롤링 업데이트 동작을 이해합니다.', importance: 'CORE', targetQuestionCount: 3 },
+            { key: 'deployment-recovery', title: '배포 복구', description: '롤백과 상태 확인 절차를 판단합니다.', importance: 'SUPPORTING', targetQuestionCount: 2 }
+          ] }
         ]
       },
       {
-        key: 'operations', title: 'Kubernetes 운영', description: '운영과 장애 대응', topic: 'Kubernetes 운영', questionTarget: 5, dependsOn: ['foundation'], subtopics: []
+        key: 'operations', title: 'Kubernetes 운영', description: '운영과 장애 대응', topic: 'Kubernetes 운영', questionTarget: 5, dependsOn: ['foundation'], subtopics: [], learningObjectives: [
+          { key: 'troubleshooting', title: '장애 진단 순서', description: '이벤트, 로그, 메트릭을 이용해 원인을 좁힙니다.', importance: 'CORE', targetQuestionCount: 5 }
+        ]
       }
     ]
   }
@@ -392,19 +484,74 @@ function toggleRoadmap(roadmapId) {
   expandedRoadmapId.value = expandedRoadmapId.value === roadmapId ? null : roadmapId
 }
 
+function selectRoadmapListTab(tab) {
+  roadmapListTab.value = tab
+  const visible = selectedRoadmapList.value.items.some((roadmap) => roadmap.roadmapId === expandedRoadmapId.value)
+  if (!visible) expandedRoadmapId.value = null
+}
+
+async function deleteRoadmap(roadmap) {
+  const confirmed = window.confirm(
+    `“${roadmap.title}” 로드맵을 삭제할까요?\n\n로드맵·단계 구성만 삭제되며, 이미 저장된 퀴즈와 풀이 기록은 유지됩니다.`
+  )
+  if (!confirmed || saving.value) return
+
+  saving.value = true
+  error.value = null
+  try {
+    await axios.delete(`/api/learning-roadmaps/${roadmap.roadmapId}`)
+    expandedRoadmapId.value = null
+    message.value = `“${roadmap.title}” 로드맵을 삭제했습니다. 기존 풀이 기록은 유지됩니다.`
+    await loadRoadmaps()
+  } catch (requestError) {
+    error.value = requestError.response?.data?.message || '로드맵을 삭제하지 못했습니다.'
+  } finally {
+    saving.value = false
+  }
+}
+
 function startLearningUnit(roadmap, unit) {
-  if (unit.status === 'LOCKED' || unit.status === 'COMPLETED' || !unit.stepId) return
+  if (unit.status === 'LOCKED' || unit.status === 'COMPLETED' || unit.status === 'AWAITING_DECISION' || !unit.stepId) return
   emit('start-roadmap-quiz', {
     roadmapId: roadmap.roadmapId,
     roadmapStepId: unit.stepId,
+    sourceId: roadmap.sourceDocumentId || null,
     topic: unit.topic,
     numberOfQuestions: Math.min(20, Math.max(1, unit.questionTarget - unit.completedQuestions))
   })
 }
 
+function continueLearningUnit(roadmap, unit) {
+  if (unit.status !== 'AWAITING_DECISION' || !unit.stepId) return
+  emit('start-roadmap-quiz', {
+    roadmapId: roadmap.roadmapId,
+    roadmapStepId: unit.stepId,
+    sourceId: roadmap.sourceDocumentId || null,
+    topic: unit.topic,
+    numberOfQuestions: 5,
+    additionalPractice: true
+  })
+}
+
+async function advanceLearningUnit(roadmap, unit) {
+  if (unit.status !== 'AWAITING_DECISION' || !unit.stepId || saving.value) return
+  saving.value = true
+  error.value = null
+  try {
+    await axios.post(`/api/learning-roadmaps/${roadmap.roadmapId}/steps/${unit.stepId}/advance`)
+    message.value = `“${unit.title}”을 완료로 확정했습니다. 다음 학습 단위를 시작할 수 있습니다.`
+    await loadRoadmaps(roadmap.roadmapId)
+  } catch (requestError) {
+    error.value = requestError.response?.data?.message || '다음 단계 진행을 확정하지 못했습니다.'
+  } finally {
+    saving.value = false
+  }
+}
+
 function startWeekQuiz(roadmap, week) {
   emit('start-roadmap-quiz', {
     roadmapId: roadmap.roadmapId,
+    sourceId: roadmap.sourceDocumentId || null,
     topic: week.topic,
     numberOfQuestions: Math.min(20, Math.max(1, week.plannedQuestions - week.completedQuestions))
   })
@@ -434,18 +581,32 @@ onMounted(() => {
     <p v-if="message" class="message success-message">{{ message }}</p>
 
     <section class="roadmap-library" aria-label="학습 로드맵 목록">
-      <section v-for="group in roadmapGroups" :key="group.key" class="roadmap-group" :class="`${group.key}-group`">
+      <div class="roadmap-list-tabs" role="tablist" aria-label="로드맵 상태별 목록">
+        <button
+          v-for="tab in roadmapListTabs"
+          :key="tab.key"
+          type="button"
+          role="tab"
+          :aria-selected="roadmapListTab === tab.key"
+          :class="{ active: roadmapListTab === tab.key }"
+          @click="selectRoadmapListTab(tab.key)"
+        >
+          {{ tab.label }} <span>{{ tab.items.length }}</span>
+        </button>
+      </div>
+
+      <section class="roadmap-group" :class="`${selectedRoadmapList.key}-group`" role="tabpanel">
         <div class="roadmap-group-heading">
           <div>
-            <p class="section-kicker">{{ group.key === 'in-progress' ? 'IN PROGRESS' : 'COMPLETED' }}</p>
-            <h3>{{ group.title }}</h3>
-            <p>{{ group.description }}</p>
+            <p class="section-kicker">{{ selectedRoadmapList.key === 'in-progress' ? 'IN PROGRESS' : 'COMPLETED' }}</p>
+            <h3>{{ selectedRoadmapList.title }}</h3>
+            <p>{{ selectedRoadmapList.description }}</p>
           </div>
-          <span class="roadmap-count">{{ group.items.length }}</span>
+          <span class="roadmap-count">{{ selectedRoadmapList.items.length }}</span>
         </div>
 
-        <p v-if="!group.items.length" class="empty-roadmap-list">{{ group.emptyMessage }}</p>
-        <article v-for="roadmap in group.items" :key="roadmap.roadmapId" class="roadmap-accordion" :class="{ expanded: expandedRoadmapId === roadmap.roadmapId }">
+        <p v-if="!selectedRoadmapList.items.length" class="empty-roadmap-list">{{ selectedRoadmapList.emptyMessage }}</p>
+        <article v-for="roadmap in selectedRoadmapList.items" :key="roadmap.roadmapId" class="roadmap-accordion" :class="{ expanded: expandedRoadmapId === roadmap.roadmapId }">
           <button
             type="button"
             class="roadmap-summary-button"
@@ -480,6 +641,9 @@ onMounted(() => {
         <span class="completion-label" :class="{ completed: roadmap.completed }">
           {{ roadmap.completed ? '전체 단계 완료' : `진행률 ${roadmap.progressPercent}%` }}
         </span>
+        <button type="button" class="delete-roadmap-button" :disabled="saving" @click="deleteRoadmap(roadmap)">
+          {{ saving ? '처리 중...' : '로드맵 삭제' }}
+        </button>
       </div>
 
       <div class="overall-progress" aria-label="전체 학습 로드맵 진행률">
@@ -521,13 +685,38 @@ onMounted(() => {
                   <div><span :style="{ width: `${subtopic.progressPercent}%` }"></span></div>
                   <span>{{ subtopic.completedQuestions }}/{{ subtopic.questionTarget }}문제</span>
                 </div>
-                <button v-if="!roadmap.completed" type="button" class="primary-button step-action" :disabled="subtopic.status === 'LOCKED' || subtopic.status === 'COMPLETED'" @click="startLearningUnit(roadmap, subtopic)">
+                <ul v-if="subtopic.learningObjectives?.length" class="objective-progress-list">
+                  <li v-for="objective in subtopic.learningObjectives" :key="objective.objectiveId">
+                    <span class="objective-importance" :class="objective.importance.toLowerCase()">{{ objective.importance === 'CORE' ? '필수' : '보조' }}</span>
+                    <span><strong>{{ objective.title }}</strong><small>{{ objective.coveredQuestionCount }}/{{ objective.targetQuestionCount }}문제 다룸 · {{ objective.correctQuestionCount }}문제 정답</small></span>
+                    <span class="objective-percent">{{ objective.progressPercent }}%</span>
+                  </li>
+                </ul>
+                <div v-if="!roadmap.completed && subtopic.status === 'AWAITING_DECISION'" class="step-decision-actions">
+                  <p>완료 기준을 채웠습니다. 같은 소주제를 더 학습하거나 다음 단계 진행을 확정하세요.</p>
+                  <button type="button" class="secondary-button" @click="continueLearningUnit(roadmap, subtopic)">이 소주제 추가 학습</button>
+                  <button type="button" class="primary-button" :disabled="saving" @click="advanceLearningUnit(roadmap, subtopic)">다음 단계로 진행</button>
+                </div>
+                <button v-else-if="!roadmap.completed" type="button" class="primary-button step-action" :disabled="subtopic.status === 'LOCKED' || subtopic.status === 'COMPLETED'" @click="startLearningUnit(roadmap, subtopic)">
                   {{ subtopic.status === 'LOCKED' ? '앞 소주제 학습 필요' : subtopic.status === 'COMPLETED' ? '소주제 완료' : '이 소주제 학습 시작' }}
                 </button>
               </li>
             </ol>
 
-            <button v-else-if="!roadmap.completed" type="button" class="primary-button step-action major-action" :disabled="majorTopic.status === 'LOCKED' || majorTopic.status === 'COMPLETED'" @click="startLearningUnit(roadmap, majorTopic)">
+            <ul v-else-if="majorTopic.learningObjectives?.length" class="objective-progress-list major-objectives">
+              <li v-for="objective in majorTopic.learningObjectives" :key="objective.objectiveId">
+                <span class="objective-importance" :class="objective.importance.toLowerCase()">{{ objective.importance === 'CORE' ? '필수' : '보조' }}</span>
+                <span><strong>{{ objective.title }}</strong><small>{{ objective.coveredQuestionCount }}/{{ objective.targetQuestionCount }}문제 다룸 · {{ objective.correctQuestionCount }}문제 정답</small></span>
+                <span class="objective-percent">{{ objective.progressPercent }}%</span>
+              </li>
+            </ul>
+
+            <div v-if="!majorTopic.subtopics?.length && !roadmap.completed && majorTopic.status === 'AWAITING_DECISION'" class="step-decision-actions major-decision-actions">
+              <p>완료 기준을 채웠습니다. 같은 대주제를 더 학습하거나 다음 단계 진행을 확정하세요.</p>
+              <button type="button" class="secondary-button" @click="continueLearningUnit(roadmap, majorTopic)">이 대주제 추가 학습</button>
+              <button type="button" class="primary-button" :disabled="saving" @click="advanceLearningUnit(roadmap, majorTopic)">다음 단계로 진행</button>
+            </div>
+            <button v-else-if="!majorTopic.subtopics?.length && !roadmap.completed" type="button" class="primary-button step-action major-action" :disabled="majorTopic.status === 'LOCKED' || majorTopic.status === 'COMPLETED'" @click="startLearningUnit(roadmap, majorTopic)">
               {{ majorTopic.status === 'LOCKED' ? '선행 대주제 학습 필요' : majorTopic.status === 'COMPLETED' ? '대주제 완료' : '이 대주제 학습 시작' }}
             </button>
           </div>
@@ -556,7 +745,7 @@ onMounted(() => {
         </div>
         <div v-if="aiPreviewMode" class="ai-preview-banner">
           <strong>편집 가능한 미리보기</strong>
-          <p>이름·설명·순서·목표 문제 수를 수정할 수 있습니다. 최종 저장은 OpenAI를 다시 호출하지 않습니다.</p>
+          <p>대주제·소주제와 필수 학습 목표의 이름·설명·순서·문제 수를 수정할 수 있습니다. 최종 저장은 OpenAI를 다시 호출하지 않습니다.</p>
           <p v-if="aiPreviewSource?.sourceDocumentId">
             근거 자료 #{{ aiPreviewSource.sourceDocumentId }}
             <a v-if="aiPreviewSource.sourceDocumentUri" :href="aiPreviewSource.sourceDocumentUri" target="_blank" rel="noopener noreferrer">{{ aiPreviewSource.sourceDocumentTitle }}</a>
@@ -582,7 +771,30 @@ onMounted(() => {
             <label>대주제 이름<input v-model="step.title" maxlength="120" required placeholder="예: Kubernetes 기초" /></label>
             <label>대주제 문제 생성 주제 <span>(소주제가 없을 때 사용)</span><input v-model="step.topic" maxlength="120" placeholder="예: Kubernetes 기초" /></label>
             <label>학습 내용 <span>(선택)</span><textarea v-model="step.description" maxlength="1000" rows="2" placeholder="이 대주제에서 익힐 내용을 적어주세요."></textarea></label>
-            <label v-if="!step.subtopics.length">대주제 완료 기준<input v-model.number="step.questionTarget" type="number" min="1" max="20" required /> 문제 풀이</label>
+            <label v-if="!step.subtopics.length">대주제 완료 기준<input v-model.number="step.questionTarget" type="number" min="1" max="30" :disabled="step.learningObjectives?.length > 0" required /> 문제 풀이 <span v-if="step.learningObjectives?.length">학습 목표별 문제 수 합계로 자동 계산됩니다.</span></label>
+            <section v-if="!step.subtopics.length" class="objective-editor-group">
+              <div class="objective-editor-heading">
+                <div><strong>필수 학습 목표</strong><span>선택 사항 · 핵심 내용별 문제 수 배정 · 최대 10개</span></div>
+                <button type="button" class="text-button" :disabled="step.learningObjectives?.length >= 10 || (step.learningObjectives?.length > 0 && objectiveTarget(step) >= 30)" @click="addLearningObjective(step)">+ 학습 목표</button>
+              </div>
+              <p v-if="!step.learningObjectives?.length" class="no-objective-hint">목표를 추가하면 무작위 출제 대신 각 핵심 내용을 정해진 수만큼 다룹니다.</p>
+              <article v-for="(objective, objectiveIndex) in step.learningObjectives" :key="objective.key" class="objective-editor">
+                <div class="editor-heading">
+                  <strong>목표 {{ objectiveIndex + 1 }}</strong>
+                  <div class="editor-actions">
+                    <button type="button" class="order-button" :disabled="objectiveIndex === 0" @click="moveLearningObjective(step, objectiveIndex, -1)">↑</button>
+                    <button type="button" class="order-button" :disabled="objectiveIndex === step.learningObjectives.length - 1" @click="moveLearningObjective(step, objectiveIndex, 1)">↓</button>
+                    <button type="button" class="remove-button" @click="removeLearningObjective(step, objectiveIndex)">삭제</button>
+                  </div>
+                </div>
+                <label>목표 이름<input v-model="objective.title" maxlength="120" required placeholder="예: Pod 생명주기 판단" /></label>
+                <label>검증할 내용<textarea v-model="objective.description" maxlength="500" rows="2" placeholder="학습 후 무엇을 판단하거나 설명할 수 있어야 하는지 적어주세요."></textarea></label>
+                <div class="objective-fields">
+                  <label>중요도<select v-model="objective.importance"><option value="CORE">필수</option><option value="SUPPORTING">보조</option></select></label>
+                  <label>배정 문제 수<input v-model.number="objective.targetQuestionCount" type="number" min="1" max="5" required @change="updateObjectiveTarget(step)" /></label>
+                </div>
+              </article>
+            </section>
             <fieldset v-if="index > 0">
               <legend>선행 대주제 <span>(복수 선택 가능)</span></legend>
               <label v-for="candidate in steps.slice(0, index)" :key="candidate.key" class="check-label">
@@ -607,7 +819,30 @@ onMounted(() => {
               <label>소주제 이름<input v-model="subtopic.title" maxlength="120" required placeholder="예: Pod" /></label>
               <label>문제 생성 주제 <span>(비우면 대주제와 소주제 이름 조합)</span><input v-model="subtopic.topic" maxlength="120" placeholder="예: Kubernetes Pod" /></label>
               <label>학습 내용 <span>(선택)</span><textarea v-model="subtopic.description" maxlength="1000" rows="2" placeholder="이 소주제에서 익힐 내용을 적어주세요."></textarea></label>
-              <label>완료 기준<input v-model.number="subtopic.questionTarget" type="number" min="1" max="20" required /> 문제 풀이</label>
+              <label>완료 기준<input v-model.number="subtopic.questionTarget" type="number" min="1" max="30" :disabled="subtopic.learningObjectives?.length > 0" required /> 문제 풀이 <span v-if="subtopic.learningObjectives?.length">학습 목표별 문제 수 합계로 자동 계산됩니다.</span></label>
+              <section class="objective-editor-group compact-objectives">
+                <div class="objective-editor-heading">
+                  <div><strong>필수 학습 목표</strong><span>핵심 내용별 문제 수 배정 · 최대 10개</span></div>
+                  <button type="button" class="text-button" :disabled="subtopic.learningObjectives?.length >= 10 || (subtopic.learningObjectives?.length > 0 && objectiveTarget(subtopic) >= 30)" @click="addLearningObjective(subtopic)">+ 학습 목표</button>
+                </div>
+                <p v-if="!subtopic.learningObjectives?.length" class="no-objective-hint">비워두면 기존 방식으로 주제 범위 안에서 문제를 생성합니다.</p>
+                <article v-for="(objective, objectiveIndex) in subtopic.learningObjectives" :key="objective.key" class="objective-editor">
+                  <div class="editor-heading">
+                    <strong>목표 {{ objectiveIndex + 1 }}</strong>
+                    <div class="editor-actions">
+                      <button type="button" class="order-button" :disabled="objectiveIndex === 0" @click="moveLearningObjective(subtopic, objectiveIndex, -1)">↑</button>
+                      <button type="button" class="order-button" :disabled="objectiveIndex === subtopic.learningObjectives.length - 1" @click="moveLearningObjective(subtopic, objectiveIndex, 1)">↓</button>
+                      <button type="button" class="remove-button" @click="removeLearningObjective(subtopic, objectiveIndex)">삭제</button>
+                    </div>
+                  </div>
+                  <label>목표 이름<input v-model="objective.title" maxlength="120" required placeholder="예: Service 유형 선택" /></label>
+                  <label>검증할 내용<textarea v-model="objective.description" maxlength="500" rows="2" placeholder="핵심 내용과 실제 판단 기준을 적어주세요."></textarea></label>
+                  <div class="objective-fields">
+                    <label>중요도<select v-model="objective.importance"><option value="CORE">필수</option><option value="SUPPORTING">보조</option></select></label>
+                    <label>배정 문제 수<input v-model.number="objective.targetQuestionCount" type="number" min="1" max="5" required @change="updateObjectiveTarget(subtopic)" /></label>
+                  </div>
+                </article>
+              </section>
             </article>
           </article>
           <div class="builder-save-actions">
@@ -620,12 +855,12 @@ onMounted(() => {
       <section class="builder-card file-card" aria-labelledby="file-builder-title">
         <div class="section-heading">
           <div><p class="section-kicker">PORTABLE FORMAT</p><h3 id="file-builder-title">.roadmap.json 가져오기</h3></div>
-          <span class="format-badge">v1.1</span>
+          <span class="format-badge">v1.2</span>
         </div>
         <p>단계, 완료 기준, 선행 관계를 구조적으로 저장합니다. Git에서 변경 이력을 볼 수 있고 서버가 형식을 검증합니다.</p>
         <div class="ai-panel">
           <div><strong>주제로 AI 로드맵 생성</strong><span>OpenAI API 토큰 사용</span></div>
-          <p>AI가 주제의 범위·난이도·예상 기간을 분석해 필요한 대주제, 소주제와 목표 문제 수를 직접 결정합니다. 정해진 개수를 채우기 위해 내용을 억지로 늘리거나 줄이지 않습니다.</p>
+          <p>AI가 주제의 범위·난이도·예상 기간을 분석해 대주제와 소주제를 구성하고, 각 소주제에서 빠뜨리면 안 되는 학습 목표를 뽑아 목표별 문제 수를 결정합니다.</p>
           <label>근거 학습 자료
             <select v-model="selectedSourceId" :disabled="sourcesLoading" @change="applySelectedSource">
               <option value="">자료 없이 주제만 사용</option>
@@ -640,7 +875,7 @@ onMounted(() => {
           </div>
           <p v-if="selectedSource" class="source-disclosure">생성 시 이 자료의 앞부분 최대 8개 조각(약 9,600자)이 OpenAI로 전송됩니다. 자료 안의 명령문은 실행하지 않고 학습 내용으로만 취급합니다.</p>
           <button type="button" class="ai-button" :disabled="aiGenerating || !topic.trim()" @click="createAiRoadmap">{{ aiGenerating ? 'AI가 단계 구성 중...' : selectedSource ? '선택 자료로 AI 미리보기 생성' : 'AI 로드맵 미리보기 생성' }}</button>
-          <p class="adaptive-generation-note">목표 문제 수는 전체 학습량이며 한 번에 모두 생성하지 않습니다. 학습 시작 시 최대 20문제씩 나누어 생성하므로 API 비용과 풀이 부담을 제어할 수 있습니다.</p>
+          <p class="adaptive-generation-note">학습 시작 시 아직 다루지 않은 필수 목표를 먼저 골고루 출제합니다. 목표 문제 수는 전체 학습량이며 한 번에 최대 20문제씩 생성합니다.</p>
         </div>
         <div class="format-comparison"><strong>왜 Mermaid가 아닌가요?</strong><p>Mermaid는 시각화에 좋지만 진행 상태를 저장하는 표준 계약은 아닙니다. JSON을 원본으로 삼고, 향후 Mermaid 화면은 이 데이터에서 자동 생성하는 편이 안전합니다.</p></div>
         <label class="file-input">로드맵 파일<input type="file" accept=".roadmap.json,application/json" @change="chooseFile" /></label>
@@ -651,7 +886,8 @@ onMounted(() => {
         </div>
         <ul class="validation-list">
           <li>최대 128KB, 파일명은 반드시 <code>*.roadmap.json</code></li>
-          <li>지원 버전 <code>1.0</code>·<code>1.1</code>, 대주제와 대주제별 소주제 각각 최대 10개</li>
+          <li>지원 버전 <code>1.0</code>·<code>1.1</code>·<code>1.2</code>, 대주제와 대주제별 소주제 각각 최대 10개</li>
+          <li>v1.2 학습 목표는 학습 단위당 최대 10개, 목표별 1~5문제이며 합계가 완료 기준이 됨</li>
           <li>소주제는 등록 순서대로 진행하며, 없는 대주제는 단독 단계로 진행</li>
           <li>없는 대주제 참조·자기 참조·순환 의존성은 저장 전 차단</li>
           <li>가져오기 자체는 OpenAI API와 토큰을 사용하지 않음</li>
@@ -680,7 +916,12 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .message { margin-top: 18px; padding: 13px 15px; border-radius: 8px; font-weight: 700; }
 .error-message { color: #b42318; border: 1px solid #fecdca; background: #fef3f2; }
 .success-message { color: #1f6b51; border: 1px solid #bde7ce; background: #edfbf2; }
-.roadmap-library { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 28px; align-items: start; }
+.roadmap-library { display: grid; gap: 12px; margin-top: 28px; }
+.roadmap-list-tabs { display: flex; gap: 8px; padding: 5px; border: 1px solid var(--line); border-radius: 11px; background: var(--surface-subtle); }
+.roadmap-list-tabs button { flex: 1; padding: 10px 13px; color: var(--muted); background: transparent; text-align: left; }
+.roadmap-list-tabs button:hover { color: var(--ink); background: var(--surface); }
+.roadmap-list-tabs button.active { color: var(--ink); background: var(--surface); box-shadow: 0 1px 4px rgb(17 24 39 / 10%); }
+.roadmap-list-tabs span { display: inline-grid; min-width: 21px; height: 21px; margin-left: 5px; padding: 0 6px; color: inherit; border: 1px solid var(--line); border-radius: 999px; place-items: center; font-size: .7rem; }
 .roadmap-group { min-width: 0; padding: 22px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface-subtle); }
 .roadmap-group-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
 .roadmap-group-heading > div > p:not(.section-kicker) { margin-top: 5px; color: var(--muted); font-size: .84rem; }
@@ -701,6 +942,8 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .completion-label, .cost-badge, .format-badge, .status-badge { flex: 0 0 auto; padding: 6px 9px; border-radius: 999px; font-size: .76rem; font-weight: 800; }
 .completion-label, .format-badge { color: var(--accent-strong); background: var(--accent-soft); }
 .completion-label.completed, .cost-badge { color: #1f6b51; background: #e7f7ef; }
+.delete-roadmap-button { flex: 0 0 auto; margin-left: auto; padding: 7px 9px; color: #a53d3d; border: 1px solid #efc7c7; background: #fff1f1; font-size: .76rem; }
+.delete-roadmap-button:hover:not(:disabled) { color: #8c2f2f; border-color: #dc9d9d; background: #ffe6e6; }
 .roadmap-description { max-width: 720px; }
 .roadmap-source { overflow-wrap: anywhere; }
 .roadmap-source a { color: var(--ink); font-weight: 750; }
@@ -727,6 +970,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .step-progress { margin-top: 12px; }
 .step-progress > div { height: 7px; }
 .step-progress > span { color: var(--muted); font-size: .78rem; font-weight: 700; }
+.objective-progress-list { display: grid; gap: 7px; margin: 12px 0 0 49px; padding: 0; list-style: none; }
+.objective-progress-list.major-objectives { margin-left: 0; }
+.objective-progress-list li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 8px; padding: 9px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.objective-progress-list li > span:nth-child(2) { display: grid; gap: 2px; }
+.objective-progress-list small { color: var(--muted); font-size: .72rem; }
+.objective-importance { padding: 3px 6px; color: #fff; border-radius: 999px; background: var(--ink-soft); font-size: .66rem; font-weight: 800; }
+.objective-importance.supporting { color: var(--muted); background: var(--surface-subtle); }
+.objective-percent { color: var(--accent-strong); font-size: .75rem; font-weight: 800; }
 .step-action { margin-top: 13px; }
 .major-action { width: 100%; }
 .subtopic-list { display: grid; gap: 10px; margin: 18px 0 0; padding: 14px 0 0; border-top: 1px solid var(--line); list-style: none; }
@@ -735,6 +986,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .subtopic-number { display: grid; min-width: 38px; height: 28px; padding: 0 7px; color: var(--accent-strong); border-radius: 999px; background: var(--accent-soft); place-items: center; font-size: .74rem; font-weight: 800; }
 .compact-progress { margin-left: 49px; }
 .subtopic-card .step-action { width: calc(100% - 49px); margin-left: 49px; }
+.step-decision-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 13px 0 0 49px; padding: 12px; border: 1px solid #ebc6b8; border-radius: 9px; background: var(--accent-soft); }
+.step-decision-actions p { flex-basis: 100%; margin: 0; color: var(--accent-strong); font-size: .78rem; font-weight: 700; }
+.step-decision-actions button { width: auto; margin: 0; padding: 8px 10px; font-size: .78rem; }
+.major-decision-actions { margin-left: 0; }
 .legacy-week-list { display: grid; gap: 10px; margin: 24px 0 0; padding: 0; list-style: none; }
 .legacy-week-list li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 9px; background: var(--surface); }
 .legacy-week-list p { margin-top: 3px; color: var(--muted); font-size: .82rem; }
@@ -759,6 +1014,14 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .order-button { min-width: 30px; padding: 6px 8px; color: var(--ink-soft); border: 1px solid var(--line); background: var(--surface); font-size: .8rem; }
 .step-editor { display: grid; gap: 10px; padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface-subtle); }
 .subtopic-editor { display: grid; gap: 9px; margin-left: 18px; padding: 14px; border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 9px; background: var(--surface); }
+.objective-editor-group { display: grid; gap: 8px; padding: 12px; border: 1px dashed var(--line-strong); border-radius: 9px; background: var(--surface); }
+.objective-editor-group.compact-objectives { margin-top: 4px; background: var(--surface-subtle); }
+.objective-editor-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.objective-editor-heading > div { display: grid; gap: 2px; }
+.objective-editor-heading span { color: var(--muted); font-size: .72rem; }
+.no-objective-hint { color: var(--muted); font-size: .76rem; }
+.objective-editor { display: grid; gap: 8px; padding: 11px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); }
+.objective-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .no-subtopic-hint { padding: 10px 12px; color: var(--muted); border: 1px dashed var(--line-strong); border-radius: 8px; background: var(--surface); font-size: .78rem; }
 .step-editor fieldset { display: flex; flex-wrap: wrap; gap: 7px 14px; margin: 3px 0 0; padding: 10px; border: 1px solid var(--line); border-radius: 8px; }
 .step-editor legend { color: var(--ink-soft); font-size: .8rem; font-weight: 800; }
@@ -790,6 +1053,6 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
 .file-actions button { flex: 1; }
 .validation-list { display: grid; gap: 6px; margin: 18px 0 0; padding-left: 18px; color: var(--muted); font-size: .79rem; }
 code { padding: 2px 4px; border-radius: 4px; background: var(--surface-subtle); }
-@media (max-width: 900px) { .roadmap-library, .builder-grid { grid-template-columns: 1fr; } .file-card { position: static; } }
-@media (max-width: 680px) { .roadmap-page { padding: 28px 18px 42px; border-radius: 0; } .page-heading, .active-heading, .major-topic-heading, .section-heading, .file-actions { flex-direction: column; } .page-heading button, .step-action, .file-actions button { width: 100%; } .roadmap-group, .builder-card { padding: 18px; } .roadmap-details { padding: 16px; } .roadmap-summary-button { align-items: flex-start; } .roadmap-summary-copy small { white-space: normal; } .major-topic-item { grid-template-columns: 30px minmax(0, 1fr); } .major-topic-card { padding: 14px; } .subtopic-heading { grid-template-columns: auto minmax(0, 1fr); } .subtopic-heading .status-badge { grid-column: 2; } .compact-progress, .subtopic-card .step-action { width: 100%; margin-left: 0; } .subtopic-editor { margin-left: 0; } .legacy-week-list li { align-items: stretch; flex-direction: column; } .builder-save-actions { grid-template-columns: 1fr; } .builder-save-actions .secondary-button { width: 100%; } }
+@media (max-width: 900px) { .builder-grid { grid-template-columns: 1fr; } .file-card { position: static; } }
+@media (max-width: 680px) { .roadmap-page { padding: 28px 18px 42px; border-radius: 0; } .page-heading, .active-heading, .major-topic-heading, .section-heading, .file-actions { flex-direction: column; } .page-heading button, .step-action, .file-actions button { width: 100%; } .roadmap-list-tabs { width: 100%; } .roadmap-group, .builder-card { padding: 18px; } .roadmap-details { padding: 16px; } .roadmap-summary-button { align-items: flex-start; } .roadmap-summary-copy small { white-space: normal; } .major-topic-item { grid-template-columns: 30px minmax(0, 1fr); } .major-topic-card { padding: 14px; } .subtopic-heading { grid-template-columns: auto minmax(0, 1fr); } .subtopic-heading .status-badge { grid-column: 2; } .compact-progress, .subtopic-card .step-action, .objective-progress-list, .step-decision-actions { width: 100%; margin-left: 0; } .subtopic-editor { margin-left: 0; } .objective-fields { grid-template-columns: 1fr; } .legacy-week-list li { align-items: stretch; flex-direction: column; } .builder-save-actions { grid-template-columns: 1fr; } .builder-save-actions .secondary-button { width: 100%; } }
 </style>

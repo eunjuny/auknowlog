@@ -1,34 +1,40 @@
-# Auknowlog 프로젝트 개요 및 기술 스택
+# Auknowlog 프로젝트 개요
 
-## 프로젝트 소개
+> 전체 기능·데이터 흐름·기술 선택·운영 방법은 [통합 설계·운영 가이드](docs/PROJECT_GUIDE.md)를 기준으로 한다. 이 문서는 빠르게 구조를 파악하기 위한 요약이다.
 
-`auknowlog`는 사용자가 입력한 학습 주제로 객관식 퀴즈를 생성하고, 풀이 결과를 Markdown·Git·Notion에 기록하는 학습 기록 애플리케이션입니다. 생성 단계에는 OpenAI Responses API를 사용하고, 동일·유사 문제를 저장 전에 걸러 반복 학습의 품질을 높입니다.
+## 목적
 
-## 아키텍처
+Auknowlog는 기술 주제를 퀴즈로 만들고, 서버 채점 결과를 학습 기록·복습 일정·약점 분석·단계형 로드맵으로 연결하는 개인 학습 서비스다.
 
+## 현재 아키텍처
+
+```text
+Vue 3 + Vite
+  → Spring Boot API
+  ├→ PostgreSQL 16 (학습·복습·로드맵·자료·AI 운영 원장)
+  ├→ pgvector (문제 의미 유사도 검사)
+  ├→ OpenAI Responses·Embeddings API (명시적 AI 생성 시에만)
+  └→ Actuator·Micrometer → Prometheus (선택 실행)
 ```
-Vue 3 + Vite → Spring MVC API → OpenAI Responses API
-                          ├→ PostgreSQL (정확 중복·이력)
-                          ├→ Elasticsearch (유사도 검색)
-                          └→ Markdown / Git / Notion (학습 기록)
+
+개발 환경에서 외부 확인이 필요하면 Cloudflare Quick Tunnel과 Node.js 세션 인증 프록시를 제한된 시간만 사용한다. `quick-email`을 명시적으로 실행하면 인증 검증 뒤 Spring Mail/Gmail SMTP가 고정된 본인 수신 메일로만 URL과 임시 인증 정보를 전달한다. Elasticsearch는 현재 구조에서 사용하지 않는다.
+
+## 핵심 원칙
+
+- 정답·채점·복습 예약은 서버에서 처리해 브라우저 노출과 데이터 왜곡을 막는다.
+- 정확 해시와 pgvector를 함께 사용해 같은 문제와 의미가 비슷한 문제를 줄인다.
+- AI 로드맵은 바로 저장하지 않고 사용자가 편집·확인한 결과만 저장한다. 각 학습 단위의 필수 목표와 목표별 문제 수를 저장하고, 아직 다루지 않은 목표부터 문제를 생성해 핵심 내용 누락을 줄인다.
+- 파일·URL 자료는 보안 검증과 미리보기 확인 뒤 저장한다.
+- 시크릿은 Git에 넣지 않고 환경 변수 또는 Git 제외 설정 파일로 주입한다.
+
+## 빠른 실행
+
+```bash
+docker compose up -d
+cd backend && ./gradlew bootRun
+cd frontend && npm install && npm run dev
 ```
 
-## 백엔드
-
-- Java 21, Spring Boot 3.5, Spring MVC, Virtual Threads
-- Spring Data JPA + PostgreSQL 16, Spring Data Elasticsearch 8.11
-- `RestClient`로 OpenAI Responses API 호출
-- Structured Outputs(JSON Schema)와 서버 측 응답 검증으로 퀴즈 형식을 보장
-- Springdoc OpenAPI(Swagger UI), Jackson, SLF4J/Logback
-- `application-api.properties` 또는 `OPENAI_API_KEY` 환경 변수로 시크릿 관리
-
-## 프런트엔드
-
-- Vue 3 Composition API, Vite, Axios, CSS
-- Vite 프록시로 `/api` 요청을 백엔드에 전달
-
-## 운영 원칙
-
-- API 키는 저장소에 커밋하지 않고 환경 변수 또는 시크릿 매니저로 주입합니다.
-- AI의 형식 보장은 JSON Schema에 맡기되, 문항 수·선택지 수·정답 일치 여부를 서버에서도 검증합니다.
-- 일시적인 429/502/503/504 응답만 지수 백오프로 제한 재시도하고, 사용자에게는 503으로 명확히 알립니다.
+- 화면: `http://localhost:5173`
+- Swagger: `http://localhost:8080/swagger-ui.html`
+- 전체 백엔드 검증: `cd backend && ./gradlew check`

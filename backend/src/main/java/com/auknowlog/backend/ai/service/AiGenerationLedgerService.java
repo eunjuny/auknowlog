@@ -78,6 +78,34 @@ public class AiGenerationLedgerService {
         ));
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordQualitySuccess(String model, JsonNode usage, Duration duration) {
+        record(new AiGenerationLog(
+                "QUALITY_EVALUATION",
+                model,
+                "SUCCESS",
+                token(usage, "input_tokens"),
+                token(usage, "output_tokens"),
+                token(usage, "total_tokens"),
+                duration.toMillis(),
+                null
+        ));
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordQualityFailure(String model, String failureType, Duration duration) {
+        record(new AiGenerationLog(
+                "QUALITY_EVALUATION",
+                model,
+                "FAILED",
+                null,
+                null,
+                null,
+                duration.toMillis(),
+                failureType
+        ));
+    }
+
     private Long token(JsonNode usage, String field) {
         if (usage == null || !usage.isObject() || !usage.has(field)) {
             return null;

@@ -1,5 +1,5 @@
 {
-  "version": "1.1",
+  "version": "1.2",
   "title": "Kubernetes 단계별 학습 로드맵",
   "topic": "Kubernetes",
   "description": "핵심 개념을 완료한 뒤 네트워크와 운영 단계로 진행합니다.",
@@ -12,27 +12,76 @@
       "topic": "Kubernetes 기초",
       "questionTarget": 15,
       "dependsOn": [],
+      "learningObjectives": [],
       "subtopics": [
         {
           "key": "pod",
           "title": "Pod",
           "description": "컨테이너 실행의 최소 단위를 이해합니다.",
           "topic": "Kubernetes Pod",
-          "questionTarget": 5
+          "questionTarget": 5,
+          "learningObjectives": [
+            {
+              "key": "pod-lifecycle",
+              "title": "Pod 생명주기",
+              "description": "Pod 상태와 재시작 정책의 동작을 구분합니다.",
+              "importance": "CORE",
+              "targetQuestionCount": 3
+            },
+            {
+              "key": "pod-probes",
+              "title": "상태 프로브",
+              "description": "liveness, readiness, startup probe의 역할을 판단합니다.",
+              "importance": "CORE",
+              "targetQuestionCount": 2
+            }
+          ]
         },
         {
           "key": "service",
           "title": "Service",
           "description": "Pod 집합에 안정적으로 접근하는 방법을 이해합니다.",
           "topic": "Kubernetes Service",
-          "questionTarget": 5
+          "questionTarget": 5,
+          "learningObjectives": [
+            {
+              "key": "service-types",
+              "title": "Service 유형 선택",
+              "description": "ClusterIP, NodePort, LoadBalancer의 용도에 맞게 선택합니다.",
+              "importance": "CORE",
+              "targetQuestionCount": 3
+            },
+            {
+              "key": "service-discovery",
+              "title": "서비스 디스커버리",
+              "description": "selector와 DNS를 통한 연결 흐름을 설명합니다.",
+              "importance": "CORE",
+              "targetQuestionCount": 2
+            }
+          ]
         },
         {
           "key": "deployment",
           "title": "Deployment",
           "description": "선언적 배포와 ReplicaSet 관리를 이해합니다.",
           "topic": "Kubernetes Deployment",
-          "questionTarget": 5
+          "questionTarget": 5,
+          "learningObjectives": [
+            {
+              "key": "deployment-rollout",
+              "title": "선언적 롤아웃",
+              "description": "Deployment와 ReplicaSet의 관계 및 롤링 업데이트를 이해합니다.",
+              "importance": "CORE",
+              "targetQuestionCount": 3
+            },
+            {
+              "key": "deployment-recovery",
+              "title": "배포 복구",
+              "description": "상태 확인과 롤백 절차를 판단합니다.",
+              "importance": "SUPPORTING",
+              "targetQuestionCount": 2
+            }
+          ]
         }
       ]
     },
@@ -43,7 +92,16 @@
       "topic": "Kubernetes 운영",
       "questionTarget": 5,
       "dependsOn": ["foundation"],
-      "subtopics": []
+      "subtopics": [],
+      "learningObjectives": [
+        {
+          "key": "incident-triage",
+          "title": "장애 진단 순서",
+          "description": "이벤트, 로그, 메트릭을 이용해 장애 원인을 좁힙니다.",
+          "importance": "CORE",
+          "targetQuestionCount": 5
+        }
+      ]
     }
   ]
 }

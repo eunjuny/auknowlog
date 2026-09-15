@@ -6,6 +6,10 @@ import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
+import jakarta.validation.Valid;
+
+import java.util.List;
+
 public record RoadmapSubtopicDefinition(
         @NotBlank(message = "소주제 식별자를 입력해주세요.")
         @Pattern(regexp = "[A-Za-z0-9_-]{1,48}", message = "소주제 식별자는 영문, 숫자, 하이픈, 밑줄만 사용할 수 있습니다.")
@@ -18,7 +22,17 @@ public record RoadmapSubtopicDefinition(
         @Size(max = 120, message = "소주제 문제 생성 주제는 120자 이하여야 합니다.")
         String topic,
         @Min(value = 1, message = "소주제별 목표 문제 수는 1개 이상이어야 합니다.")
-        @Max(value = 20, message = "소주제별 목표 문제 수는 20개 이하여야 합니다.")
-        Integer questionTarget
+        @Max(value = 30, message = "소주제별 목표 문제 수는 30개 이하여야 합니다.")
+        Integer questionTarget,
+        @Size(max = 10, message = "학습 목표는 소주제별 최대 10개까지 만들 수 있습니다.")
+        List<@Valid RoadmapLearningObjectiveDefinition> learningObjectives
 ) {
+    public RoadmapSubtopicDefinition(String key, String title, String description, String topic,
+                                     Integer questionTarget) {
+        this(key, title, description, topic, questionTarget, List.of());
+    }
+
+    public List<RoadmapLearningObjectiveDefinition> safeLearningObjectives() {
+        return learningObjectives == null ? List.of() : learningObjectives;
+    }
 }

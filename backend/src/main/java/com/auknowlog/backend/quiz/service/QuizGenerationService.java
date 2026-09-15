@@ -8,8 +8,11 @@ import com.auknowlog.backend.learning.service.LearningService;
 import com.auknowlog.backend.observability.LangfuseTracingService;
 import com.auknowlog.backend.question.service.QuestionHistoryService;
 import com.auknowlog.backend.quiz.dto.Question;
+import com.auknowlog.backend.quiz.dto.QuizObjectiveAllocation;
 import com.auknowlog.backend.quiz.dto.QuizRequest;
 import com.auknowlog.backend.quiz.dto.QuizResponse;
+import com.auknowlog.backend.quiz.dto.RoadmapQuizPlan;
+import com.auknowlog.backend.roadmap.service.RoadmapQuizPlanningService;
 import com.auknowlog.backend.source.dto.SourceChunkContext;
 import com.auknowlog.backend.source.service.SourceService;
 import org.slf4j.Logger;
@@ -20,6 +23,7 @@ import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 퀴즈 생성 유스케이스를 조립한다. HTTP 계층은 요청 검증과 응답만 맡기고,
@@ -40,6 +44,7 @@ public class QuizGenerationService {
     private final QuestionFeedbackService questionFeedbackService;
     private final SourceService sourceService;
     private final LearningService learningService;
+    private final RoadmapQuizPlanningService roadmapQuizPlanningService;
     private final LangfuseTracingService langfuseTracingService;
     private final QuizGenerationMetrics quizGenerationMetrics;
 
@@ -49,6 +54,7 @@ public class QuizGenerationService {
                                  QuestionFeedbackService questionFeedbackService,
                                  SourceService sourceService,
                                  LearningService learningService,
+                                 RoadmapQuizPlanningService roadmapQuizPlanningService,
                                  LangfuseTracingService langfuseTracingService,
                                  QuizGenerationMetrics quizGenerationMetrics) {
         this.openAiQuizService = openAiQuizService;
@@ -57,12 +63,14 @@ public class QuizGenerationService {
         this.questionFeedbackService = questionFeedbackService;
         this.sourceService = sourceService;
         this.learningService = learningService;
+        this.roadmapQuizPlanningService = roadmapQuizPlanningService;
         this.langfuseTracingService = langfuseTracingService;
         this.quizGenerationMetrics = quizGenerationMetrics;
     }
 
     public QuizResponse createQuiz(QuizRequest request) {
-        int targetCount = request.numberOfQuestions() == null ? 5 : request.numberOfQuestions();
+        RoadmapQuizPlan roadmapPlan = roadmapQuizPlanningService.plan(request);
+        int targetCount = roadmapPlan.questionCount();
         String topic = request.topic().trim();
         int attempts = 0;
         long startedAt = System.nanoTime();
@@ -77,9 +85,9 @@ public class QuizGenerationService {
                 try (LangfuseTracingService.TraceScope sourceLookup = langfuseTracingService.startOperation(
                         "source-context-lookup", Map.of("sourceProvided", request.sourceId() != null)
                 )) {
-                    sourceContext = request.sourceId() == null
+                    sourceContext = roadmapPlan.sourceId() == null
                             ? List.of()
-                            : sourceService.getQuizContext(request.sourceId());
+                            : sourceService.getQuizContext(roadmapPlan.sourceId());
                     sourceLookup.complete(Map.of("sourceChunkCount", sourceContext.size()));
                 }
                 List<String> feedbackAvoidanceQuestions;
@@ -97,7 +105,11 @@ public class QuizGenerationService {
 
                 while (collectedQuestions.size() < targetCount && attempts < MAX_GENERATION_ATTEMPTS) {
                     int remaining = targetCount - collectedQuestions.size();
-                    int requestedCount = attempts == 0 ? remaining : Math.min(remaining * 2, 20);
+                    List<QuizObjectiveAllocation> objectiveAllocations = remainingObjectiveAllocations(
+                            roadmapPlan.objectiveAllocations(), collectedQuestions);
+                    int requestedCount = roadmapPlan.objectiveBased()
+                            ? objectiveAllocations.stream().mapToInt(QuizObjectiveAllocation::questionCount).sum()
+                            : attempts == 0 ? remaining : Math.min(remaining * 2, 20);
 
                     log.info("Quiz generation attempt {}/{}: need {}, request {}",
                             attempts + 1, MAX_GENERATION_ATTEMPTS, remaining, requestedCount);
@@ -119,7 +131,10 @@ public class QuizGenerationService {
                             ));
                         }
 
-                        QuizResponse response = openAiQuizService.generateQuiz(topic, requestedCount, existingQuestions, sourceContext);
+                        QuizResponse response = roadmapPlan.objectiveBased()
+                                ? openAiQuizService.generateQuiz(
+                                        topic, requestedCount, existingQuestions, sourceContext, objectiveAllocations)
+                                : openAiQuizService.generateQuiz(topic, requestedCount, existingQuestions, sourceContext);
                         quizGenerationMetrics.recordQuestions("generated", response.questions().size());
                         if (attempts == 0) {
                             quizTitle = response.quizTitle();
@@ -219,7 +234,7 @@ public class QuizGenerationService {
 
                 log.info("Quiz generation completed: requested {}, generated {}, attempts {}",
                         targetCount, collectedQuestions.size(), attempts);
-                QuizResponse quiz = learningService.storeGeneratedQuiz(topic, request.sourceId(), request.roadmapId(),
+                QuizResponse quiz = learningService.storeGeneratedQuiz(topic, roadmapPlan.sourceId(), request.roadmapId(),
                         request.roadmapStepId(), new QuizResponse(quizTitle, collectedQuestions));
                 trace.complete(Map.of(
                         "generatedQuestionCount", collectedQuestions.size(),
@@ -243,6 +258,23 @@ public class QuizGenerationService {
 
     private String preview(String question) {
         return question.substring(0, Math.min(50, question.length()));
+    }
+
+    private List<QuizObjectiveAllocation> remainingObjectiveAllocations(
+            List<QuizObjectiveAllocation> planned,
+            List<Question> acceptedQuestions) {
+        if (planned == null || planned.isEmpty()) return List.of();
+        Map<String, Long> acceptedByObjective = acceptedQuestions.stream()
+                .filter(question -> question.objectiveKey() != null)
+                .collect(Collectors.groupingBy(Question::objectiveKey, Collectors.counting()));
+        return planned.stream()
+                .map(allocation -> new QuizObjectiveAllocation(
+                        allocation.objectiveId(), allocation.key(), allocation.title(), allocation.description(),
+                        allocation.importance(), Math.max(0, allocation.questionCount()
+                        - acceptedByObjective.getOrDefault(allocation.key(), 0L).intValue())
+                ))
+                .filter(allocation -> allocation.questionCount() > 0)
+                .toList();
     }
 
     private List<String> mergePromptAvoidanceQuestions(List<String> feedbackQuestions, List<String> recentQuestions) {

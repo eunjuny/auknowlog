@@ -7,12 +7,14 @@ const DashboardView = defineAsyncComponent(() => import('./components/DashboardV
 const RoadmapView = defineAsyncComponent(() => import('./components/RoadmapView.vue'))
 const ReviewQueue = defineAsyncComponent(() => import('./components/ReviewQueue.vue'))
 const SourceLibrary = defineAsyncComponent(() => import('./components/SourceLibrary.vue'))
+const QualityEvaluationView = defineAsyncComponent(() => import('./components/QualityEvaluationView.vue'))
 
 const activeView = ref('quiz')
 const historyMounted = ref(false)
 const roadmapMounted = ref(false)
 const reviewMounted = ref(false)
 const sourceMounted = ref(false)
+const qualityMounted = ref(false)
 const recommendedQuiz = ref(null)
 const roadmapDraft = ref(null)
 
@@ -38,6 +40,11 @@ function showReview() {
 function showSources() {
   sourceMounted.value = true
   activeView.value = 'sources'
+}
+
+function showQuality() {
+  qualityMounted.value = true
+  activeView.value = 'quality'
 }
 
 function startRecommendedQuiz(recommendation) {
@@ -76,6 +83,8 @@ function startRoadmapQuiz(roadmapQuiz) {
     numberOfQuestions: roadmapQuiz.numberOfQuestions,
     roadmapId: roadmapQuiz.roadmapId,
     roadmapStepId: roadmapQuiz.roadmapStepId,
+    sourceId: roadmapQuiz.sourceId || null,
+    additionalPractice: roadmapQuiz.additionalPractice === true,
     priority: 'ROADMAP',
     requestedAt: Date.now()
   }
@@ -98,17 +107,19 @@ function startRoadmapQuiz(roadmapQuiz) {
           <button type="button" :class="{ active: activeView === 'roadmap' }" :aria-current="activeView === 'roadmap' ? 'page' : undefined" @click="showRoadmap">학습 로드맵</button>
           <button type="button" :class="{ active: activeView === 'sources' }" :aria-current="activeView === 'sources' ? 'page' : undefined" @click="showSources">학습 자료</button>
           <button type="button" :class="{ active: activeView === 'history' }" :aria-current="activeView === 'history' ? 'page' : undefined" @click="showHistory">풀이 기록</button>
+          <button type="button" :class="{ active: activeView === 'quality' }" :aria-current="activeView === 'quality' ? 'page' : undefined" @click="showQuality">품질 평가</button>
         </nav>
       </div>
     </header>
 
     <main>
       <DashboardView v-if="activeView === 'dashboard'" @start-recommended-quiz="startRecommendedQuiz" @create-learning-roadmap="createRoadmapFromRecommendation" />
-      <QuizGenerator v-show="activeView === 'quiz'" :recommended-quiz="recommendedQuiz" />
+      <QuizGenerator v-show="activeView === 'quiz'" :recommended-quiz="recommendedQuiz" @open-roadmap="showRoadmap" />
       <ReviewQueue v-if="reviewMounted" v-show="activeView === 'review'" />
       <RoadmapView v-if="roadmapMounted" v-show="activeView === 'roadmap'" :initial-roadmap="roadmapDraft" :visible="activeView === 'roadmap'" @start-roadmap-quiz="startRoadmapQuiz" />
       <SourceLibrary v-if="sourceMounted" v-show="activeView === 'sources'" @create-roadmap="createRoadmapFromSource" />
       <LearningHistory v-if="historyMounted" v-show="activeView === 'history'" />
+      <QualityEvaluationView v-if="qualityMounted" v-show="activeView === 'quality'" />
     </main>
   </div>
 </template>
@@ -215,11 +226,14 @@ main {
   display: block;
 }
 
-@media (max-width: 680px) {
-  .app-shell { margin: 0; border: 0; border-radius: 0; }
-  header { padding: 20px 18px; }
+@media (max-width: 980px) {
   .header-content { align-items: flex-start; flex-direction: column; }
   header nav { width: 100%; overflow-x: auto; padding-bottom: 3px; }
   header nav button { flex: 0 0 auto; white-space: nowrap; }
+}
+
+@media (max-width: 680px) {
+  .app-shell { margin: 0; border: 0; border-radius: 0; }
+  header { padding: 20px 18px; }
 }
 </style>

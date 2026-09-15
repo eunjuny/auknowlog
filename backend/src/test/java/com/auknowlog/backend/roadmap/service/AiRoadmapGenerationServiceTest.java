@@ -47,13 +47,19 @@ class AiRoadmapGenerationServiceTest {
         assertThat(schema.at("/properties/steps/maxItems").asInt()).isEqualTo(10);
         assertThat(schema.at("/properties/steps/items/properties/subtopics/minItems").asInt()).isEqualTo(1);
         assertThat(schema.at("/properties/steps/items/properties/subtopics/maxItems").asInt()).isEqualTo(10);
-        assertThat(schema.at("/properties/steps/items/properties/questionTarget/maximum").asInt()).isEqualTo(200);
-        assertThat(schema.at("/properties/steps/items/properties/subtopics/items/properties/questionTarget/maximum").asInt()).isEqualTo(20);
+        assertThat(schema.at("/properties/steps/items/properties/questionTarget/maximum").asInt()).isEqualTo(300);
+        assertThat(schema.at("/properties/steps/items/properties/subtopics/items/properties/questionTarget/maximum").asInt()).isEqualTo(30);
+        assertThat(schema.at("/properties/version/enum/0").asText()).isEqualTo("1.2");
+        assertThat(schema.at("/properties/steps/items/properties/subtopics/items/properties/learningObjectives/minItems").asInt()).isEqualTo(1);
+        assertThat(schema.at("/properties/steps/items/properties/subtopics/items/properties/learningObjectives/maxItems").asInt()).isEqualTo(10);
+        assertThat(schema.at("/properties/steps/items/properties/subtopics/items/properties/learningObjectives/items/properties/targetQuestionCount/maximum").asInt()).isEqualTo(5);
         assertThat(prompt)
                 .contains("Decide the appropriate number of major topics, subtopics, and mastery questions")
                 .contains("Do not pad or truncate the curriculum to meet a fixed item quota")
                 .contains("Prefer the smallest focused curriculum that still covers the learning goal")
-                .contains("Never treat schema maxima as targets");
+                .contains("Never treat schema maxima as targets")
+                .contains("analyze the essential knowledge and practical decisions")
+                .contains("exact sum of targetQuestionCount");
     }
 
     @Test

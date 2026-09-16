@@ -129,7 +129,7 @@ git push -u origin main
 - 프런트 버튼: "Git에 저장" → `POST /api/documents/save-quiz-git`
 - 백엔드 처리 흐름:
   1) 퀴즈 결과를 마크다운으로 렌더링
-  2) 파일 저장: `backend/src/main/resources/saved_quizzes/` (레포 기준). 로드맵 퀴즈는 `roadmaps/roadmap-{id}-{제목}/step-{순서}-{제목}/` 아래에 정리됩니다.
+  2) 파일 저장: `backend/src/main/resources/saved_quizzes/` (레포 기준). 로드맵 퀴즈는 `roadmaps/roadmap-{id}-{제목}/{대주제}/{소주제}.md` 아래에 정리됩니다. 같은 소주제를 다시 저장하면 두 번째 파일부터 `{소주제}-2.md`, `{소주제}-3.md`로 누적됩니다.
   3) 커밋: `git add <절대경로>` → `git commit -m "chore: save quiz markdown (제목)"`
   4) 서브트리 푸시: 레포 최상위에서 `git subtree split --prefix=backend/src/main/resources/saved_quizzes -b tmp-notes-split`
      → `git push notes tmp-notes-split:main --force-with-lease` → 임시 브랜치 삭제

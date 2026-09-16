@@ -20,10 +20,15 @@ Auknowlog의 호출량은 많지 않으므로 트래픽 규모를 과장하기 �
 Spring Boot /actuator/prometheus
         │ 15초마다 pull
         ▼
-Prometheus (최근 15일 보관)
+Prometheus (최근 60일 보관)
 ```
 
 Prometheus가 중지돼도 퀴즈 생성과 학습 기능은 그대로 동작한다.
+
+Prometheus 컨테이너를 재시작하거나 일반적인 `docker compose down` 후 다시 실행해도
+named volume `prometheus_data`가 유지되므로 기존 지표는 남는다. 생성 시점에서 60일이 지난
+운영 지표는 서비스 사용 여부와 무관하게 오래된 순서대로 자동 정리된다. 퀴즈·풀이·로드맵
+같은 학습 원본 데이터는 PostgreSQL에 별도로 저장되므로 이 보존 정책의 영향을 받지 않는다.
 
 ## 실행
 

@@ -4,12 +4,15 @@ import com.auknowlog.backend.quiz.dto.Question;
 import com.auknowlog.backend.quiz.dto.QuizResponse;
 import com.auknowlog.backend.learning.entity.LearningQuiz;
 import com.auknowlog.backend.learning.repository.LearningQuizRepository;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.io.IOException;
+import java.nio.file.FileAlreadyExistsException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardOpenOption;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.List;
@@ -19,17 +22,25 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class DocumentService {
 
-    private static final String SAVE_DIR = "./src/main/resources/saved_quizzes/";
+    private static final Path SAVE_DIR = Paths.get("./src/main/resources/saved_quizzes/");
     private final LearningQuizRepository learningQuizRepository;
+    private final Path saveDirectory;
 
+    @Autowired
     public DocumentService(LearningQuizRepository learningQuizRepository) {
+        this(learningQuizRepository, SAVE_DIR);
+    }
+
+    /** 테스트에서는 임시 디렉터리를 주입해 실제 학습 노트 디렉터리를 건드리지 않는다. */
+    DocumentService(LearningQuizRepository learningQuizRepository, Path saveDirectory) {
         this.learningQuizRepository = learningQuizRepository;
+        this.saveDirectory = saveDirectory;
     }
 
     public String saveQuizAsMarkdown(QuizResponse quizResponse) throws IOException {
         String markdownContent = convertQuizToMarkdown(quizResponse);
         String fileName = generateFileName(quizResponse.quizTitle());
-        Path filePath = Paths.get(SAVE_DIR + fileName);
+        Path filePath = saveDirectory.resolve(fileName);
 
         Files.createDirectories(filePath.getParent()); // Ensure directory exists
         Files.writeString(filePath, markdownContent);
@@ -40,7 +51,7 @@ public class DocumentService {
     public String saveMarkdownContent(String quizTitle, String markdownContent) throws IOException {
         String safeTitle = (quizTitle == null || quizTitle.isBlank()) ? "퀴즈_결과" : quizTitle;
         String fileName = generateFileName(safeTitle);
-        Path filePath = Paths.get(SAVE_DIR + fileName);
+        Path filePath = saveDirectory.resolve(fileName);
 
         Files.createDirectories(filePath.getParent());
         Files.writeString(filePath, markdownContent);
@@ -49,7 +60,8 @@ public class DocumentService {
 
     /**
      * 로드맵 퀴즈는 브라우저가 보낸 제목이나 경로를 믿지 않고, 저장된 quizId의 관계를 기준으로 정리한다.
-     * notes 원격에는 roadmaps/roadmap-{id}-{title}/step-{순서}-{title}/ 아래에 누적된다.
+     * notes 원격에는 roadmaps/roadmap-{id}-{title}/{대주제}/{소주제}.md 아래에 누적된다.
+     * 같은 소주제를 다시 저장하면 두 번째부터 -2, -3 suffix를 붙여 기존 노트를 덮어쓰지 않는다.
      */
     @Transactional(readOnly = true)
     public String saveQuizMarkdown(Long quizId, String markdownContent) throws IOException {
@@ -59,21 +71,40 @@ public class DocumentService {
         LearningQuiz quiz = learningQuizRepository.findById(quizId)
                 .orElseThrow(() -> new java.util.NoSuchElementException("저장할 퀴즈를 찾을 수 없습니다."));
 
-        Path directory = Paths.get(SAVE_DIR);
+        Path directory = saveDirectory;
+        String fileBaseName = "quiz-" + quiz.getId();
         if (quiz.getRoadmap() != null) {
             directory = directory
                     .resolve("roadmaps")
                     .resolve("roadmap-" + quiz.getRoadmap().getId() + "-" + directoryName(quiz.getRoadmap().getTitle()));
             if (quiz.getRoadmapStep() != null) {
-                directory = directory.resolve("step-%02d-%s".formatted(
-                        quiz.getRoadmapStep().getStepOrder(), directoryName(quiz.getRoadmapStep().getTitle())));
+                String majorTopic = directoryName(quiz.getRoadmapStep().getMajorTopicTitle());
+                String subtopic = quiz.getRoadmapStep().getSubtopicTitle();
+                directory = directory.resolve(majorTopic);
+                // 소주제가 없는 대주제 단독 단계는 대주제 이름을 파일명으로 사용한다.
+                fileBaseName = directoryName(subtopic == null || subtopic.isBlank()
+                        ? quiz.getRoadmapStep().getMajorTopicTitle()
+                        : subtopic);
             }
         }
-        String fileName = "quiz-%d-%s.md".formatted(quiz.getId(), timestamp());
-        Path filePath = directory.resolve(fileName);
-        Files.createDirectories(filePath.getParent());
-        Files.writeString(filePath, markdownContent);
+        Files.createDirectories(directory);
+        Path filePath = writeSequentialMarkdown(directory, fileBaseName, markdownContent);
         return filePath.toAbsolutePath().toString();
+    }
+
+    /** CREATE_NEW로 생성해 동시에 저장해도 기존 학습 노트를 덮어쓰지 않는다. */
+    private Path writeSequentialMarkdown(Path directory, String fileBaseName, String markdownContent) throws IOException {
+        String normalizedBaseName = directoryName(fileBaseName);
+        for (int occurrence = 1; ; occurrence++) {
+            String suffix = occurrence == 1 ? "" : "-" + occurrence;
+            Path candidate = directory.resolve(normalizedBaseName + suffix + ".md");
+            try {
+                Files.writeString(candidate, markdownContent, StandardOpenOption.CREATE_NEW);
+                return candidate;
+            } catch (FileAlreadyExistsException ignored) {
+                // 같은 소주제의 이전 저장본이 있으면 다음 번호로 시도한다.
+            }
+        }
     }
 
     private String convertQuizToMarkdown(QuizResponse quizResponse) {

@@ -35,6 +35,7 @@ const recommendationMessage = ref(null);
 const roadmapContext = ref(null);
 const roadmapDecision = ref(null);
 const roadmapDecisionLoading = ref(false);
+const nextRoadmapUnit = ref(null);
 const reviewRegistrations = ref({});
 
 const feedbackTypes = [
@@ -98,6 +99,7 @@ async function generateQuiz() {
   feedbackForms.value = {};
   reviewRegistrations.value = {};
   roadmapDecision.value = null;
+  nextRoadmapUnit.value = null;
   recommendationMessage.value = null;
 
   try {
@@ -208,11 +210,66 @@ async function advanceRoadmapStep() {
   if (!roadmapContext.value || roadmapDecisionLoading.value) return;
   roadmapDecisionLoading.value = true;
   try {
-    await axios.post(`/api/learning-roadmaps/${roadmapContext.value.roadmapId}/steps/${roadmapContext.value.roadmapStepId}/advance`);
+    const response = await axios.post(`/api/learning-roadmaps/${roadmapContext.value.roadmapId}/steps/${roadmapContext.value.roadmapStepId}/advance`);
     roadmapDecision.value = null;
-    submissionMessage.value = '다음 단계 진행을 확정했습니다. 로드맵에서 다음 학습 단위를 선택해주세요.';
+    nextRoadmapUnit.value = findNextRoadmapUnit(response.data);
+    submissionMessage.value = nextRoadmapUnit.value
+      ? '다음 학습 단위를 준비했습니다. 이 화면에서 바로 이어서 시작할 수 있습니다.'
+      : '이 로드맵의 모든 학습 단위를 완료했습니다.';
   } catch (err) {
     submissionMessage.value = '다음 단계 진행 처리 실패: ' + (err.response?.data?.message || err.message);
+  } finally {
+    roadmapDecisionLoading.value = false;
+  }
+}
+
+function findNextRoadmapUnit(roadmap) {
+  const nextStep = (roadmap?.steps || []).find((step) => step.status === 'READY' || step.status === 'IN_PROGRESS');
+  if (!nextStep) return null;
+
+  const majorTopic = (roadmap.majorTopics || []).find((major) =>
+    major.stepId === nextStep.stepId || (major.subtopics || []).some((subtopic) => subtopic.stepId === nextStep.stepId)
+  );
+  const isSubtopic = Boolean(majorTopic?.subtopics?.some((subtopic) => subtopic.stepId === nextStep.stepId));
+  const previousMajorTopic = (roadmap.majorTopics || []).find((major) =>
+    major.stepId === roadmapContext.value?.roadmapStepId || (major.subtopics || []).some((subtopic) => subtopic.stepId === roadmapContext.value?.roadmapStepId)
+  );
+  const unitType = isSubtopic && previousMajorTopic?.key === majorTopic?.key
+    ? '새 소주제'
+    : isSubtopic
+      ? '새 대주제의 첫 소주제'
+      : '새 대주제';
+  const remainingQuestions = Math.min(20, Math.max(1, nextStep.questionTarget - nextStep.completedQuestions));
+
+  return {
+    roadmapId: roadmap.roadmapId,
+    roadmapStepId: nextStep.stepId,
+    sourceId: roadmap.sourceDocumentId || null,
+    topic: nextStep.topic,
+    title: nextStep.title,
+    majorTitle: majorTopic?.title || nextStep.title,
+    unitType,
+    questionCount: remainingQuestions,
+    totalQuestionTarget: nextStep.questionTarget,
+    description: nextStep.description
+  };
+}
+
+async function startNextRoadmapUnit() {
+  if (!nextRoadmapUnit.value || roadmapDecisionLoading.value) return;
+  roadmapDecisionLoading.value = true;
+  const nextUnit = nextRoadmapUnit.value;
+  roadmapContext.value = {
+    roadmapId: nextUnit.roadmapId,
+    roadmapStepId: nextUnit.roadmapStepId,
+    sourceId: nextUnit.sourceId,
+    topic: nextUnit.topic,
+    additionalPractice: false
+  };
+  topic.value = nextUnit.topic;
+  numberOfQuestions.value = nextUnit.questionCount;
+  try {
+    await generateQuiz();
   } finally {
     roadmapDecisionLoading.value = false;
   }
@@ -653,11 +710,29 @@ function cancelNextQuiz() {
       <section v-if="roadmapDecision && attemptSaved" class="roadmap-decision-card" aria-live="polite">
         <p class="eyebrow">ROADMAP CHECKPOINT</p>
         <h3>“{{ roadmapDecision.title }}”의 필수 학습 목표를 모두 다뤘습니다.</h3>
-        <p>같은 소주제를 더 연습하거나, 완료를 확정하고 로드맵의 다음 단계로 이동할 수 있습니다. 다음 단계는 확정하기 전까지 열리지 않습니다.</p>
+        <p>같은 소주제를 더 연습하거나 완료를 확정하세요. 확정하면 이 화면에서 다음 학습 단위를 확인하고 바로 이어서 시작할 수 있습니다.</p>
         <div class="roadmap-decision-actions">
           <button type="button" class="secondary-button" :disabled="roadmapDecisionLoading" @click="continueRoadmapSubtopic">같은 소주제 추가 학습</button>
           <button type="button" class="primary-button" :disabled="roadmapDecisionLoading" @click="advanceRoadmapStep">다음 단계로 진행</button>
           <button type="button" class="text-button" :disabled="roadmapDecisionLoading" @click="emit('open-roadmap')">로드맵 보기</button>
+        </div>
+      </section>
+      <section v-else-if="nextRoadmapUnit && attemptSaved" class="roadmap-next-card" aria-live="polite">
+        <p class="eyebrow">NEXT LEARNING UNIT</p>
+        <div class="roadmap-next-heading">
+          <div>
+            <span class="roadmap-next-type">{{ nextRoadmapUnit.unitType }}</span>
+            <h3>{{ nextRoadmapUnit.majorTitle }} <template v-if="nextRoadmapUnit.majorTitle !== nextRoadmapUnit.title">· {{ nextRoadmapUnit.title }}</template></h3>
+          </div>
+          <strong>{{ nextRoadmapUnit.questionCount }}문제</strong>
+        </div>
+        <p>{{ nextRoadmapUnit.description || '남은 필수 학습 목표를 기준으로 문제를 준비합니다.' }}</p>
+        <p class="roadmap-next-meta">이 학습 단위의 완료 기준은 총 {{ nextRoadmapUnit.totalQuestionTarget }}문제입니다. 한 번에 최대 20문제씩 생성합니다.</p>
+        <div class="roadmap-decision-actions">
+          <button type="button" class="primary-button" :disabled="roadmapDecisionLoading" @click="startNextRoadmapUnit">
+            {{ roadmapDecisionLoading ? '다음 문제 준비 중...' : `“${nextRoadmapUnit.title}” 바로 시작` }}
+          </button>
+          <button type="button" class="text-button" :disabled="roadmapDecisionLoading" @click="emit('open-roadmap')">로드맵에서 전체 보기</button>
         </div>
       </section>
     </div>
@@ -1123,6 +1198,25 @@ button:disabled {
   border-radius: 10px;
   background: var(--accent-soft);
 }
+
+.roadmap-next-card {
+  display: grid;
+  gap: 9px;
+  margin-top: 18px;
+  padding: 18px;
+  border: 1px solid var(--ink);
+  border-radius: 10px;
+  background: var(--surface);
+}
+
+.roadmap-next-card .eyebrow { margin: 0; color: var(--accent-strong); font-size: .72rem; font-weight: 800; letter-spacing: .08em; }
+.roadmap-next-card h3, .roadmap-next-card p { margin: 0; }
+.roadmap-next-card p { color: var(--ink-soft); font-size: .88rem; }
+.roadmap-next-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
+.roadmap-next-heading h3 { margin-top: 5px; }
+.roadmap-next-heading > strong { flex: 0 0 auto; padding: 5px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-strong); font-size: .8rem; }
+.roadmap-next-type { color: var(--accent-strong); font-size: .76rem; font-weight: 800; }
+.roadmap-next-meta { color: var(--ink-muted, var(--ink-soft)) !important; font-size: .8rem !important; }
 
 .roadmap-decision-card .eyebrow { margin: 0; color: var(--accent-strong); font-size: .72rem; font-weight: 800; letter-spacing: .08em; }
 .roadmap-decision-card h3, .roadmap-decision-card p:not(.eyebrow) { margin: 0; }

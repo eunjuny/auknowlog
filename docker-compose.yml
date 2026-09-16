@@ -33,7 +33,8 @@ services:
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
       - "--storage.tsdb.path=/prometheus"
-      - "--storage.tsdb.retention.time=15d"
+      # 로컬 포트폴리오 관측에서도 월간 추세를 비교할 수 있도록 60일간 보관합니다.
+      - "--storage.tsdb.retention.time=60d"
       - "--web.enable-lifecycle"
     restart: unless-stopped
 

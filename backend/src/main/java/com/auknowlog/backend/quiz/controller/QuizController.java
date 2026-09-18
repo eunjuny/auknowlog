@@ -7,6 +7,7 @@ import com.auknowlog.backend.quiz.dto.QuizResponse;
 import com.auknowlog.backend.quiz.dto.QuizViewResponse;
 import com.auknowlog.backend.quiz.dto.RoadmapQuizPlan;
 import com.auknowlog.backend.quiz.service.OpenAiQuizService;
+import com.auknowlog.backend.quiz.service.QuizOptionOrderService;
 import com.auknowlog.backend.quiz.service.QuizGenerationService;
 import com.auknowlog.backend.roadmap.service.RoadmapQuizPlanningService;
 import io.swagger.v3.oas.annotations.Operation;
@@ -88,7 +89,7 @@ public class QuizController {
             ));
         }
 
-        return new QuizResponse(quizTitle, questions);
+        return QuizOptionOrderService.shuffleOptionsIndependently(new QuizResponse(quizTitle, questions));
     }
 
     @Operation(summary = "퀴즈 결과 마크다운 렌더링", description = "LLM 호출 없이 백엔드에서 직접 마크다운을 생성합니다.")

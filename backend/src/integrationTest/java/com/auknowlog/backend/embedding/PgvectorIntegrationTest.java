@@ -313,6 +313,22 @@ class PgvectorIntegrationTest {
 
         assertThat(roadmapAdvanceMigration).isEqualTo(1);
         assertThat(roadmapAdvanceColumn).isEqualTo(1);
+
+        Integer optionExplanationMigration = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM flyway_schema_history
+                WHERE version = '17' AND success = TRUE
+                """, Integer.class);
+        Integer optionExplanationColumn = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*)
+                FROM information_schema.columns
+                WHERE table_schema = 'public'
+                  AND table_name = 'learning_question'
+                  AND column_name = 'option_explanations'
+                """, Integer.class);
+
+        assertThat(optionExplanationMigration).isEqualTo(1);
+        assertThat(optionExplanationColumn).isEqualTo(1);
     }
 
     @Test

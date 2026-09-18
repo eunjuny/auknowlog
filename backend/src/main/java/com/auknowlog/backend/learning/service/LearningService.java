@@ -122,6 +122,7 @@ public class LearningService {
                     writeJson(question.options()),
                     question.correctAnswer(),
                     question.explanation(),
+                    writeJson(question.optionExplanations()),
                     writeJson(question.sourceReferences()),
                     learningObjective
             ));
@@ -305,6 +306,7 @@ public class LearningService {
                 answer.getSelectedAnswer(),
                 question.getCorrectAnswer(),
                 question.getExplanation(),
+                readStringList(question.getOptionExplanations()),
                 readStringList(question.getSourceReferences()),
                 answer.isCorrect()
         );

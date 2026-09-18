@@ -1,7 +1,9 @@
 package com.auknowlog.backend.dashboard.service;
 
 import com.auknowlog.backend.ai.entity.AiGenerationLog;
+import com.auknowlog.backend.ai.dto.AiBudgetSnapshot;
 import com.auknowlog.backend.ai.repository.AiGenerationLogRepository;
+import com.auknowlog.backend.ai.service.AiUsagePolicyService;
 import com.auknowlog.backend.dashboard.dto.AiDashboardSummary;
 import com.auknowlog.backend.dashboard.dto.DailyAiMetric;
 import com.auknowlog.backend.dashboard.dto.DailyLearningMetric;
@@ -41,17 +43,20 @@ public class DashboardService {
     private final LearningAttemptRepository learningAttemptRepository;
     private final ReviewScheduleRepository reviewScheduleRepository;
     private final AiGenerationLogRepository aiGenerationLogRepository;
+    private final AiUsagePolicyService aiUsagePolicyService;
     private final QuestionHistoryRepository questionHistoryRepository;
     private final QuestionFeedbackRepository questionFeedbackRepository;
 
     public DashboardService(LearningAttemptRepository learningAttemptRepository,
                             ReviewScheduleRepository reviewScheduleRepository,
                             AiGenerationLogRepository aiGenerationLogRepository,
+                            AiUsagePolicyService aiUsagePolicyService,
                             QuestionHistoryRepository questionHistoryRepository,
                             QuestionFeedbackRepository questionFeedbackRepository) {
         this.learningAttemptRepository = learningAttemptRepository;
         this.reviewScheduleRepository = reviewScheduleRepository;
         this.aiGenerationLogRepository = aiGenerationLogRepository;
+        this.aiUsagePolicyService = aiUsagePolicyService;
         this.questionHistoryRepository = questionHistoryRepository;
         this.questionFeedbackRepository = questionFeedbackRepository;
     }
@@ -203,6 +208,7 @@ public class DashboardService {
     }
 
     private AiDashboardSummary buildAiSummary(List<AiGenerationLog> logs, LocalDate firstActivityDate) {
+        AiBudgetSnapshot budget = aiUsagePolicyService.snapshot();
         long successfulCalls = logs.stream().filter(this::isSuccess).count();
         long totalTokens = logs.stream().mapToLong(log -> tokens(log.getTotalTokens())).sum();
         long averageLatency = logs.isEmpty() ? 0 : Math.round(logs.stream().mapToLong(AiGenerationLog::getLatencyMs).average().orElse(0));
@@ -247,6 +253,11 @@ public class DashboardService {
                 averageLatency,
                 percentile95(logs.stream().map(AiGenerationLog::getLatencyMs).toList()),
                 questionHistoryRepository.count(),
+                budget.enforcementEnabled(),
+                budget.dailyTokenBudget(),
+                budget.todayTokens(),
+                budget.remainingTokens(),
+                budget.usedPercent(),
                 activity,
                 modelUsage
         );

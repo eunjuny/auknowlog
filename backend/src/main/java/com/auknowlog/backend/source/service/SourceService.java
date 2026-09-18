@@ -11,10 +11,16 @@ import com.auknowlog.backend.source.entity.SourceType;
 import com.auknowlog.backend.source.repository.SourceChunkRepository;
 import com.auknowlog.backend.source.repository.SourceDocumentRepository;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 @Service
@@ -24,6 +30,18 @@ public class SourceService {
     private final SourceChunkRepository sourceChunkRepository;
     private final SourceContentSupport contentSupport;
     private final UrlSafetyValidator urlSafetyValidator;
+
+    @Value("${auknowlog.ai-policy.source.quiz.max-chunks:4}")
+    private int quizContextMaxChunks = 4;
+
+    @Value("${auknowlog.ai-policy.source.quiz.max-characters:4800}")
+    private int quizContextMaxCharacters = 4800;
+
+    @Value("${auknowlog.ai-policy.source.roadmap.max-chunks:8}")
+    private int roadmapContextMaxChunks = 8;
+
+    @Value("${auknowlog.ai-policy.source.roadmap.max-characters:9600}")
+    private int roadmapContextMaxCharacters = 9600;
 
     public SourceService(SourceDocumentRepository sourceDocumentRepository,
                          SourceChunkRepository sourceChunkRepository,
@@ -72,26 +90,28 @@ public class SourceService {
 
     @Transactional(readOnly = true)
     public List<SourceChunkContext> getQuizContext(Long sourceId) {
+        return getQuizContext(sourceId, "");
+    }
+
+    @Transactional(readOnly = true)
+    public List<SourceChunkContext> getQuizContext(Long sourceId, String topic) {
         if (!sourceDocumentRepository.existsById(sourceId)) {
             throw new java.util.NoSuchElementException("학습 자료를 찾을 수 없습니다.");
         }
-        return sourceChunkRepository.findTop4BySourceDocumentIdOrderByChunkOrderAsc(sourceId).stream()
-                .map(chunk -> new SourceChunkContext("source-" + sourceId + "-chunk-" + chunk.getChunkOrder(), chunk.getContent()))
-                .toList();
+        return selectRelevantChunkContexts(sourceId, topic, quizContextMaxChunks, quizContextMaxCharacters);
     }
 
     @Transactional(readOnly = true)
     public SourceRoadmapContext getRoadmapContext(Long sourceId) {
+        return getRoadmapContext(sourceId, "");
+    }
+
+    @Transactional(readOnly = true)
+    public SourceRoadmapContext getRoadmapContext(Long sourceId, String topic) {
         SourceDocument document = sourceDocumentRepository.findById(sourceId)
                 .orElseThrow(() -> new java.util.NoSuchElementException("학습 자료를 찾을 수 없습니다."));
-        List<SourceChunkContext> chunks = sourceChunkRepository
-                .findTop8BySourceDocumentIdOrderByChunkOrderAsc(sourceId)
-                .stream()
-                .map(chunk -> new SourceChunkContext(
-                        "source-" + sourceId + "-chunk-" + chunk.getChunkOrder(),
-                        chunk.getContent()
-                ))
-                .toList();
+        List<SourceChunkContext> chunks = selectRelevantChunkContexts(
+                sourceId, topic, roadmapContextMaxChunks, roadmapContextMaxCharacters);
         if (chunks.isEmpty()) {
             throw new IllegalArgumentException("학습 자료에 로드맵 생성용 본문이 없습니다.");
         }
@@ -102,6 +122,51 @@ public class SourceService {
                 document.getSourceUri(),
                 chunks
         );
+    }
+
+    /** 임베딩 API를 추가 호출하지 않고, 주제 키워드와 문자 예산으로 자료 문맥을 고른다. */
+    private List<SourceChunkContext> selectRelevantChunkContexts(Long sourceId,
+                                                                   String topic,
+                                                                   int maxChunks,
+                                                                   int maxCharacters) {
+        List<SourceChunk> allChunks = sourceChunkRepository.findBySourceDocumentIdOrderByChunkOrderAsc(sourceId);
+        Set<String> terms = topicTerms(topic);
+        List<SourceChunk> ranked = allChunks.stream()
+                .sorted(Comparator.comparingInt((SourceChunk chunk) -> relevanceScore(chunk, terms)).reversed()
+                        .thenComparingInt(SourceChunk::getChunkOrder))
+                .limit(Math.max(1, maxChunks))
+                .sorted(Comparator.comparingInt(SourceChunk::getChunkOrder))
+                .toList();
+        int remaining = Math.max(1, maxCharacters);
+        List<SourceChunkContext> selected = new ArrayList<>();
+        for (SourceChunk chunk : ranked) {
+            if (remaining <= 0) {
+                break;
+            }
+            String content = chunk.getContent();
+            String selectedContent = content.length() <= remaining
+                    ? content
+                    : content.substring(0, remaining);
+            selected.add(new SourceChunkContext(
+                    "source-" + sourceId + "-chunk-" + chunk.getChunkOrder(),
+                    selectedContent
+            ));
+            remaining -= selectedContent.length();
+        }
+        return selected;
+    }
+
+    private Set<String> topicTerms(String topic) {
+        if (topic == null || topic.isBlank()) return Set.of();
+        return Arrays.stream(topic.toLowerCase(Locale.ROOT).split("[^a-z0-9가-힣]+"))
+                .filter(term -> term.length() >= 2)
+                .collect(Collectors.toUnmodifiableSet());
+    }
+
+    private int relevanceScore(SourceChunk chunk, Set<String> terms) {
+        if (terms.isEmpty()) return 0;
+        String content = chunk.getContent().toLowerCase(Locale.ROOT);
+        return (int) terms.stream().filter(content::contains).count();
     }
 
     @Transactional(readOnly = true)

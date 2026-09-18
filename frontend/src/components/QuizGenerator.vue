@@ -340,6 +340,7 @@ function buildGradedQuizPayload() {
       userSelectedAnswer: grade.selectedAnswer,
       correctAnswer: grade.correctAnswer,
       explanation: grade.explanation,
+      optionExplanations: grade.optionExplanations,
       sourceReferences: grade.sourceReferences,
       isCorrect: grade.correct
     };
@@ -589,7 +590,13 @@ function cancelNextQuiz() {
             <strong v-else>틀렸습니다.</strong>
           </div>
           <p><strong>정답:</strong> {{ gradingResults[index].correctAnswer }}</p>
-            <p><strong>설명:</strong> {{ gradingResults[index].explanation }}</p>
+          <p><strong>핵심 설명:</strong> {{ gradingResults[index].explanation }}</p>
+          <ul v-if="gradingResults[index].optionExplanations?.length" class="option-explanation-list">
+            <li v-for="(option, optIndex) in question.options" :key="`${option}-explanation`" :class="option === gradingResults[index].correctAnswer ? 'correct-option-explanation' : 'wrong-option-explanation'">
+              <strong>{{ String.fromCharCode(65 + optIndex) }}. {{ option }}</strong>
+              <span>{{ gradingResults[index].optionExplanations[optIndex] || '이 보기에 대한 추가 해설이 없습니다.' }}</span>
+            </li>
+          </ul>
           </div>
           <p v-if="quizSubmitted && question.sourceReferences?.length" class="source-reference">
             <strong>근거:</strong> {{ question.sourceReferences.join(', ') }}
@@ -1157,6 +1164,12 @@ button:disabled {
   color: #444;
   margin-bottom: 5px;
 }
+.option-explanation-list { display: grid; gap: 8px; margin: 14px 0 0; padding: 0; list-style: none; }
+.option-explanation-list li { display: grid; gap: 3px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink-soft); font-size: .88rem; }
+.option-explanation-list li strong { color: var(--ink); }
+.option-explanation-list li span { color: var(--muted); }
+.option-explanation-list .correct-option-explanation { border-color: #9ad5b5; background: #effaf3; }
+.option-explanation-list .wrong-option-explanation { background: var(--surface); }
 
 .answer-section strong {
   color: #333;

@@ -14,6 +14,8 @@ public interface SourceChunkRepository extends JpaRepository<SourceChunk, Long> 
 
     List<SourceChunk> findTop8BySourceDocumentIdOrderByChunkOrderAsc(Long sourceDocumentId);
 
+    List<SourceChunk> findBySourceDocumentIdOrderByChunkOrderAsc(Long sourceDocumentId);
+
     int countBySourceDocumentId(Long sourceDocumentId);
 
     @Query("""

@@ -9,6 +9,7 @@ public record LearningAttemptQuestionResult(
         String selectedAnswer,
         String correctAnswer,
         String explanation,
+        List<String> optionExplanations,
         List<String> sourceReferences,
         boolean correct
 ) {

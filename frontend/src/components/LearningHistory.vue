@@ -141,6 +141,12 @@ loadHistory()
               <p><b>내 답:</b> {{ question.selectedAnswer }}</p>
               <p><b>정답:</b> {{ question.correctAnswer }}</p>
               <p class="explanation"><b>해설:</b> {{ question.explanation }}</p>
+              <ul v-if="question.optionExplanations?.length" class="option-explanation-list">
+                <li v-for="(option, optionIndex) in question.options" :key="`${option}-explanation`" :class="option === question.correctAnswer ? 'correct-option' : 'wrong-option'">
+                  <b>{{ String.fromCharCode(65 + optionIndex) }}. {{ option }}</b>
+                  <span>{{ question.optionExplanations[optionIndex] || '이 보기에 대한 추가 해설이 없습니다.' }}</span>
+                </li>
+              </ul>
               <p v-if="question.sourceReferences?.length" class="reference"><b>근거:</b> {{ question.sourceReferences.join(', ') }}</p>
             </li>
           </ol>
@@ -269,6 +275,10 @@ button:disabled { cursor: not-allowed; opacity: 0.55; }
 .answer-card p { margin-top: 7px; color: var(--ink-soft); }
 .answer-card b { color: var(--ink); }
 .answer-card .explanation { padding-top: 9px; border-top: 1px solid rgb(148 163 184 / 30%); }
+.option-explanation-list { display: grid; gap: 7px; margin: 12px 0 0; padding: 0; list-style: none; }
+.option-explanation-list li { display: grid; gap: 3px; padding: 10px 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 8px; font-size: .86rem; }
+.option-explanation-list li b { color: var(--ink-soft); }
+.option-explanation-list .correct-option { border-color: #9ad5b5; background: #effaf3; }
 .reference { color: #356a48 !important; font-size: .86rem; }
 
 .pagination { margin-top: 16px; }

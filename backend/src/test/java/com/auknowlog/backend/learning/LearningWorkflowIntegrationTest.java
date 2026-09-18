@@ -147,6 +147,7 @@ class LearningWorkflowIntegrationTest {
                 .andExpect(jsonPath("$.questions[0].correct").value(false))
                 .andExpect(jsonPath("$.questions[0].correctAnswer").value("선택지 A"))
                 .andExpect(jsonPath("$.questions[0].explanation").isNotEmpty())
+                .andExpect(jsonPath("$.questions[0].optionExplanations.length()").value(4))
                 .andExpect(jsonPath("$.questions[1].correct").value(true))
                 .andReturn().getResponse().getContentAsString();
 
@@ -184,6 +185,7 @@ class LearningWorkflowIntegrationTest {
                 .andExpect(jsonPath("$.questions[0].questionOrder").value(1))
                 .andExpect(jsonPath("$.questions[0].selectedAnswer").value("선택지 B"))
                 .andExpect(jsonPath("$.questions[0].correct").value(false))
+                .andExpect(jsonPath("$.questions[0].optionExplanations.length()").value(4))
                 .andExpect(jsonPath("$.questions[1].correct").value(true));
 
         // 맞힌 문항도 채점 완료 후 사용자가 직접 복습 대상으로 등록할 수 있다.

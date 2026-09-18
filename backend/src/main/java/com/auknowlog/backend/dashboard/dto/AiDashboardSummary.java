@@ -11,6 +11,11 @@ public record AiDashboardSummary(
         long averageLatencyMs,
         long p95LatencyMs,
         long storedQuestionCount,
+        boolean dailyBudgetEnforced,
+        long dailyTokenBudget,
+        long todayTokens,
+        long remainingDailyTokens,
+        int dailyBudgetUsedPercent,
         List<DailyAiMetric> dailyActivity,
         List<ModelAiMetric> modelUsage
 ) {

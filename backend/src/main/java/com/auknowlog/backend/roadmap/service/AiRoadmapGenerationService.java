@@ -27,7 +27,7 @@ public class AiRoadmapGenerationService {
     public AiRoadmapPreviewResponse generatePreview(AiRoadmapCreateRequest request) {
         SourceRoadmapContext sourceContext = request.sourceId() == null
                 ? null
-                : sourceService.getRoadmapContext(request.sourceId());
+                : sourceService.getRoadmapContext(request.sourceId(), request.topic().trim());
         RoadmapDefinitionRequest definition = openAiRoadmapService.generate(
                 request.topic().trim(), request.durationWeeks(), sourceContext);
         learningRoadmapService.validateDraft(definition);

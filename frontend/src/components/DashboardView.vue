@@ -281,6 +281,16 @@ onBeforeUnmount(() => {
           <article class="metric-card"><span>API 호출</span><strong>{{ formatNumber(dashboard.ai.totalCalls) }}회</strong></article>
           <article class="metric-card"><span>성공률</span><strong>{{ dashboard.ai.successRatePercent }}%</strong></article>
           <article class="metric-card"><span>총 토큰</span><strong>{{ formatNumber(dashboard.ai.totalTokens) }}</strong></article>
+          <article class="metric-card accent-card">
+            <span>오늘 토큰 예산</span>
+            <strong>{{ formatNumber(dashboard.ai.todayTokens) }} / {{ formatNumber(dashboard.ai.dailyTokenBudget) }}</strong>
+            <small>{{ dashboard.ai.dailyBudgetEnforced ? `${dashboard.ai.dailyBudgetUsedPercent}% 사용` : '표시 전용' }}</small>
+          </article>
+          <article class="metric-card">
+            <span>오늘 남은 예산</span>
+            <strong>{{ formatNumber(dashboard.ai.remainingDailyTokens) }}</strong>
+            <small>로컬 안전 한도 기준</small>
+          </article>
           <article class="metric-card"><span>평균 지연시간</span><strong>{{ formatDuration(dashboard.ai.averageLatencyMs) }}</strong></article>
           <article class="metric-card"><span>P95 지연시간</span><strong>{{ formatDuration(dashboard.ai.p95LatencyMs) }}</strong></article>
           <article class="metric-card accent-card"><span>저장된 문제</span><strong>{{ formatNumber(dashboard.ai.storedQuestionCount) }}개</strong></article>
@@ -314,8 +324,8 @@ onBeforeUnmount(() => {
         </div>
 
         <aside class="operation-note">
-          <strong>비용 표기 기준</strong>
-          <p>이 화면은 프로젝트 DB에 저장한 호출 횟수·토큰·지연시간을 보여줍니다. 환율이나 모델 단가가 바뀌어 잘못된 금액을 표시하지 않도록 비용 추정치는 포함하지 않았습니다. Langfuse를 연결하면 요청 단위 추적과 비용 정책을 별도로 확장할 수 있습니다.</p>
+          <strong>비용·품질 제어 기준</strong>
+          <p>오늘 예산은 이 서버가 저장한 실제 토큰 원장과 요청 전 추정치로 검사하는 로컬 안전 한도입니다. OpenAI 청구 한도와는 별개이며, 한도를 넘길 요청은 외부 API 호출 전에 차단됩니다. 자료 기반 생성은 요청 주제와 겹치는 조각만 제한해서 보내며, 별도 임베딩 호출은 하지 않습니다.</p>
         </aside>
       </section>
 
@@ -385,6 +395,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .metric-card { display: grid; gap: 3px; min-width: 0; padding: 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .metric-card span { color: var(--muted); font-size: .82rem; font-weight: 700; }
 .metric-card strong { overflow: hidden; color: var(--ink); font-size: clamp(1.15rem, 2.4vw, 1.6rem); text-overflow: ellipsis; white-space: nowrap; }
+.metric-card small { color: var(--muted); font-size: .74rem; font-weight: 700; }
 .accent-card { border-color: var(--line-strong); background: var(--surface-subtle); }
 .chart-grid, .operations-layout { display: grid; gap: 18px; margin-top: 20px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .operations-layout { grid-template-columns: minmax(0, 1.2fr) minmax(360px, .8fr); }

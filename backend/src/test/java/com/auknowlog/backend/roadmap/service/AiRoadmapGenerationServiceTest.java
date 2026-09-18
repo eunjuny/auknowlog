@@ -111,7 +111,7 @@ class AiRoadmapGenerationServiceTest {
                                 new RoadmapSubtopicDefinition("eval", "평가", "검증", "AI 안전성 평가", 3)
                         ))
                 ));
-        when(sourceService.getRoadmapContext(3L)).thenReturn(context);
+        when(sourceService.getRoadmapContext(3L, "AI 에이전트 보안")).thenReturn(context);
         when(openAiRoadmapService.generate("AI 에이전트 보안", 3, context)).thenReturn(generated);
 
         AiRoadmapGenerationService service = new AiRoadmapGenerationService(

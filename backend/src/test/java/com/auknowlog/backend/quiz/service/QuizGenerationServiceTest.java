@@ -220,7 +220,7 @@ class QuizGenerationServiceTest {
                 "트래픽 제외", "Service 대상에서 제외됩니다.", List.of("source-44-chunk-1"), "probe");
 
         when(roadmapQuizPlanningService.plan(request)).thenReturn(new RoadmapQuizPlan(44L, 2, allocations));
-        when(sourceService.getQuizContext(44L)).thenReturn(List.of());
+        when(sourceService.getQuizContext(44L, "Kubernetes Pod")).thenReturn(List.of());
         when(questionHistoryService.getRecentQuestionPreviews("Kubernetes Pod", 30)).thenReturn(List.of());
         when(openAiQuizService.generateQuiz(eq("Kubernetes Pod"), eq(2), ArgumentMatchers.anyList(),
                 ArgumentMatchers.anyList(), eq(allocations)))

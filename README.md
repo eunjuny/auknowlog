@@ -24,7 +24,9 @@ AI를 활용하여 원하는 주제에 대한 객관식 문제를 자동으로 �
 ## ✨ 주요 기능
 
 - 🤖 **AI 퀴즈 자동 생성** - 주제 입력만으로 객관식 퀴즈 생성
-- 📚 **학습 자료 기반 생성** - 파일·공개 URL의 본문을 청크로 저장하고 제한된 문맥으로 AI 학습 로드맵 생성
+- 🎲 **정답 위치 무작위화·보기별 해설** - 서버가 문항별 보기 순서를 무작위화하고, 채점 후 정답과 오답 보기를 각각 설명
+- 📚 **학습 자료 기반 생성** - 파일·공개 URL의 본문을 청크로 저장하고, 요청 주제와 관련된 제한 문맥으로 AI 학습 로드맵·문제 생성
+- 🛡️ **AI 비용·품질 제어** - 요청 전 일일 토큰 안전 예산·출력 상한으로 과도한 호출을 차단하고, 대시보드에서 실제 사용량과 남은 예산을 확인
 - 🔐 **안전한 자료 가져오기** - TXT·Markdown·PDF 파일과 공개 URL을 SSRF·크기·시간 제한 아래 추출하고 미리보기 후 저장
 - 🧠 **학습 기록과 복습 예약** - 풀이 결과를 저장하고 오답은 다음 날 복습 대상으로 예약
 - 🔍 **의미 기반 중복 방지** - pgvector 코사인 유사도와 PostgreSQL 정확 해시를 조합
@@ -108,10 +110,12 @@ Codex 로컬 자동화 `Auknowlog 원격 접속 메일`은 매일 오전 8시(�
 - [pgvector·Testcontainers 통합 테스트](docs/PGVECTOR_INTEGRATION_TEST.md)
 - [pgvector·Testcontainers 3회차 학습 문서 (HTML)](docs/PGVECTOR_STUDY_CURRICULUM.html)
 - [퀴즈 생성·중복 필터링 전체 흐름 (HTML)](docs/QUIZ_GENERATION_DUPLICATE_FILTER_FLOW.html)
+- [퀴즈 정답 분포·보기별 해설 정책](docs/QUIZ_ANSWER_DISTRIBUTION_AND_EXPLANATIONS.md)
 - [외부 접속 모드 운영 가이드](docs/REMOTE_ACCESS.md)
 - [외부 접속 구조와 동작 흐름 (HTML)](docs/REMOTE_ACCESS_FLOW.html)
 - [포트폴리오 완성도·부족한 부분 점검](docs/PORTFOLIO_GAP_ANALYSIS.md)
 - [Langfuse 기반 AI 관측·비용 없는 설정](docs/LANGFUSE_OBSERVABILITY.md)
+- [AI 비용·품질 제어 설계](docs/AI_COST_AND_QUALITY_CONTROL.md)
 - [Prometheus 기반 AI·문제 품질 운영 관측](docs/PROMETHEUS_OBSERVABILITY.md)
 - [AI 품질 평가와 Human-in-the-loop](docs/AI_QUALITY_EVALUATION.md)
 - [파일·URL 학습 자료 수집 보안 설계](docs/SOURCE_INGESTION_SECURITY.md)
@@ -132,6 +136,7 @@ Codex 로컬 자동화 `Auknowlog 원격 접속 메일`은 매일 오전 8시(�
 - Prometheus는 기본 실행에서 제외되며 `docker compose --profile monitoring up -d`로 필요할 때만 실행합니다. UI는 `http://127.0.0.1:9090`입니다.
 - 백엔드와 Prometheus를 실행한 뒤 `./scripts/verify-prometheus.sh`를 실행하면 프로젝트 전용 지표 노출, 고카디널리티 label 부재, 실제 scrape target의 `UP` 상태를 한 번에 확인합니다. 이 검증은 OpenAI API를 호출하지 않습니다.
 - 화면은 기본적으로 비용 없는 더미 퀴즈 모드입니다. 실제 GPT 생성은 화면에서 해제하고 `OPENAI_API_KEY`를 설정한 경우에만 실행됩니다.
+- 실제 AI 요청은 서버 전체 일일 안전 예산과 기능별 출력 토큰 상한을 먼저 검사합니다. 이 값은 OpenAI 청구 한도와 별개인 앱 안전장치이며, 기본값·조정 방법은 [AI 비용·품질 제어 설계](docs/AI_COST_AND_QUALITY_CONTROL.md)를 참고하세요.
 - 의미 중복 검사용 임베딩은 기본 활성입니다. 실제 AI 퀴즈 생성 시 Embeddings API가 함께 호출되며, 비활성화하려면 `AUKNOWLOG_EMBEDDINGS_ENABLED=false`를 설정하세요.
 - Langfuse 관측은 기본 비활성입니다. 별도 비용 없이 Cloud Hobby를 연결하는 방법과 개인정보 기본값은 [Langfuse 운영 문서](docs/LANGFUSE_OBSERVABILITY.md)를 참고하세요.
 - `품질 평가`의 중복 후보 수집·검토·지표 조회는 저장된 DB 데이터만 사용합니다. 기준 데이터셋의 문장 저장도 비용이 없지만, `실제 유사도 계산`은 사용자가 확인한 경우에만 OpenAI Embeddings API를 호출합니다. 목표·문항 AI 평가는 사용자가 버튼을 누르고 확인한 경우에만 선택한 학습 단위 하나를 OpenAI로 평가합니다.
@@ -155,7 +160,7 @@ cd ..
 ./scripts/verify-prometheus.sh
 ```
 
-`integrationTest`는 Testcontainers가 격리된 임시 DB를 만들고 Flyway V1~V16, `vector(512)`, HNSW 인덱스, 코사인 유사도 검색, 평가 문제 쌍·분리 기준 데이터셋 벡터 저장, 511차원 벡터 거부와 피드백·계층형 로드맵·자료 출처·학습 목표 및 문항 연결 스키마를 검증한 뒤 컨테이너를 제거합니다. OpenAI API는 호출하지 않습니다.
+`integrationTest`는 Testcontainers가 격리된 임시 DB를 만들고 Flyway V1~V17, `vector(512)`, HNSW 인덱스, 코사인 유사도 검색, 평가 문제 쌍·분리 기준 데이터셋 벡터 저장, 511차원 벡터 거부와 피드백·계층형 로드맵·자료 출처·학습 목표·보기별 해설 및 문항 연결 스키마를 검증한 뒤 컨테이너를 제거합니다. OpenAI API는 호출하지 않습니다.
 
 ## ⚙️ 환경 설정
 

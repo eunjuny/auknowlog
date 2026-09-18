@@ -1,6 +1,7 @@
 package com.auknowlog.backend.roadmap.service;
 
 import com.auknowlog.backend.ai.service.AiGenerationLedgerService;
+import com.auknowlog.backend.ai.service.AiUsagePolicyService;
 import com.auknowlog.backend.common.observability.AiGenerationMetrics;
 import com.auknowlog.backend.observability.LangfuseTracingService;
 import com.auknowlog.backend.roadmap.dto.RoadmapDefinitionRequest;
@@ -46,7 +47,8 @@ class OpenAiRoadmapServiceTest {
                 objectMapper,
                 new AiGenerationMetrics(new SimpleMeterRegistry()),
                 mock(AiGenerationLedgerService.class),
-                tracingService
+                tracingService,
+                mock(AiUsagePolicyService.class)
         );
         ReflectionTestUtils.setField(service, "apiKey", "test-key");
         ReflectionTestUtils.setField(service, "apiUrl", "https://api.openai.com/v1/responses");
@@ -82,6 +84,7 @@ class OpenAiRoadmapServiceTest {
         ));
 
         server.expect(requestTo("https://api.openai.com/v1/responses"))
+                .andExpect(jsonPath("$.max_output_tokens").value(6000))
                 .andExpect(jsonPath("$.text.format.schema.properties.version.enum[0]").value("1.2"))
                 .andExpect(jsonPath("$.input[0].content[0].text", containsString(
                         "analyze the essential knowledge and practical decisions")))

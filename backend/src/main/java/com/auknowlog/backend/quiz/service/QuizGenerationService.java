@@ -87,7 +87,7 @@ public class QuizGenerationService {
                 )) {
                     sourceContext = roadmapPlan.sourceId() == null
                             ? List.of()
-                            : sourceService.getQuizContext(roadmapPlan.sourceId());
+                            : sourceService.getQuizContext(roadmapPlan.sourceId(), topic);
                     sourceLookup.complete(Map.of("sourceChunkCount", sourceContext.size()));
                 }
                 List<String> feedbackAvoidanceQuestions;

@@ -159,6 +159,7 @@ public class ReviewService {
                 attempt.getSelectedAnswer(),
                 question.getCorrectAnswer(),
                 question.getExplanation(),
+                readOptionExplanations(question),
                 attempt.getNextReviewAt(),
                 attempt.getIntervalAfter(),
                 attempt.getRepetitionAfter(),
@@ -174,6 +175,15 @@ public class ReviewService {
                     .constructCollectionType(List.class, String.class));
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("저장된 문항 선택지를 읽을 수 없습니다.", exception);
+        }
+    }
+
+    private List<String> readOptionExplanations(LearningQuestion question) {
+        try {
+            return objectMapper.readValue(question.getOptionExplanations(), objectMapper.getTypeFactory()
+                    .constructCollectionType(List.class, String.class));
+        } catch (JsonProcessingException exception) {
+            throw new IllegalStateException("저장된 보기별 해설을 읽을 수 없습니다.", exception);
         }
     }
 }

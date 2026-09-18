@@ -38,6 +38,9 @@ public class LearningQuestion {
     @Column(nullable = false, columnDefinition = "TEXT")
     private String explanation;
 
+    @Column(name = "option_explanations", nullable = false, columnDefinition = "TEXT")
+    private String optionExplanations;
+
     @Column(name = "source_references", columnDefinition = "TEXT")
     private String sourceReferences;
 
@@ -49,12 +52,12 @@ public class LearningQuestion {
     }
 
     public LearningQuestion(LearningQuiz quiz, int questionOrder, String questionText, String options,
-                            String correctAnswer, String explanation, String sourceReferences) {
-        this(quiz, questionOrder, questionText, options, correctAnswer, explanation, sourceReferences, null);
+                            String correctAnswer, String explanation, String optionExplanations, String sourceReferences) {
+        this(quiz, questionOrder, questionText, options, correctAnswer, explanation, optionExplanations, sourceReferences, null);
     }
 
     public LearningQuestion(LearningQuiz quiz, int questionOrder, String questionText, String options,
-                            String correctAnswer, String explanation, String sourceReferences,
+                            String correctAnswer, String explanation, String optionExplanations, String sourceReferences,
                             LearningObjective learningObjective) {
         this.quiz = quiz;
         this.questionOrder = questionOrder;
@@ -62,6 +65,7 @@ public class LearningQuestion {
         this.options = options;
         this.correctAnswer = correctAnswer;
         this.explanation = explanation;
+        this.optionExplanations = optionExplanations;
         this.sourceReferences = sourceReferences;
         this.learningObjective = learningObjective;
     }
@@ -92,6 +96,10 @@ public class LearningQuestion {
 
     public String getExplanation() {
         return explanation;
+    }
+
+    public String getOptionExplanations() {
+        return optionExplanations;
     }
 
     public String getSourceReferences() {

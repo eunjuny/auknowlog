@@ -146,6 +146,12 @@ onMounted(loadQueue);
         <p><strong>내 답:</strong> {{ results[review.reviewScheduleId].selectedAnswer }}</p>
         <p><strong>정답:</strong> {{ results[review.reviewScheduleId].correctAnswer }}</p>
         <p><strong>해설:</strong> {{ results[review.reviewScheduleId].explanation }}</p>
+        <ul v-if="results[review.reviewScheduleId].optionExplanations?.length" class="option-explanation-list">
+          <li v-for="(option, optionIndex) in review.options" :key="`${option}-explanation`" :class="option === results[review.reviewScheduleId].correctAnswer ? 'correct-option' : 'wrong-option'">
+            <strong>{{ String.fromCharCode(65 + optionIndex) }}. {{ option }}</strong>
+            <span>{{ results[review.reviewScheduleId].optionExplanations[optionIndex] || '이 보기에 대한 추가 해설이 없습니다.' }}</span>
+          </li>
+        </ul>
         <p class="next-review">{{ intervalText(results[review.reviewScheduleId]) }}</p>
       </article>
     </section>
@@ -221,6 +227,10 @@ onMounted(loadQueue);
 .submit-review-button:disabled, .refresh-button:disabled { opacity: .55; cursor: not-allowed; }
 
 .result-card p { margin: 7px 0; color: var(--ink-soft); }
+.option-explanation-list { display: grid; gap: 7px; margin: 13px 0 0; padding: 0; list-style: none; }
+.option-explanation-list li { display: grid; gap: 3px; padding: 10px 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 8px; font-size: .86rem; }
+.option-explanation-list li strong { color: var(--ink-soft); }
+.option-explanation-list .correct-option { border-color: #9ad5b5; background: #effaf3; }
 .result-title strong { font-size: 17px; }
 .result-title.correct strong { color: #24744d; }
 .result-title.wrong strong { color: #be3c35; }

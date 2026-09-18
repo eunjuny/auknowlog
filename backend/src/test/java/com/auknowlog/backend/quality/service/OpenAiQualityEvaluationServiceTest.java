@@ -1,6 +1,7 @@
 package com.auknowlog.backend.quality.service;
 
 import com.auknowlog.backend.ai.service.AiGenerationLedgerService;
+import com.auknowlog.backend.ai.service.AiUsagePolicyService;
 import com.auknowlog.backend.common.observability.AiGenerationMetrics;
 import com.auknowlog.backend.quality.repository.QualityEvaluationRepository;
 import com.auknowlog.backend.quality.repository.QualityEvaluationRepository.ObjectiveInput;
@@ -45,7 +46,8 @@ class OpenAiQualityEvaluationServiceTest {
         ledgerService = mock(AiGenerationLedgerService.class);
         service = new OpenAiQualityEvaluationService(
                 builder, objectMapper, repository,
-                new AiGenerationMetrics(new SimpleMeterRegistry()), ledgerService
+                new AiGenerationMetrics(new SimpleMeterRegistry()), ledgerService,
+                mock(AiUsagePolicyService.class)
         );
         ReflectionTestUtils.setField(service, "apiKey", "test-key");
         ReflectionTestUtils.setField(service, "apiUrl", "https://api.openai.com/v1/responses");
@@ -95,6 +97,7 @@ class OpenAiQualityEvaluationServiceTest {
 
         server.expect(requestTo("https://api.openai.com/v1/responses"))
                 .andExpect(jsonPath("$.store").value(false))
+                .andExpect(jsonPath("$.max_output_tokens").value(3000))
                 .andExpect(jsonPath("$.input[0].content[0].text", containsString("assignedObjectiveId")))
                 .andExpect(jsonPath("$.text.format.schema.properties.referenceObjectives.type").value("array"))
                 .andRespond(withSuccess(responseBody, MediaType.APPLICATION_JSON));

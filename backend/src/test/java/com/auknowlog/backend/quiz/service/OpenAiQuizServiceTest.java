@@ -1,6 +1,7 @@
 package com.auknowlog.backend.quiz.service;
 
 import com.auknowlog.backend.ai.service.AiGenerationLedgerService;
+import com.auknowlog.backend.ai.service.AiUsagePolicyService;
 import com.auknowlog.backend.quiz.dto.Question;
 import com.auknowlog.backend.quiz.dto.QuizObjectiveAllocation;
 import com.auknowlog.backend.quiz.dto.QuizResponse;
@@ -41,6 +42,7 @@ class OpenAiQuizServiceTest {
     private OpenAiQuizService service;
     private SimpleMeterRegistry meterRegistry;
     private AiGenerationLedgerService aiGenerationLedgerService;
+    private AiUsagePolicyService aiUsagePolicyService;
     private LangfuseTracingService langfuseTracingService;
 
     @BeforeEach
@@ -49,10 +51,11 @@ class OpenAiQuizServiceTest {
         server = MockRestServiceServer.bindTo(builder).build();
         meterRegistry = new SimpleMeterRegistry();
         aiGenerationLedgerService = mock(AiGenerationLedgerService.class);
+        aiUsagePolicyService = mock(AiUsagePolicyService.class);
         langfuseTracingService = mock(LangfuseTracingService.class);
         when(langfuseTracingService.startGeneration(any(), any(), org.mockito.ArgumentMatchers.anyMap(), org.mockito.ArgumentMatchers.anyMap()))
                 .thenReturn(LangfuseTracingService.noopScope());
-        service = new OpenAiQuizService(builder, objectMapper, new AiGenerationMetrics(meterRegistry), aiGenerationLedgerService, langfuseTracingService);
+        service = new OpenAiQuizService(builder, objectMapper, new AiGenerationMetrics(meterRegistry), aiGenerationLedgerService, langfuseTracingService, aiUsagePolicyService);
         ReflectionTestUtils.setField(service, "apiKey", "test-key");
         ReflectionTestUtils.setField(service, "apiUrl", "https://api.openai.com/v1/responses");
         ReflectionTestUtils.setField(service, "modelName", "gpt-5.4-mini");
@@ -85,9 +88,11 @@ class OpenAiQuizServiceTest {
                 .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer test-key"))
                 .andExpect(jsonPath("$.model").value("gpt-5.4-mini"))
                 .andExpect(jsonPath("$.store").value(false))
+                .andExpect(jsonPath("$.max_output_tokens").value(2400))
                 .andExpect(jsonPath("$.reasoning.effort").value("low"))
                 .andExpect(jsonPath("$.text.format.type").value("json_schema"))
                 .andExpect(jsonPath("$.text.format.strict").value(true))
+                .andExpect(jsonPath("$.text.format.schema.properties.questions.items.properties.optionExplanations.type").value("array"))
                 .andExpect(jsonPath("$.input[0].content[0].text", containsString("<topic>\nJava\n</topic>")))
                 .andRespond(withSuccess(responseBody, MediaType.APPLICATION_JSON));
 
@@ -104,6 +109,7 @@ class OpenAiQuizServiceTest {
                 .summary().totalAmount()).isEqualTo(200);
         verify(aiGenerationLedgerService).recordQuizSuccess(
                 org.mockito.ArgumentMatchers.eq("gpt-5.4-mini"), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+        verify(aiUsagePolicyService).assertWithinBudget(org.mockito.ArgumentMatchers.eq("퀴즈 생성"), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(2400));
         server.verify();
     }
 

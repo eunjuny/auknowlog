@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Daily Tech Learning 샘플</title>
+  <style>
+    :root {
+      --ink: #171717;
+      --ink-soft: #303030;
+      --muted: #6b6b66;
+      --line: #deded8;
+      --surface: #ffffff;
+      --surface-subtle: #f7f7f4;
+      --page: #efefeb;
+      --accent: #c64e32;
+      --accent-soft: #fff1ec;
+      --good: #24744d;
+      --good-soft: #edf8f1;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: var(--ink); background: var(--page); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; line-height: 1.6; }
+    .shell { max-width: 1080px; margin: 28px auto; overflow: hidden; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); box-shadow: 0 18px 50px rgb(23 23 23 / 7%); }
+    header { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 22px 34px; border-bottom: 1px solid var(--line); }
+    .product { margin: 0; color: var(--accent); font-size: .78rem; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+    h1 { margin: 2px 0 0; font-size: 1.25rem; }
+    .sample { padding: 5px 9px; border-radius: 99px; color: var(--accent); background: var(--accent-soft); font-size: .75rem; font-weight: 800; }
+    main { padding: 38px 42px 48px; }
+    .eyebrow { margin: 0 0 7px; color: var(--accent); font-size: .76rem; font-weight: 800; letter-spacing: .1em; }
+    .title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; }
+    h2 { max-width: 700px; margin: 0; font-size: clamp(1.65rem, 4vw, 2.3rem); line-height: 1.25; }
+    .date { margin: 6px 0 0; color: var(--muted); font-size: .88rem; }
+    .source { margin-top: 24px; padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-subtle); }
+    .source small, .source p { margin: 0; }
+    .source small { color: var(--muted); font-weight: 800; }
+    .source a { display: inline-block; margin-top: 3px; color: var(--ink); font-weight: 800; text-decoration-color: var(--accent); text-decoration-thickness: 2px; text-underline-offset: 4px; }
+    .source p { margin-top: 7px; color: var(--muted); font-size: .88rem; }
+    .article-brief { margin-top: 18px; padding: 23px 24px; border: 1px solid var(--line); border-radius: 14px; background: #fff; }
+    .article-brief h3, .ai-brief h3 { margin: 0 0 7px; font-size: 1.1rem; }
+    .article-brief > p, .ai-brief > p { margin: 0; color: var(--ink-soft); }
+    .article-points { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 16px; }
+    .article-point { padding: 13px; border-radius: 10px; background: var(--surface-subtle); }
+    .article-point b { display: block; color: var(--accent); font-size: .76rem; letter-spacing: .04em; }
+    .article-point span { display: block; margin-top: 4px; font-size: .88rem; font-weight: 700; }
+    .boundary { margin: 15px 0 0; padding: 10px 12px; border-left: 3px solid var(--accent); color: var(--muted) !important; background: var(--accent-soft); font-size: .85rem; }
+    .flow { display: flex; flex-wrap: wrap; gap: 8px; margin: 18px 0 0; padding: 0; list-style: none; }
+    .flow li { padding: 5px 9px; border: 1px solid var(--line); border-radius: 99px; color: var(--muted); background: var(--surface-subtle); font-size: .78rem; font-weight: 800; }
+    .grid { display: grid; grid-template-columns: 1.25fr .75fr; gap: 18px; margin-top: 20px; }
+    .section { padding: 24px; border: 1px solid var(--line); border-radius: 14px; }
+    .section h3 { margin: 0 0 7px; font-size: 1.1rem; }
+    .section p { margin: 0; color: var(--ink-soft); }
+    .section p + p { margin-top: 12px; }
+    .fact { margin-top: 16px !important; padding: 12px 13px; border-left: 3px solid var(--accent); color: var(--muted) !important; background: var(--accent-soft); font-size: .88rem; }
+    .why { background: var(--surface-subtle); }
+    .why ul { display: grid; gap: 9px; margin: 16px 0 0; padding-left: 20px; color: var(--ink-soft); }
+    .concepts { margin-top: 18px; border-top: 1px solid var(--line); }
+    .concept { display: grid; grid-template-columns: 145px 1fr; gap: 14px; padding: 15px 0; border-bottom: 1px solid var(--line); }
+    .concept strong { font-size: .94rem; }
+    .concept span { color: var(--muted); font-size: .88rem; }
+    .ai-brief { margin-top: 18px; padding: 24px; border: 1px solid #bcdcc9; border-radius: 14px; background: var(--good-soft); }
+    .ai-label { display: inline-block; margin-bottom: 8px; padding: 3px 8px; border-radius: 99px; color: var(--good); background: #d9f0e1; font-size: .72rem; font-weight: 800; letter-spacing: .04em; }
+    .ai-brief .concepts { margin-top: 15px; }
+    .supplement-copy { margin-top: 16px !important; padding: 18px; border-radius: 10px; background: #fff; }
+    .supplement-copy p { margin: 0; color: var(--ink-soft); }
+    .supplement-copy p + p { margin-top: 12px; }
+    .learning { margin-top: 18px; padding: 25px; border: 1px solid #edc5b8; border-radius: 14px; background: var(--accent-soft); }
+    .learning h3 { margin: 0; font-size: 1.14rem; }
+    .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 18px 0; }
+    .step { min-height: 93px; padding: 13px; border-radius: 10px; background: #fff; }
+    .step b { display: block; color: var(--accent); font-size: .76rem; }
+    .step span { display: block; margin-top: 4px; font-size: .88rem; font-weight: 700; }
+    .actions { display: flex; flex-wrap: wrap; gap: 9px; }
+    button { padding: 10px 14px; border: 1px solid var(--ink); border-radius: 8px; color: #fff; background: var(--ink); font: inherit; font-size: .88rem; font-weight: 800; cursor: pointer; }
+    button.secondary { color: var(--ink); background: #fff; border-color: #bbb; }
+    .practice { display: none; margin-top: 17px; padding: 18px; border-radius: 11px; background: #fff; }
+    .practice.open { display: block; }
+    .practice small { color: var(--accent); font-weight: 800; }
+    .practice h4 { margin: 6px 0 8px; font-size: 1rem; }
+    .quiz-card { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
+    .quiz-card:first-of-type { margin-top: 12px; }
+    .quiz-card p { margin: 0 0 10px; font-weight: 700; }
+    .choices { display: grid; gap: 7px; }
+    .choice { width: 100%; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; color: var(--ink); background: #fff; text-align: left; font-weight: 600; }
+    .choice:hover { border-color: var(--accent); }
+    .choice.correct { color: #145c3a; border-color: var(--good); background: var(--good-soft); }
+    .choice.incorrect { color: #9b2c21; border-color: var(--accent); background: var(--accent-soft); }
+    .answer { display: none; margin: 10px 0 0; color: var(--ink-soft); font-size: .9rem; }
+    .answer.open { display: block; }
+    .advanced { display: none; margin-top: 17px; padding: 18px; border: 1px solid #bcdcc9; border-radius: 11px; background: var(--good-soft); }
+    .advanced.open { display: block; }
+    .advanced h4 { margin: 0 0 7px; }
+    .advanced ul { margin: 10px 0 0; padding-left: 20px; }
+    .saved { display: none; margin: 13px 0 0; color: var(--good); font-size: .88rem; font-weight: 800; }
+    .saved.open { display: block; }
+    footer { padding: 16px 42px; color: var(--muted); border-top: 1px solid var(--line); background: var(--surface-subtle); font-size: .78rem; }
+    @media (max-width: 760px) {
+      .shell { margin: 0; border: 0; border-radius: 0; }
+      header, main { padding-left: 20px; padding-right: 20px; }
+      footer { padding-left: 20px; padding-right: 20px; }
+      .grid, .steps, .article-points { grid-template-columns: 1fr; }
+      .concept { grid-template-columns: 1fr; gap: 3px; }
+      .title-row { display: block; }
+    }
+  </style>
+</head>
+<body>
+  <div class="shell">
+    <header>
+      <div><p class="product">Auknowlog</p><h1>데일리 기술 학습</h1></div>
+      <span class="sample">기능 제안 샘플</span>
+    </header>
+
+    <main>
+      <p class="eyebrow">TODAY'S TECH BRIEF · AI SECURITY</p>
+      <div class="title-row">
+        <div>
+          <h2>AI가 바꾼 공격 속도, 보안은 왜 ‘공격자의 시간’으로 봐야 할까?</h2>
+          <p class="date">2026.09.22 · 예상 학습 시간 18분</p>
+        </div>
+      </div>
+
+      <article class="source">
+        <small>원문 출처</small><br>
+        <a href="https://www.etnews.com/20260922000113" target="_blank" rel="noopener noreferrer">[보안칼럼] AI가 바꾼 공격 속도, 보안도 '공격자의 시간'으로 — 전자신문</a>
+        <p>원문 전문을 저장하거나 재게시하지 않고, 제공받은 RSS 미리보기·제목·링크·출처 메타데이터만 학습 시작점으로 사용합니다.</p>
+      </article>
+
+      <section class="article-brief">
+        <h3>1. 기사에 대한 내용</h3>
+        <p>이 칼럼은 데프콘 CTF 현장에서 관찰한 변화를 출발점으로, AI가 공격자의 코드 분석·취약점 탐색·반복 시도를 빠르게 만드는 환경을 설명합니다. 핵심은 AI가 공격자를 완전히 대체한다는 것이 아니라, 숙련된 공격자가 더 많은 가설과 공격 경로를 짧은 시간에 시험하도록 돕는다는 점입니다.</p>
+        <p>따라서 방어 조직이 분기·반기 단위의 점검만 반복하면 공격 속도와 방어 검증 속도 사이의 차이가 커질 수 있습니다. 오늘의 학습 목표는 <strong>탐지·차단 중심 보안에서 공격자 관점의 지속 검증으로 왜 관점을 넓혀야 하는지</strong>를 이해하는 것입니다.</p>
+        <div class="article-points">
+          <div class="article-point"><b>기사에서 읽을 사실</b><span>AI와 MCP 도구·전용 스킬이 분석과 반복 탐색 속도를 높이고 있다는 점</span></div>
+          <div class="article-point"><b>기사의 관점</b><span>취약점 개수보다 실제 침투 경로와 약점 간 연결을 판단하는 능력이 중요하다는 점</span></div>
+          <div class="article-point"><b>오늘의 질문</b><span>우리 서비스가 실제 공격 경로를 지속적으로 검증하려면 무엇을 측정하고 자동화해야 하는가?</span></div>
+        </div>
+        <p class="boundary">기사의 제목·본문에서 확인하지 못한 가격, API 제공 여부, 성능 수치, 출시 일정은 요약에 덧붙이지 않습니다. 세부 사실은 반드시 원문 또는 공식 문서에서 확인합니다.</p>
+        <ol class="flow"><li>기사 맥락 읽기</li><li>보충 해설 읽기</li><li>복습 문제 풀기</li><li>심화 학습 선택</li></ol>
+      </section>
+
+      <div class="grid">
+        <section class="section">
+          <h3>기사에서 보안 운영 주제로 연결하기</h3>
+          <p>일반적인 취약점 관리는 “알려진 취약점이 있는가”를 찾는 데 강합니다. 반면 기사에서 말하는 공격자 관점 검증은 외부 노출 자산, 실제 악용 가능성, 권한 상승과 측면 이동까지 이어지는 <strong>공격 경로</strong>를 묻습니다.</p>
+          <p class="fact">이 영역은 기사 요약이 아니라 기사에서 파생된 학습 연결입니다. 원문 사실과 일반 보안 원칙을 화면에서 섞지 않는 것이 핵심입니다.</p>
+
+          <div class="concepts">
+            <div class="concept"><strong>공격 표면</strong><span>인터넷에 노출된 도메인·API·클라우드 자산·계정처럼 공격자가 발견하고 시도할 수 있는 모든 진입점</span></div>
+            <div class="concept"><strong>공격 경로</strong><span>초기 침투 뒤 취약점 악용, 권한 상승, 측면 이동을 거쳐 핵심 자산에 도달하는 실제 연결 과정</span></div>
+            <div class="concept"><strong>지속 검증</strong><span>정기 진단 결과만 보지 않고 환경 변화와 외부 노출을 반영해 실제 악용 가능성을 반복 검증하는 운영 방식</span></div>
+          </div>
+        </section>
+
+        <aside class="section why">
+          <h3>왜 나에게 중요한가요?</h3>
+          <p>AI가 공격자의 탐색 속도를 올리는 환경에서는 “경보가 왔을 때 잘 대응하는가”만으로 충분하지 않습니다. 공격자가 먼저 찾을 수 있는 길을 방어자가 더 빨리 확인하고 끊을 수 있어야 합니다.</p>
+          <ul>
+            <li>외부에 노출된 자산과 권한이 최신 상태로 파악되는가?</li>
+            <li>심각도뿐 아니라 실제 악용 가능성이 판단되는가?</li>
+            <li>침투 후 권한 상승·측면 이동 경로까지 검증하는가?</li>
+            <li>AI 결과를 사람이 검증하고 조치 우선순위로 바꾸는가?</li>
+          </ul>
+        </aside>
+      </div>
+
+      <section class="ai-brief">
+        <span class="ai-label">AI 보충 지식 · 기사와 분리된 기술 설명</span>
+        <h3>2. 보충 해설: AI 시대의 보안을 ‘공격자의 시간’으로 설계하기</h3>
+        <p>아래 설명은 기사 사실을 반복하는 대신, 기사를 이해하고 프로젝트에 연결하기 위해 AI가 생성하는 일반 기술 해설의 예시입니다.</p>
+        <div class="supplement-copy">
+          <p><strong>첫째, 보안 우선순위는 취약점 개수보다 공격 가능성에 가깝습니다.</strong> 같은 심각도 점수를 받은 취약점이라도 인터넷에 노출된 서비스에 있고 공개 익스플로잇이 존재하며, 중요 데이터가 있는 내부망까지 이어질 수 있다면 위험은 훨씬 커집니다. 자산의 노출 상태, 계정 권한, 네트워크 연결, 악용 난이도를 함께 보아야 합니다.</p>
+          <p><strong>둘째, 공격 경로는 하나의 취약점보다 중요할 수 있습니다.</strong> 공격자는 작은 설정 오류로 시작해 서비스 계정을 얻고, 과도한 권한을 이용해 다른 시스템으로 이동할 수 있습니다. 방어자는 “외부 진입 → 권한 획득 → 권한 상승 → 측면 이동 → 핵심 자산 접근”을 하나의 시나리오로 그려야 합니다.</p>
+          <p><strong>셋째, AI는 자동 조치기가 아니라 탐색 범위를 넓히는 가속기로 다뤄야 합니다.</strong> AI는 자산 정보와 설정을 정리하고 검증 후보를 빠르게 만들 수 있지만, 실제 악용 가능성·업무 영향·검증 안전성은 사람이 판단해야 합니다. 운영 환경의 공격 시뮬레이션은 승인된 범위와 중단 기준 아래에서만 수행합니다.</p>
+          <p><strong>마지막으로, 지속 검증은 자동화와 책임 분리를 함께 요구합니다.</strong> 자산·배포·권한 변경이 생길 때마다 외부 노출과 보안 정책을 다시 평가하고, 높은 위험 후보만 담당자가 검토하도록 큐를 구성합니다. 탐지는 “무슨 일이 일어났는가”를, 공격자 관점 검증은 “어디가 실제로 뚫릴 수 있는가”를 확인합니다.</p>
+        </div>
+        <div class="concepts">
+          <div class="concept"><strong>우선순위 기준</strong><span>심각도에 외부 노출, 공개 익스플로잇, 중요 자산 접근 가능성, 탐지 가능성을 더해 실제 위험을 계산합니다.</span></div>
+          <div class="concept"><strong>검증 안전선</strong><span>공격 시뮬레이션은 승인된 범위·테스트 계정·중단 조건·감사 로그가 있어야 하며, 운영 자산에 무제한으로 실행하면 안 됩니다.</span></div>
+          <div class="concept"><strong>사람의 역할</strong><span>AI가 만든 후보와 요약을 그대로 믿지 않고, 공격 시나리오의 현실성·업무 영향·조치 순서를 전문가가 확정합니다.</span></div>
+        </div>
+      </section>
+
+      <section class="learning">
+        <h3>3. 읽은 내용을 복습하고, 필요하면 심화 학습으로 이어가기</h3>
+        <div class="steps">
+          <div class="step"><b>01 · 읽기</b><span>기사 맥락 확인<br>2분</span></div>
+          <div class="step"><b>02 · 이해</b><span>공격 경로 해설<br>8분</span></div>
+          <div class="step"><b>03 · 연결</b><span>보안 운영 점검<br>4분</span></div>
+          <div class="step"><b>04 · 확인</b><span>개념 문제 2개<br>2분</span></div>
+        </div>
+        <div class="actions">
+          <button type="button" id="start">보충 해설 복습하기</button>
+          <button type="button" class="secondary" id="advanced-start">관련 심화 학습 보기</button>
+          <button type="button" class="secondary" id="later">나중에 보기</button>
+        </div>
+        <p class="saved" id="saved" aria-live="polite">나중에 볼 데일리 브리핑에 저장했습니다.</p>
+        <section class="practice" id="practice" aria-live="polite">
+          <small>복습 문제 · 바로 위 보충 해설에서 다룬 내용</small>
+          <h4>읽은 내용을 확인해보세요</h4>
+          <div class="quiz-card" data-answer="b">
+            <p>외부에 노출된 웹 서비스의 취약점을 우선 처리할지 판단할 때, 기사 관점에 가장 가까운 기준은 무엇인가요?</p>
+            <div class="choices">
+              <button class="choice" type="button" data-choice="a">A. 발견된 날짜가 오래된 순서만 따른다.</button>
+              <button class="choice" type="button" data-choice="b">B. 심각도, 외부 노출, 실제 악용 가능성, 핵심 자산 접근 경로를 함께 본다.</button>
+              <button class="choice" type="button" data-choice="c">C. 취약점 개수가 많은 시스템을 먼저 고른다.</button>
+              <button class="choice" type="button" data-choice="d">D. AI가 높은 점수를 준 항목은 사람 검토 없이 즉시 차단한다.</button>
+            </div>
+            <p class="answer"><strong>해설:</strong> B가 맞습니다. 공격자는 취약점 하나를 고립해서 보지 않고, 실제로 들어올 수 있는지와 이후 핵심 자산까지 이어지는지를 봅니다. 방어 우선순위도 같은 관점으로 정해야 합니다.</p>
+          </div>
+          <div class="quiz-card" data-answer="c">
+            <p>AI를 활용한 보안 검증에서 사람이 반드시 맡아야 할 역할로 가장 적절한 것은 무엇인가요?</p>
+            <div class="choices">
+              <button class="choice" type="button" data-choice="a">A. AI가 만든 모든 공격 후보를 운영 환경에서 즉시 실행한다.</button>
+              <button class="choice" type="button" data-choice="b">B. 반복 탐색을 전부 수동으로 수행해 AI를 사용하지 않는다.</button>
+              <button class="choice" type="button" data-choice="c">C. AI 결과의 현실성·업무 영향·검증 범위와 중단 기준을 판단한다.</button>
+              <button class="choice" type="button" data-choice="d">D. 탐지 알림을 끄고 공격 경로 검증만 수행한다.</button>
+            </div>
+            <p class="answer"><strong>해설:</strong> C가 맞습니다. AI는 탐색과 후보 생성의 속도를 높이지만, 실제 공격 가능성 판단과 안전한 검증 범위의 결정은 사람이 책임져야 합니다.</p>
+          </div>
+        </section>
+        <section class="advanced" id="advanced" aria-live="polite">
+          <small>선택형 심화 학습 · 별도 문제 생성 대상</small>
+          <h4>다음 중 원하는 방향으로 더 학습할 수 있습니다.</h4>
+          <ul>
+            <li><strong>공격 표면 관리:</strong> 외부 자산 탐색, 클라우드 노출 점검, 자산 인벤토리</li>
+            <li><strong>공격 경로 분석:</strong> 권한 상승, 측면 이동, 중요 자산까지의 경로 모델링</li>
+            <li><strong>지속 보안 검증:</strong> 배포·권한 변경 이벤트와 연계한 검증, 우선순위 큐, 안전한 자동화</li>
+          </ul>
+          <p class="answer open">실제 구현에서는 선택한 주제만 다음 학습 단위로 만들어 추가 AI 호출과 문제 수를 제한합니다.</p>
+        </section>
+      </section>
+    </main>
+    <footer>Daily Tech Learning은 뉴스 원문을 재게시하지 않고, 출처 링크와 검증 가능한 기술 학습을 연결하는 기능 제안입니다.</footer>
+  </div>
+  <script>
+    const practice = document.getElementById('practice');
+    const saved = document.getElementById('saved');
+    document.getElementById('start').addEventListener('click', () => {
+      practice.classList.add('open');
+      saved.classList.remove('open');
+      practice.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    document.getElementById('later').addEventListener('click', () => {
+      saved.classList.add('open');
+      practice.classList.remove('open');
+    });
+    document.getElementById('advanced-start').addEventListener('click', () => {
+      document.getElementById('advanced').classList.toggle('open');
+      saved.classList.remove('open');
+      document.getElementById('advanced').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    document.querySelectorAll('.quiz-card').forEach((card) => {
+      const answer = card.dataset.answer;
+      const explanation = card.querySelector('.answer');
+      card.querySelectorAll('.choice').forEach((choice) => {
+        choice.addEventListener('click', () => {
+          card.querySelectorAll('.choice').forEach((item) => {
+            item.classList.remove('correct', 'incorrect');
+            item.disabled = true;
+          });
+          choice.classList.add(choice.dataset.choice === answer ? 'correct' : 'incorrect');
+          card.querySelector(`[data-choice="${answer}"]`).classList.add('correct');
+          explanation.classList.add('open');
+        });
+      });
+    });
+  </script>
+</body>
+</html>

@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.stream.IntStream;
 
 @Service
@@ -81,6 +82,17 @@ public class DuplicateEvaluationDatasetService {
         } catch (RuntimeException exception) {
             repository.markFailed(datasetId);
             throw exception;
+        }
+    }
+
+    @Transactional
+    public void reviewSample(long datasetId, int sampleOrder, String verdict) {
+        String normalized = verdict == null ? "" : verdict.trim().toUpperCase();
+        if (!Set.of("DUPLICATE", "RELATED", "DISTINCT", "SKIPPED").contains(normalized)) {
+            throw new IllegalArgumentException("지원하지 않는 기준 표본 판정입니다.");
+        }
+        if (repository.reviewSample(datasetId, sampleOrder, normalized) == 0) {
+            throw new IllegalArgumentException("검토할 기준 표본을 찾을 수 없습니다.");
         }
     }
 

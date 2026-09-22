@@ -8,8 +8,19 @@ const RoadmapView = defineAsyncComponent(() => import('./components/RoadmapView.
 const ReviewQueue = defineAsyncComponent(() => import('./components/ReviewQueue.vue'))
 const SourceLibrary = defineAsyncComponent(() => import('./components/SourceLibrary.vue'))
 const QualityEvaluationView = defineAsyncComponent(() => import('./components/QualityEvaluationView.vue'))
+const DailyLearningView = defineAsyncComponent(() => import('./components/DailyLearningView.vue'))
 
-const activeView = ref('quiz')
+const DAILY_COMPLETION_KEY = 'auknowlog.daily-learning.completed-on'
+
+function todayInLocalTimezone() {
+  const now = new Date()
+  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
+  return local.toISOString().slice(0, 10)
+}
+
+const today = todayInLocalTimezone()
+const activeView = ref(window.localStorage.getItem(DAILY_COMPLETION_KEY) === today ? 'dashboard' : 'daily')
+const dailyMounted = ref(true)
 const historyMounted = ref(false)
 const roadmapMounted = ref(false)
 const reviewMounted = ref(false)
@@ -20,6 +31,16 @@ const roadmapDraft = ref(null)
 
 function showDashboard() {
   activeView.value = 'dashboard'
+}
+
+function showDailyLearning() {
+  dailyMounted.value = true
+  activeView.value = 'daily'
+}
+
+function completeDailyLearning() {
+  window.localStorage.setItem(DAILY_COMPLETION_KEY, today)
+  showDashboard()
 }
 
 function showHistory() {
@@ -102,6 +123,7 @@ function startRoadmapQuiz(roadmapQuiz) {
         </div>
         <nav aria-label="주요 메뉴">
           <button type="button" :class="{ active: activeView === 'dashboard' }" :aria-current="activeView === 'dashboard' ? 'page' : undefined" @click="showDashboard">대시보드</button>
+          <button type="button" :class="{ active: activeView === 'daily' }" :aria-current="activeView === 'daily' ? 'page' : undefined" @click="showDailyLearning">데일리 학습</button>
           <button type="button" :class="{ active: activeView === 'quiz' }" :aria-current="activeView === 'quiz' ? 'page' : undefined" @click="activeView = 'quiz'">문제 생성</button>
           <button type="button" :class="{ active: activeView === 'review' }" :aria-current="activeView === 'review' ? 'page' : undefined" @click="showReview">오늘의 복습</button>
           <button type="button" :class="{ active: activeView === 'roadmap' }" :aria-current="activeView === 'roadmap' ? 'page' : undefined" @click="showRoadmap">학습 로드맵</button>
@@ -114,6 +136,7 @@ function startRoadmapQuiz(roadmapQuiz) {
 
     <main>
       <DashboardView v-if="activeView === 'dashboard'" @start-recommended-quiz="startRecommendedQuiz" @create-learning-roadmap="createRoadmapFromRecommendation" />
+      <DailyLearningView v-if="dailyMounted" v-show="activeView === 'daily'" @complete-today="completeDailyLearning" />
       <QuizGenerator v-show="activeView === 'quiz'" :recommended-quiz="recommendedQuiz" @open-roadmap="showRoadmap" />
       <ReviewQueue v-if="reviewMounted" v-show="activeView === 'review'" />
       <RoadmapView v-if="roadmapMounted" v-show="activeView === 'roadmap'" :initial-roadmap="roadmapDraft" :visible="activeView === 'roadmap'" @start-roadmap-quiz="startRoadmapQuiz" />

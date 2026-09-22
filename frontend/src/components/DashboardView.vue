@@ -16,10 +16,14 @@ const error = ref(null)
 const learningChartElement = ref(null)
 const topicChartElement = ref(null)
 const aiChartElement = ref(null)
+const duplicateThresholdChartElement = ref(null)
+const objectiveQualityChartElement = ref(null)
 
 let learningChart
 let topicChart
 let aiChart
+let duplicateThresholdChart
+let objectiveQualityChart
 
 const hasLearningActivity = computed(() =>
   dashboard.value?.learning?.dailyActivity?.some((item) => item.attempts > 0) ?? false
@@ -28,6 +32,20 @@ const hasTopicData = computed(() => dashboard.value?.learning?.topicAccuracy?.le
 const hasAiActivity = computed(() =>
   dashboard.value?.ai?.dailyActivity?.some((item) => item.calls > 0) ?? false
 )
+const hasDuplicateThresholdData = computed(() =>
+  dashboard.value?.qualityEvaluation?.duplicateThresholdMetrics?.some((item) =>
+    item.precisionPercent != null || item.recallPercent != null || item.f1Percent != null
+  ) ?? false
+)
+const hasObjectiveQualityData = computed(() => {
+  const metric = dashboard.value?.qualityEvaluation?.objectiveQuality
+  return [
+    metric?.provisionalOmissionRatePercent,
+    metric?.provisionalAlignmentRatePercent,
+    metric?.humanVerifiedOmissionRatePercent,
+    metric?.humanVerifiedAlignmentRatePercent
+  ].some((value) => value != null)
+})
 
 function formatNumber(value) {
   return new Intl.NumberFormat('ko-KR').format(value ?? 0)
@@ -129,19 +147,90 @@ function renderCharts() {
       ]
     })
   }
+
+  const quality = dashboard.value.qualityEvaluation
+  if (hasDuplicateThresholdData.value) {
+    duplicateThresholdChart = chartFor(duplicateThresholdChart, duplicateThresholdChartElement.value, {
+      color: ['#171717', '#c64e32', '#24744d'],
+      grid: { top: 42, right: 20, bottom: 34, left: 42 },
+      legend: { top: 4, textStyle: { color: '#303030' } },
+      tooltip: { trigger: 'axis', valueFormatter: (value) => `${value}%` },
+      xAxis: {
+        type: 'category',
+        name: '임계값',
+        data: quality.duplicateThresholdMetrics.map((item) => item.threshold.toFixed(2)),
+        axisLabel: { color: '#6b6b66' },
+        axisLine: { lineStyle: { color: '#deded8' } }
+      },
+      yAxis: {
+        type: 'value',
+        min: 0,
+        max: 100,
+        axisLabel: { formatter: '{value}%', color: '#6b6b66' },
+        splitLine: { lineStyle: { color: '#efefeb' } }
+      },
+      series: [
+        { name: '정밀도', type: 'line', data: quality.duplicateThresholdMetrics.map((item) => item.precisionPercent), smooth: true, symbolSize: 5, lineStyle: { width: 3 } },
+        { name: '재현율', type: 'line', data: quality.duplicateThresholdMetrics.map((item) => item.recallPercent), smooth: true, symbolSize: 5, lineStyle: { width: 3 } },
+        { name: 'F1', type: 'line', data: quality.duplicateThresholdMetrics.map((item) => item.f1Percent), smooth: true, symbolSize: 5, lineStyle: { width: 3 } }
+      ]
+    })
+  }
+
+  if (hasObjectiveQualityData.value) {
+    objectiveQualityChart = chartFor(objectiveQualityChart, objectiveQualityChartElement.value, {
+      color: ['#c64e32', '#24744d'],
+      grid: { top: 42, right: 20, bottom: 34, left: 42 },
+      legend: { top: 4, textStyle: { color: '#303030' } },
+      tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, valueFormatter: (value) => `${value}%` },
+      xAxis: {
+        type: 'category',
+        data: ['목표 누락률', '문항 일치도'],
+        axisLabel: { color: '#6b6b66' },
+        axisLine: { lineStyle: { color: '#deded8' } }
+      },
+      yAxis: {
+        type: 'value',
+        min: 0,
+        max: 100,
+        axisLabel: { formatter: '{value}%', color: '#6b6b66' },
+        splitLine: { lineStyle: { color: '#efefeb' } }
+      },
+      series: [
+        {
+          name: 'AI 잠정',
+          type: 'bar',
+          data: [quality.objectiveQuality.provisionalOmissionRatePercent, quality.objectiveQuality.provisionalAlignmentRatePercent],
+          barMaxWidth: 30,
+          itemStyle: { borderRadius: [5, 5, 0, 0] }
+        },
+        {
+          name: '사람 검증',
+          type: 'bar',
+          data: [quality.objectiveQuality.humanVerifiedOmissionRatePercent, quality.objectiveQuality.humanVerifiedAlignmentRatePercent],
+          barMaxWidth: 30,
+          itemStyle: { borderRadius: [5, 5, 0, 0] }
+        }
+      ]
+    })
+  }
 }
 
 function resizeCharts() {
   learningChart?.resize()
   topicChart?.resize()
   aiChart?.resize()
+  duplicateThresholdChart?.resize()
+  objectiveQualityChart?.resize()
 }
 
 function disposeCharts() {
-  ;[learningChart, topicChart, aiChart].forEach((chart) => chart?.dispose())
+  ;[learningChart, topicChart, aiChart, duplicateThresholdChart, objectiveQualityChart].forEach((chart) => chart?.dispose())
   learningChart = undefined
   topicChart = undefined
   aiChart = undefined
+  duplicateThresholdChart = undefined
+  objectiveQualityChart = undefined
 }
 
 async function loadDashboard() {
@@ -361,6 +450,54 @@ onBeforeUnmount(() => {
           <span>문제를 제출한 뒤 각 문항의 품질 피드백을 남길 수 있습니다.</span>
         </div>
       </section>
+
+      <section class="dashboard-section evaluation-section" aria-labelledby="evaluation-section-title">
+        <div class="section-heading">
+          <div>
+            <p class="section-kicker">QUALITY EVIDENCE</p>
+            <h3 id="evaluation-section-title">AI 품질 검증 현황</h3>
+            <p>AI 자체 판단과 사람이 확정한 근거를 구분해, 중복 방지 정책과 로드맵 문항 품질을 확인합니다.</p>
+          </div>
+          <span class="source-label">저장된 평가 결과</span>
+        </div>
+
+        <div class="metric-grid evaluation-metrics">
+          <article class="metric-card">
+            <span>중복 사람 검증 표본</span>
+            <strong>{{ formatNumber(dashboard.qualityEvaluation.duplicateHumanSampleCount) }}건</strong>
+          </article>
+          <article class="metric-card">
+            <span>중복 검토 대기</span>
+            <strong>{{ formatNumber(dashboard.qualityEvaluation.duplicatePendingReviewCount) }}건</strong>
+          </article>
+          <article class="metric-card accent-card">
+            <span>추천 임계값</span>
+            <strong>{{ dashboard.qualityEvaluation.recommendedThreshold ?? '표본 부족' }}</strong>
+          </article>
+          <article class="metric-card">
+            <span>목표·문항 사람 검토</span>
+            <strong>{{ formatNumber(dashboard.qualityEvaluation.objectiveQuality.humanReviewedCases) }}건</strong>
+          </article>
+        </div>
+
+        <div class="chart-grid quality-chart-grid">
+          <article class="chart-card" aria-label="임계값별 정밀도 재현율 F1 차트">
+            <div class="chart-title"><h4>임계값별 중복 판정 성능</h4><span>사람 검증 표본만 사용</span></div>
+            <div v-if="hasDuplicateThresholdData" ref="duplicateThresholdChartElement" class="chart" role="img" aria-label="임계값별 정밀도 재현율 F1 선 차트"></div>
+            <div v-else class="chart-empty"><strong>아직 사람 검증 표본이 없습니다.</strong><span>품질 평가에서 애매한 문제 쌍을 판정하면 0.75~0.95 구간의 추이가 나타납니다.</span></div>
+          </article>
+          <article class="chart-card" aria-label="목표 누락률과 문항 일치도 차트">
+            <div class="chart-title"><h4>로드맵 목표·문항 품질</h4><span>AI 잠정 · 사람 검증 분리</span></div>
+            <div v-if="hasObjectiveQualityData" ref="objectiveQualityChartElement" class="chart" role="img" aria-label="목표 누락률과 문항 일치도 막대 차트"></div>
+            <div v-else class="chart-empty"><strong>아직 목표 품질 평가 결과가 없습니다.</strong><span>로드맵 학습 단위를 선택해 평가하면 AI 잠정 지표부터 표시하고, 검토 후 사람 검증 값이 추가됩니다.</span></div>
+          </article>
+        </div>
+
+        <aside class="operation-note quality-note">
+          <strong>차트 읽는 법</strong>
+          <p>중복 차트는 같은 임계값에서 정밀도·재현율·F1의 균형을 봅니다. 목표 누락률은 낮을수록, 문항 일치도는 높을수록 좋습니다. 사람 검증 값이 비어 있으면 아직 AI의 잠정 평가만 존재한다는 뜻입니다.</p>
+        </aside>
+      </section>
     </template>
   </section>
 </template>
@@ -382,7 +519,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .error-message { color: #b42318; background: #fef3f2; border: 1px solid #fecdca; }
 .page-loading { display: grid; min-height: 320px; place-items: center; color: var(--muted); }
 .dashboard-section { margin-top: 34px; padding: 28px; border: 1px solid var(--line); border-radius: 14px; }
-.learning-section, .ai-section, .feedback-section { background: var(--surface); }
+.learning-section, .ai-section, .feedback-section, .evaluation-section { background: var(--surface); }
 .review-notice, .source-label { flex: 0 0 auto; border-radius: 10px; font-weight: 700; }
 .review-notice { display: grid; min-width: 112px; padding: 10px 12px; color: var(--accent-strong); text-align: center; background: var(--accent-soft); }
 .review-notice.due { color: #a04910; background: #fff1df; }
@@ -392,6 +529,7 @@ button:disabled { cursor: not-allowed; opacity: .55; }
 .metric-grid { display: grid; gap: 12px; margin-top: 22px; grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .ai-metrics { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .feedback-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); max-width: 560px; }
+.evaluation-metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .metric-card { display: grid; gap: 3px; min-width: 0; padding: 18px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
 .metric-card span { color: var(--muted); font-size: .82rem; font-weight: 700; }
 .metric-card strong { overflow: hidden; color: var(--ink); font-size: clamp(1.15rem, 2.4vw, 1.6rem); text-overflow: ellipsis; white-space: nowrap; }
@@ -439,6 +577,7 @@ tbody tr:last-child td { border-bottom: 0; }
 .feedback-empty { display: grid; min-height: 112px; place-content: center; gap: 5px; margin-top: 18px; color: var(--muted); text-align: center; }
 .feedback-empty strong { color: var(--ink-soft); }
 .feedback-empty span { font-size: .88rem; }
+.quality-note { margin-top: 20px; }
 @media (max-width: 850px) { .dashboard-page { padding: 28px 22px 42px; } .metric-grid, .ai-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .operations-layout { grid-template-columns: 1fr; } }
 @media (max-width: 680px) { .dashboard-page { padding: 25px 16px 34px; border-radius: 0; } .dashboard-heading, .section-heading, .recommendation-item { flex-direction: column; align-items: flex-start; } .refresh-button, .recommendation-actions, .recommendation-action { width: 100%; } .dashboard-section { margin-top: 23px; padding: 17px; } .review-notice { width: 100%; } .source-label { align-self: flex-start; } .metric-grid, .ai-metrics, .chart-grid { grid-template-columns: 1fr; } .chart-card, .model-card, .recommendation-card { padding: 16px; } .chart-title { align-items: flex-start; flex-direction: column; gap: 3px; } .chart { height: 244px; } }
 </style>

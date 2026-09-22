@@ -71,6 +71,14 @@ public class QualityEvaluationController {
         return datasetService.embedDataset(datasetId);
     }
 
+    @PutMapping("/datasets/{datasetId}/samples/{sampleOrder}/review")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void reviewDatasetSample(@PathVariable long datasetId,
+                                    @PathVariable int sampleOrder,
+                                    @Valid @RequestBody DuplicateReviewRequest request) {
+        datasetService.reviewSample(datasetId, sampleOrder, request.verdict());
+    }
+
     @PostMapping("/duplicate-runs")
     @ResponseStatus(HttpStatus.CREATED)
     public QualityRunResponse evaluateDuplicates(@Valid @RequestBody DuplicateEvaluationRequest request) {

@@ -109,6 +109,14 @@ public class DuplicateEvaluationDatasetRepository {
         ), datasetId);
     }
 
+    public int reviewSample(long datasetId, int sampleOrder, String reviewerVerdict) {
+        return jdbcTemplate.update("""
+                UPDATE duplicate_evaluation_dataset_sample
+                SET reviewer_verdict = ?, reviewed_at = CURRENT_TIMESTAMP
+                WHERE dataset_id = ? AND sample_order = ?
+                """, reviewerVerdict, datasetId, sampleOrder);
+    }
+
     public void markProcessing(long datasetId) {
         jdbcTemplate.update("""
                 UPDATE duplicate_evaluation_dataset

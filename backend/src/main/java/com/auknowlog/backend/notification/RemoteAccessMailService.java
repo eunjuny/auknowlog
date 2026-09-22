@@ -71,8 +71,11 @@ public class RemoteAccessMailService {
     }
 
     private String renderBody(RemoteAccessMailRequest request) {
+        String dailyTechLearningSampleUrl = request.publicUrl().replaceFirst("/$", "")
+                + "/daily-tech-learning-sample.html";
         return "Auknowlog 임시 원격 접속 정보입니다.\n\n"
                 + "접속 주소\n" + request.publicUrl() + "\n\n"
+                + "데일리 학습 샘플 바로가기\n" + dailyTechLearningSampleUrl + "\n\n"
                 + "사용자명\n" + request.username() + "\n\n"
                 + "비밀번호\n" + request.password() + "\n\n"
                 + "만료 예정\n" + EXPIRY_FORMAT.format(request.expiresAt()) + "\n\n"

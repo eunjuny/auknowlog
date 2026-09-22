@@ -36,6 +36,7 @@ class RemoteAccessMailServiceTest {
         assertThat(message.getSubject()).contains("Auknowlog");
         assertThat(message.getText())
                 .contains(request.publicUrl())
+                .contains(request.publicUrl() + "/daily-tech-learning-sample.html")
                 .contains(request.username())
                 .contains(request.password());
     }

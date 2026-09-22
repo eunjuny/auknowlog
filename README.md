@@ -37,6 +37,7 @@ AI를 활용하여 원하는 주제에 대한 객관식 문제를 자동으로 �
 - 🗂️ **로드맵별 Git 학습 노트** - 채점 후 저장한 Markdown을 로드맵·대주제 디렉터리 아래 소주제 이름으로 정리하고, 반복 저장은 `-2`, `-3` 순번을 붙여 `notes` 원격에 누적
 - 💬 **문제 품질 피드백** - 제출한 문항의 정확성·난이도·해설 품질 의견을 저장하고 대시보드에서 집계
 - 🧪 **AI 품질 평가** - 실제 문제 쌍의 pgvector 임계값과 로드맵 목표·문항 일치도를 평가하고 애매한 사례만 사람 검토
+- 📈 **검증 지표 대시보드** - 사람 표본 기반 정밀도·재현율·F1 추이와 AI 잠정/사람 검증 목표 품질을 분리해 확인
 - 🧫 **중복 평가 기준 데이터셋** - 학습 이력과 분리한 42개 백엔드 문제 쌍의 참조 라벨·실제 벡터 유사도로 임계값을 재현 가능하게 검증
 
 ## 🚀 빠른 시작
@@ -118,6 +119,7 @@ Codex 로컬 자동화 `Auknowlog 원격 접속 메일`은 매일 오전 8시(�
 - [AI 비용·품질 제어 설계](docs/AI_COST_AND_QUALITY_CONTROL.md)
 - [Prometheus 기반 AI·문제 품질 운영 관측](docs/PROMETHEUS_OBSERVABILITY.md)
 - [AI 품질 평가와 Human-in-the-loop](docs/AI_QUALITY_EVALUATION.md)
+- [Daily Tech Learning 기능 샘플 (HTML)](docs/DAILY_TECH_LEARNING_SAMPLE.html)
 - [파일·URL 학습 자료 수집 보안 설계](docs/SOURCE_INGESTION_SECURITY.md)
 - [`.roadmap.json` 단계형 학습 로드맵 형식](docs/ROADMAP_JSON_FORMAT.md)
 - [로드맵 진행 선택·Git 학습 노트 구조](docs/ROADMAP_PROGRESS_AND_GIT_EXPORT.md)
@@ -128,6 +130,10 @@ Codex 로컬 자동화 `Auknowlog 원격 접속 메일`은 매일 오전 8시(�
 - 트러블슈팅
 
 이전 구조와 새 구조의 문제·대안·선택 근거·검증 방법은 [스택 전환 비교](docs/STACK_TRANSITION.md)에 정리했습니다. 다음 도입 기준은 [기술 의사결정 기록](docs/TECHNOLOGY_DECISIONS.md)을 참고하세요.
+
+개발 서버가 실행 중이면 Daily Tech Learning 샘플은 `http://127.0.0.1:5173/daily-tech-learning-sample.html`에서 확인할 수 있습니다. Quick Tunnel을 사용 중인 경우, 원격 접속 메일에 기본 주소와 이 화면의 직접 주소를 함께 넣습니다. 직접 주소로 열어도 로그인 후 원래 화면으로 돌아옵니다. 이 경로는 샘플 문서 한 개만 제공하며 `docs` 전체를 외부에 공개하지 않습니다.
+
+애플리케이션에서는 상단 `데일리 학습` 메뉴로도 같은 샘플에 접근할 수 있습니다. 현재 샘플 단계에서는 사용자가 `오늘 학습 완료`를 누르면 브라우저에 오늘 완료 상태를 저장하고 대시보드로 이동합니다. 기사 수집·AI 해설·서버 채점 연동을 구현하면 이 임시 상태는 서버의 데일리 학습 완료 상태로 교체합니다.
 
 ## 🔎 운영 확인
 

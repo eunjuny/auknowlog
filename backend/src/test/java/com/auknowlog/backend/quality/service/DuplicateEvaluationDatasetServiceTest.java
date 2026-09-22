@@ -88,6 +88,16 @@ class DuplicateEvaluationDatasetServiceTest {
         verify(repository).markReady(7L, "fixture-embedding", 15L);
     }
 
+    @Test
+    void storesAReviewerVerdictSeparatelyFromTheInitialReferenceLabel() {
+        when(repository.reviewSample(7L, 1, "DUPLICATE")).thenReturn(1);
+
+        service.reviewSample(7L, 1, "duplicate");
+
+        verify(repository).reviewSample(7L, 1, "DUPLICATE");
+        verify(embeddingService, times(0)).embed(anyString());
+    }
+
     private DatasetSummaryRow summary(String status, int total, int embedded) {
         return new DatasetSummaryRow(7L, "backend-korean-v1", "백엔드 핵심 개념 중복 평가 표본",
                 "1.0", "CURATED_REFERENCE", status, embedded == 0 ? null : "fixture-embedding", 15,

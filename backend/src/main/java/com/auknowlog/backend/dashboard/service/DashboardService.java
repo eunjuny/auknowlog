@@ -12,6 +12,7 @@ import com.auknowlog.backend.dashboard.dto.LearningDashboardSummary;
 import com.auknowlog.backend.dashboard.dto.LearningRecommendation;
 import com.auknowlog.backend.dashboard.dto.ModelAiMetric;
 import com.auknowlog.backend.dashboard.dto.QualityFeedbackDashboardSummary;
+import com.auknowlog.backend.dashboard.dto.QualityEvaluationDashboardSummary;
 import com.auknowlog.backend.dashboard.dto.QuestionFeedbackTypeMetric;
 import com.auknowlog.backend.dashboard.dto.TopicLearningMetric;
 import com.auknowlog.backend.feedback.entity.QuestionFeedback;
@@ -20,6 +21,8 @@ import com.auknowlog.backend.learning.entity.LearningAttempt;
 import com.auknowlog.backend.learning.repository.LearningAttemptRepository;
 import com.auknowlog.backend.learning.repository.ReviewScheduleRepository;
 import com.auknowlog.backend.question.repository.QuestionHistoryRepository;
+import com.auknowlog.backend.quality.dto.QualityEvaluationSummary;
+import com.auknowlog.backend.quality.service.QualityEvaluationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -46,19 +49,22 @@ public class DashboardService {
     private final AiUsagePolicyService aiUsagePolicyService;
     private final QuestionHistoryRepository questionHistoryRepository;
     private final QuestionFeedbackRepository questionFeedbackRepository;
+    private final QualityEvaluationService qualityEvaluationService;
 
     public DashboardService(LearningAttemptRepository learningAttemptRepository,
                             ReviewScheduleRepository reviewScheduleRepository,
                             AiGenerationLogRepository aiGenerationLogRepository,
                             AiUsagePolicyService aiUsagePolicyService,
                             QuestionHistoryRepository questionHistoryRepository,
-                            QuestionFeedbackRepository questionFeedbackRepository) {
+                            QuestionFeedbackRepository questionFeedbackRepository,
+                            QualityEvaluationService qualityEvaluationService) {
         this.learningAttemptRepository = learningAttemptRepository;
         this.reviewScheduleRepository = reviewScheduleRepository;
         this.aiGenerationLogRepository = aiGenerationLogRepository;
         this.aiUsagePolicyService = aiUsagePolicyService;
         this.questionHistoryRepository = questionHistoryRepository;
         this.questionFeedbackRepository = questionFeedbackRepository;
+        this.qualityEvaluationService = qualityEvaluationService;
     }
 
     @Transactional(readOnly = true)
@@ -74,7 +80,8 @@ public class DashboardService {
                 today,
                 buildLearningSummary(allAttempts, firstActivityDate),
                 buildAiSummary(recentAiLogs, firstActivityDate),
-                buildQualityFeedbackSummary()
+                buildQualityFeedbackSummary(),
+                buildQualityEvaluationSummary(qualityEvaluationService.summary())
         );
     }
 
@@ -282,6 +289,33 @@ public class DashboardService {
                 questionFeedbackRepository.count(),
                 questionFeedbackRepository.countByStatus("OPEN"),
                 typeMetrics
+        );
+    }
+
+    private QualityEvaluationDashboardSummary buildQualityEvaluationSummary(QualityEvaluationSummary quality) {
+        var duplicate = quality.duplicate();
+        var objective = quality.objective();
+        List<QualityEvaluationDashboardSummary.DuplicateThresholdMetric> thresholdMetrics =
+                duplicate.thresholdMetrics().stream()
+                        .filter(metric -> metric.sampleSize() > 0)
+                        .map(metric -> new QualityEvaluationDashboardSummary.DuplicateThresholdMetric(
+                                metric.threshold(), metric.precisionPercent(), metric.recallPercent(), metric.f1Percent()))
+                        .toList();
+
+        return new QualityEvaluationDashboardSummary(
+                duplicate.reviewedPairs(),
+                duplicate.pendingPairs(),
+                duplicate.recommendedThreshold(),
+                thresholdMetrics,
+                new QualityEvaluationDashboardSummary.ObjectiveQualityMetric(
+                        objective.totalCases(),
+                        objective.reviewedCases(),
+                        objective.pendingCases(),
+                        objective.provisionalOmissionRatePercent(),
+                        objective.provisionalAlignmentRatePercent(),
+                        objective.humanVerifiedOmissionRatePercent(),
+                        objective.humanVerifiedAlignmentRatePercent()
+                )
         );
     }
 

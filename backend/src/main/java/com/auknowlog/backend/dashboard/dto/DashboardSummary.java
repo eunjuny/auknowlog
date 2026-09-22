@@ -6,6 +6,7 @@ public record DashboardSummary(
         LocalDate generatedAt,
         LearningDashboardSummary learning,
         AiDashboardSummary ai,
-        QualityFeedbackDashboardSummary qualityFeedback
+        QualityFeedbackDashboardSummary qualityFeedback,
+        QualityEvaluationDashboardSummary qualityEvaluation
 ) {
 }

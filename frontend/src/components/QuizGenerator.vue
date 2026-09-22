@@ -7,8 +7,13 @@ const props = defineProps({
     type: Object,
     default: null
   }
+  ,
+  preloadedQuiz: {
+    type: Object,
+    default: null
+  }
 });
-const emit = defineEmits(['open-roadmap'])
+const emit = defineEmits(['open-roadmap', 'attempt-saved'])
 
 const topic = ref('');
 const numberOfQuestions = ref(5); // Default value
@@ -81,6 +86,26 @@ watch(() => props.recommendedQuiz?.requestedAt, () => {
       }
     : null;
   recommendationMessage.value = `학습 추천에 따라 “${props.recommendedQuiz.topic}” ${numberOfQuestions.value}문제를 준비했습니다. 생성 방식을 선택한 뒤 시작해주세요.`;
+});
+
+watch(() => props.preloadedQuiz?.requestedAt, () => {
+  if (!props.preloadedQuiz?.quizId) return;
+  quizResult.value = props.preloadedQuiz;
+  topic.value = '';
+  selectedAnswers.value = {};
+  error.value = null;
+  saveMessage.value = null;
+  attemptMessage.value = null;
+  attemptSaved.value = false;
+  attemptSaving.value = false;
+  quizSubmitted.value = false;
+  submissionMessage.value = null;
+  gradingResults.value = {};
+  feedbackForms.value = {};
+  reviewRegistrations.value = {};
+  roadmapContext.value = null;
+  roadmapDecision.value = null;
+  nextRoadmapUnit.value = null;
 });
 
 async function generateQuiz() {
@@ -164,6 +189,7 @@ async function saveLearningAttempt() {
         submissionMessage.value = `채점 완료 · ${result.correctAnswers}/${result.totalQuestions} 정답 · 풀이 기록 자동 저장됨` +
           (result.reviewScheduledCount > 0 ? ` · 오답 ${result.reviewScheduledCount}개는 내일 복습으로 예약됐습니다.` : '');
         await loadRoadmapDecision();
+        emit('attempt-saved', quizResult.value.quizId)
         return;
       } catch (err) {
         if (retry === 0) {

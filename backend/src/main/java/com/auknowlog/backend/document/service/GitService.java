@@ -46,7 +46,7 @@ public class GitService {
         String targetBranch = (remoteBranch == null || remoteBranch.isBlank()) ? "main" : remoteBranch;
 
         try {
-            runGit(List.of("git", "add", absoluteFilePath), repoTop);
+            runGit(List.of("git", "add", dailyLearningDirectoryOrFile(absoluteFilePath)), repoTop);
             
             try {
                 runGit(List.of("git", "commit", "-m", commitMessage), repoTop);
@@ -73,6 +73,20 @@ public class GitService {
             log.error("Git 작업 실패", e);
             return "Git 저장 실패: " + e.getMessage();
         }
+    }
+
+    /** 데일리 퀴즈를 저장하면 같은 날짜의 learning.md와 review/advanced 문항을 한 번에 notes 원격으로 보낸다. */
+    private String dailyLearningDirectoryOrFile(String absoluteFilePath) {
+        Path file = Paths.get(absoluteFilePath).normalize();
+        Path cursor = file.getParent();
+        while (cursor != null && cursor.getFileName() != null) {
+            Path parent = cursor.getParent();
+            if (parent != null && parent.getFileName() != null && "daily-tech".equals(parent.getFileName().toString())) {
+                return cursor.toString();
+            }
+            cursor = parent;
+        }
+        return absoluteFilePath;
     }
 
     private File resolveRepoTop() {

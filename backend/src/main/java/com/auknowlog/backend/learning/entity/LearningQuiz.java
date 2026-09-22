@@ -1,10 +1,14 @@
 package com.auknowlog.backend.learning.entity;
 
+import com.auknowlog.backend.daily.entity.DailyLearning;
+import com.auknowlog.backend.daily.entity.DailyLearningTrack;
 import com.auknowlog.backend.source.entity.SourceDocument;
 import com.auknowlog.backend.roadmap.entity.LearningRoadmap;
 import com.auknowlog.backend.roadmap.entity.LearningRoadmapStep;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.EnumType;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -34,6 +38,14 @@ public class LearningQuiz {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "roadmap_step_id")
     private LearningRoadmapStep roadmapStep;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "daily_learning_id")
+    private DailyLearning dailyLearning;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "daily_learning_track")
+    private DailyLearningTrack dailyLearningTrack;
 
     @Column(nullable = false)
     private String topic;
@@ -83,5 +95,18 @@ public class LearningQuiz {
 
     public LearningRoadmapStep getRoadmapStep() {
         return roadmapStep;
+    }
+
+    public DailyLearning getDailyLearning() {
+        return dailyLearning;
+    }
+
+    public DailyLearningTrack getDailyLearningTrack() {
+        return dailyLearningTrack;
+    }
+
+    public void linkDailyLearning(DailyLearning dailyLearning, DailyLearningTrack track) {
+        this.dailyLearning = dailyLearning;
+        this.dailyLearningTrack = track;
     }
 }

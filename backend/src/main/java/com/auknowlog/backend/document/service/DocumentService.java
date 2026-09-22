@@ -3,6 +3,8 @@ package com.auknowlog.backend.document.service;
 import com.auknowlog.backend.quiz.dto.Question;
 import com.auknowlog.backend.quiz.dto.QuizResponse;
 import com.auknowlog.backend.learning.entity.LearningQuiz;
+import com.auknowlog.backend.daily.entity.DailyLearning;
+import com.auknowlog.backend.daily.entity.DailyLearningTrack;
 import com.auknowlog.backend.learning.repository.LearningQuizRepository;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
@@ -73,7 +75,15 @@ public class DocumentService {
 
         Path directory = saveDirectory;
         String fileBaseName = "quiz-" + quiz.getId();
-        if (quiz.getRoadmap() != null) {
+        if (quiz.getDailyLearning() != null) {
+            DailyLearning daily = quiz.getDailyLearning();
+            Path dailyDirectory = saveDirectory.resolve("daily-tech")
+                    .resolve(daily.getLearningDate() + "-" + directoryName(daily.getArticleTitle()));
+            writeDailyOverview(dailyDirectory, daily);
+            directory = dailyDirectory.resolve(quiz.getDailyLearningTrack() == DailyLearningTrack.ADVANCED
+                    ? "advanced" : "review");
+            fileBaseName = directoryName(quiz.getTopic());
+        } else if (quiz.getRoadmap() != null) {
             directory = directory
                     .resolve("roadmaps")
                     .resolve("roadmap-" + quiz.getRoadmap().getId() + "-" + directoryName(quiz.getRoadmap().getTitle()));
@@ -90,6 +100,21 @@ public class DocumentService {
         Files.createDirectories(directory);
         Path filePath = writeSequentialMarkdown(directory, fileBaseName, markdownContent);
         return filePath.toAbsolutePath().toString();
+    }
+
+    /** 데일리 학습은 기사·해설을 learning.md에, 복습/심화 문항을 하위 폴더에 분리한다. */
+    private void writeDailyOverview(Path dailyDirectory, DailyLearning daily) throws IOException {
+        Files.createDirectories(dailyDirectory);
+        Path overview = dailyDirectory.resolve("learning.md");
+        if (Files.exists(overview)) return;
+        String content = "# " + daily.getArticleTitle() + "\n\n"
+                + "- 학습 일자: " + daily.getLearningDate() + "\n"
+                + "- 원문: " + daily.getArticleUrl() + "\n"
+                + "- 복습 주제: " + daily.getReviewTopic() + "\n\n"
+                + "## 기사 요약\n\n" + daily.getArticleSummary() + "\n\n"
+                + "## 보충 해설\n\n" + daily.getSupplement() + "\n\n"
+                + "## 핵심 개념 (구조화 데이터)\n\n```json\n" + daily.getConcepts() + "\n```\n";
+        Files.writeString(overview, content, StandardOpenOption.CREATE_NEW);
     }
 
     /** CREATE_NEW로 생성해 동시에 저장해도 기존 학습 노트를 덮어쓰지 않는다. */

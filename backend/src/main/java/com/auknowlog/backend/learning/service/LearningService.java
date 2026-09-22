@@ -11,6 +11,9 @@ import com.auknowlog.backend.learning.entity.LearningAttempt;
 import com.auknowlog.backend.learning.entity.LearningAttemptAnswer;
 import com.auknowlog.backend.learning.entity.LearningQuestion;
 import com.auknowlog.backend.learning.entity.LearningQuiz;
+import com.auknowlog.backend.daily.entity.DailyLearningTrack;
+import com.auknowlog.backend.daily.repository.DailyLearningRepository;
+import com.auknowlog.backend.daily.service.DailyLearningProgressService;
 import com.auknowlog.backend.learning.repository.LearningAttemptAnswerRepository;
 import com.auknowlog.backend.learning.repository.LearningAttemptRepository;
 import com.auknowlog.backend.learning.repository.LearningQuestionRepository;
@@ -53,6 +56,8 @@ public class LearningService {
     private final LearningRoadmapStepRepository learningRoadmapStepRepository;
     private final LearningObjectiveRepository learningObjectiveRepository;
     private final LearningRoadmapService learningRoadmapService;
+    private final DailyLearningRepository dailyLearningRepository;
+    private final DailyLearningProgressService dailyLearningProgressService;
     private final ObjectMapper objectMapper;
 
     public LearningService(LearningQuizRepository learningQuizRepository,
@@ -65,6 +70,8 @@ public class LearningService {
                            LearningRoadmapStepRepository learningRoadmapStepRepository,
                            LearningObjectiveRepository learningObjectiveRepository,
                            LearningRoadmapService learningRoadmapService,
+                           DailyLearningRepository dailyLearningRepository,
+                           DailyLearningProgressService dailyLearningProgressService,
                            ObjectMapper objectMapper) {
         this.learningQuizRepository = learningQuizRepository;
         this.learningQuestionRepository = learningQuestionRepository;
@@ -76,7 +83,30 @@ public class LearningService {
         this.learningRoadmapStepRepository = learningRoadmapStepRepository;
         this.learningObjectiveRepository = learningObjectiveRepository;
         this.learningRoadmapService = learningRoadmapService;
+        this.dailyLearningRepository = dailyLearningRepository;
+        this.dailyLearningProgressService = dailyLearningProgressService;
         this.objectMapper = objectMapper;
+    }
+
+    @Transactional
+    public void linkDailyLearning(Long quizId, Long dailyLearningId, DailyLearningTrack track) {
+        LearningQuiz quiz = learningQuizRepository.findById(quizId)
+                .orElseThrow(() -> new java.util.NoSuchElementException("학습 퀴즈를 찾을 수 없습니다."));
+        var daily = dailyLearningRepository.findById(dailyLearningId)
+                .orElseThrow(() -> new java.util.NoSuchElementException("데일리 학습을 찾을 수 없습니다."));
+        quiz.linkDailyLearning(daily, track);
+    }
+
+    @Transactional(readOnly = true)
+    public com.auknowlog.backend.quiz.dto.QuizViewResponse viewQuiz(Long quizId) {
+        LearningQuiz quiz = learningQuizRepository.findById(quizId)
+                .orElseThrow(() -> new java.util.NoSuchElementException("학습 퀴즈를 찾을 수 없습니다."));
+        List<LearningQuestion> questions = learningQuestionRepository.findByQuizIdOrderByQuestionOrderAsc(quizId);
+        return new com.auknowlog.backend.quiz.dto.QuizViewResponse(quiz.getId(), quiz.getTitle(), questions.stream()
+                .map(question -> new com.auknowlog.backend.quiz.dto.QuizQuestionResponse(
+                        question.getQuestionText(), readStringList(question.getOptions()),
+                        readStringList(question.getSourceReferences())))
+                .toList());
     }
 
     @Transactional
@@ -225,6 +255,9 @@ public class LearningService {
         }
 
         completeRoadmapIfNecessary(quiz);
+        if (quiz.getDailyLearning() != null) {
+            dailyLearningProgressService.recordSubmittedQuiz(quiz.getDailyLearning().getId(), quiz.getDailyLearningTrack());
+        }
 
         return new AttemptResult(
                 attempt.getId(),

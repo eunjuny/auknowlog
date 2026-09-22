@@ -120,14 +120,17 @@ public class QualityEvaluationRepository {
 
     public List<LabeledDuplicateSample> findLatestLabeledDuplicateSamples() {
         return jdbcTemplate.query("""
-                SELECT DISTINCT ON (pair.id)
-                       pair.id, pair.human_verdict, result.similarity
-                FROM duplicate_question_pair pair
-                JOIN duplicate_evaluation_result result ON result.pair_id = pair.id
-                JOIN quality_evaluation_run run ON run.id = result.run_id
-                WHERE pair.human_verdict IN ('DUPLICATE', 'RELATED', 'DISTINCT')
-                  AND run.status = 'COMPLETED'
-                ORDER BY pair.id, result.created_at DESC, result.id DESC
+                SELECT id, human_verdict, similarity
+                FROM (
+                    SELECT pair.id, pair.human_verdict, result.similarity,
+                           ROW_NUMBER() OVER (PARTITION BY pair.id ORDER BY result.created_at DESC, result.id DESC) AS row_rank
+                    FROM duplicate_question_pair pair
+                    JOIN duplicate_evaluation_result result ON result.pair_id = pair.id
+                    JOIN quality_evaluation_run run ON run.id = result.run_id
+                    WHERE pair.human_verdict IN ('DUPLICATE', 'RELATED', 'DISTINCT')
+                      AND run.status = 'COMPLETED'
+                ) ranked
+                WHERE row_rank = 1
                 """, (resultSet, rowNumber) -> new LabeledDuplicateSample(
                 resultSet.getLong("id"),
                 resultSet.getString("human_verdict"),
@@ -138,10 +141,13 @@ public class QualityEvaluationRepository {
     public List<DuplicateReviewItem> findDuplicateReviewQueue(int limit) {
         return jdbcTemplate.query("""
                 WITH latest_result AS (
-                    SELECT DISTINCT ON (pair_id)
-                           pair_id, similarity, system_verdict
-                    FROM duplicate_evaluation_result
-                    ORDER BY pair_id, created_at DESC, id DESC
+                    SELECT pair_id, similarity, system_verdict
+                    FROM (
+                        SELECT pair_id, similarity, system_verdict,
+                               ROW_NUMBER() OVER (PARTITION BY pair_id ORDER BY created_at DESC, id DESC) AS row_rank
+                        FROM duplicate_evaluation_result
+                    ) ranked
+                    WHERE row_rank = 1
                 )
                 SELECT
                        pair.id AS pair_id,
@@ -179,10 +185,13 @@ public class QualityEvaluationRepository {
     public DuplicateCounts duplicateCounts() {
         return jdbcTemplate.queryForObject("""
                 WITH latest_result AS (
-                    SELECT DISTINCT ON (pair_id)
-                           pair_id, system_verdict
-                    FROM duplicate_evaluation_result
-                    ORDER BY pair_id, created_at DESC, id DESC
+                    SELECT pair_id, system_verdict
+                    FROM (
+                        SELECT pair_id, system_verdict,
+                               ROW_NUMBER() OVER (PARTITION BY pair_id ORDER BY created_at DESC, id DESC) AS row_rank
+                        FROM duplicate_evaluation_result
+                    ) ranked
+                    WHERE row_rank = 1
                 )
                 SELECT COUNT(*) AS total,
                        COUNT(*) FILTER (WHERE human_verdict IS NOT NULL) AS reviewed,

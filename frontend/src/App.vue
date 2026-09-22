@@ -1,5 +1,6 @@
 <script setup>
-import { defineAsyncComponent, ref } from 'vue'
+import { defineAsyncComponent, onMounted, ref } from 'vue'
+import axios from 'axios'
 import QuizGenerator from './components/QuizGenerator.vue'
 import LearningHistory from './components/LearningHistory.vue'
 
@@ -10,16 +11,7 @@ const SourceLibrary = defineAsyncComponent(() => import('./components/SourceLibr
 const QualityEvaluationView = defineAsyncComponent(() => import('./components/QualityEvaluationView.vue'))
 const DailyLearningView = defineAsyncComponent(() => import('./components/DailyLearningView.vue'))
 
-const DAILY_COMPLETION_KEY = 'auknowlog.daily-learning.completed-on'
-
-function todayInLocalTimezone() {
-  const now = new Date()
-  const local = new Date(now.getTime() - now.getTimezoneOffset() * 60_000)
-  return local.toISOString().slice(0, 10)
-}
-
-const today = todayInLocalTimezone()
-const activeView = ref(window.localStorage.getItem(DAILY_COMPLETION_KEY) === today ? 'dashboard' : 'daily')
+const activeView = ref('daily')
 const dailyMounted = ref(true)
 const historyMounted = ref(false)
 const roadmapMounted = ref(false)
@@ -28,6 +20,18 @@ const sourceMounted = ref(false)
 const qualityMounted = ref(false)
 const recommendedQuiz = ref(null)
 const roadmapDraft = ref(null)
+const preloadedQuiz = ref(null)
+const activeDailyQuizId = ref(null)
+const dailyView = ref(null)
+
+onMounted(async () => {
+  try {
+    const response = await axios.get('/api/daily-learnings/today')
+    if (response.data?.status === 'COMPLETED') activeView.value = 'dashboard'
+  } catch (error) {
+    // 데일리 API 장애 시에도 사용자는 첫 화면에서 원인과 수동 생성 버튼을 확인할 수 있다.
+  }
+})
 
 function showDashboard() {
   activeView.value = 'dashboard'
@@ -36,11 +40,25 @@ function showDashboard() {
 function showDailyLearning() {
   dailyMounted.value = true
   activeView.value = 'daily'
+  dailyView.value?.load()
 }
 
-function completeDailyLearning() {
-  window.localStorage.setItem(DAILY_COMPLETION_KEY, today)
-  showDashboard()
+function completeDailyLearning() { showDashboard() }
+
+function openDailyQuiz(quiz) {
+  preloadedQuiz.value = { ...quiz, requestedAt: Date.now() }
+  activeDailyQuizId.value = quiz.quizId
+  activeView.value = 'quiz'
+}
+
+async function handleAttemptSaved(quizId) {
+  if (quizId !== activeDailyQuizId.value) return
+  try {
+    const response = await axios.get('/api/daily-learnings/today')
+    if (response.data?.status === 'COMPLETED') showDashboard()
+  } catch (error) {
+    // 채점과 기록은 이미 성공했으므로, 상태 재조회 실패가 결과 화면을 망치지는 않게 둔다.
+  }
 }
 
 function showHistory() {
@@ -76,6 +94,7 @@ function startRecommendedQuiz(recommendation) {
     priority: recommendation.priority,
     requestedAt: Date.now()
   }
+  activeDailyQuizId.value = null
   activeView.value = 'quiz'
 }
 
@@ -109,6 +128,7 @@ function startRoadmapQuiz(roadmapQuiz) {
     priority: 'ROADMAP',
     requestedAt: Date.now()
   }
+  activeDailyQuizId.value = null
   activeView.value = 'quiz'
 }
 </script>
@@ -136,8 +156,8 @@ function startRoadmapQuiz(roadmapQuiz) {
 
     <main>
       <DashboardView v-if="activeView === 'dashboard'" @start-recommended-quiz="startRecommendedQuiz" @create-learning-roadmap="createRoadmapFromRecommendation" />
-      <DailyLearningView v-if="dailyMounted" v-show="activeView === 'daily'" @complete-today="completeDailyLearning" />
-      <QuizGenerator v-show="activeView === 'quiz'" :recommended-quiz="recommendedQuiz" @open-roadmap="showRoadmap" />
+      <DailyLearningView ref="dailyView" v-if="dailyMounted" v-show="activeView === 'daily'" @completed="completeDailyLearning" @open-quiz="openDailyQuiz" />
+      <QuizGenerator v-show="activeView === 'quiz'" :recommended-quiz="recommendedQuiz" :preloaded-quiz="preloadedQuiz" @open-roadmap="showRoadmap" @attempt-saved="handleAttemptSaved" />
       <ReviewQueue v-if="reviewMounted" v-show="activeView === 'review'" />
       <RoadmapView v-if="roadmapMounted" v-show="activeView === 'roadmap'" :initial-roadmap="roadmapDraft" :visible="activeView === 'roadmap'" @start-roadmap-quiz="startRoadmapQuiz" />
       <SourceLibrary v-if="sourceMounted" v-show="activeView === 'sources'" @create-roadmap="createRoadmapFromSource" />

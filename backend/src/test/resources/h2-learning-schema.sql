@@ -237,6 +237,7 @@ CREATE TABLE daily_learning (
     concepts TEXT NOT NULL DEFAULT '[]',
     review_topic VARCHAR(255) NOT NULL,
     recommended_review_question_count INTEGER NOT NULL,
+    focus_tier VARCHAR(32) NOT NULL DEFAULT 'IT_EXPANSION',
     source_document_id BIGINT,
     status VARCHAR(32) NOT NULL,
     completed_at TIMESTAMP,

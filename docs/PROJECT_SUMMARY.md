@@ -2,17 +2,17 @@
 
 ### 개요
 
-- **목적**: 기술 문서 기반 AI 퀴즈 생성, 풀이 기록, 오답 복습을 한 흐름으로 제공
+- **목적**: 기술 주제·자료·RSS 기사를 퀴즈, 풀이 기록, 간격 반복, 로드맵 학습으로 연결하는 개인 학습 서비스
 - **구성**: 모노레포(Backend: Java 21/Spring Boot MVC, Frontend: Vue 3/Vite)
 - **AI**: OpenAI `Responses API`와 Structured Outputs(JSON Schema)
 
 ### 주요 흐름
 
-1. 사용자가 주제와 문항 수(1~20)를 입력합니다.
-2. 백엔드가 OpenAI에 구조화된 퀴즈 생성을 요청합니다.
-3. 서버가 제목, 문항 수, 4개 선택지, 정답·해설의 무결성을 검증합니다.
-4. PostgreSQL의 해시와 선택적 pgvector 의미 검색으로 중복을 제거합니다.
-5. 풀이 결과를 PostgreSQL에 저장하고 오답 문항의 복습 일정을 만듭니다.
+1. 사용자가 주제·자료를 선택하거나, 데일리 학습은 RSS 후보를 개발 직접 관련 → 개발 인접 → IT 확장 순으로 비용 없이 선택합니다.
+2. 백엔드는 OpenAI Structured Outputs로 퀴즈·로드맵 초안·데일리 해설을 만들고 비용·출력 한도를 먼저 검사합니다.
+3. 서버는 문제 해시와 선택적 pgvector 의미 검색으로 중복을 걸러내고, 생성 응답에서는 정답·해설을 제외합니다.
+4. 제출 시 서버가 채점·풀이 저장·오답 복습 예약을 하나의 트랜잭션으로 처리하고 보기별 해설을 반환합니다.
+5. 로드맵은 목표별 출제 수를 관리하고, 데일리 학습은 기사 해설·복습·심화 학습을 같은 저장·채점 흐름으로 연결합니다.
 
 ### 핵심 코드
 
@@ -23,6 +23,8 @@
 - `source/service/SourceService.java`: 학습 자료 청크 관리
 - `embedding/service/*`: 선택적 OpenAI 임베딩과 pgvector 의미 중복 체크
 - `document/controller/DocumentController.java`: Markdown·Notion·Git 저장 API
+- `daily/service/*`: 개발자 우선 RSS 기사 선택, 데일리 학습 생성·복습 완료 처리
+- `quality/service/*`: 중복 임계값과 목표·문항 품질 평가·사람 검토
 
 ### 설정
 
@@ -41,9 +43,11 @@ export OPENAI_API_KEY="your_api_key"
 - Testcontainers의 실제 PostgreSQL + pgvector에서 V3·HNSW·코사인 검색을 검증합니다.
 - AI 호출의 지연·결과·토큰 사용량을 Actuator/Micrometer로 기록합니다.
 - 자료 저장 → 더미 퀴즈 → 풀이 → 복습 예약을 H2 기반 HTTP 통합 테스트로 검증합니다.
+- Vitest로 제출 전 정답 비노출·제출 상태를 검증하고, Playwright Chromium으로 생성·제출·데일리 완료·360px 화면을 고정 API fixture로 검증합니다.
+- GitHub Actions는 Java 21 백엔드 `check`와 Node 22 프론트엔드 단위·빌드·E2E를 분리 실행합니다. CI는 OpenAI·RSS·개인 DB를 호출하지 않습니다.
 
 ### 다음 개선 우선순위
 
-1. 사용자 인증과 학습 이력·정답률 대시보드
-2. 문항별 출처 검증 평가셋과 유사도 임계값 보정
-3. Git/Notion 외부 저장의 사용자 승인·권한·감사 이력
+1. 사용자 인증과 데이터 소유권
+2. 기사·학습 자료 문단 단위 근거 인용과 생성 결과 근거성 평가
+3. 전체 컨테이너화와 Terraform 기반 제한적 클라우드 배포

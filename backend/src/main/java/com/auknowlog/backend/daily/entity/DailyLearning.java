@@ -22,6 +22,8 @@ public class DailyLearning {
     @Column(nullable = false, columnDefinition = "TEXT") private String concepts;
     @Column(nullable = false) private String reviewTopic;
     @Column(nullable = false) private int recommendedReviewQuestionCount;
+    @Enumerated(EnumType.STRING) @Column(nullable = false, length = 32)
+    private DailyLearningFocus focusTier;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "source_document_id")
     private SourceDocument sourceDocument;
     @Enumerated(EnumType.STRING) @Column(nullable = false)
@@ -35,7 +37,7 @@ public class DailyLearning {
 
     public DailyLearning(LocalDate learningDate, String articleTitle, String articleUrl, LocalDateTime articlePublishedAt,
                          String articleSummary, String supplement, String concepts, String reviewTopic,
-                         int recommendedReviewQuestionCount, SourceDocument sourceDocument) {
+                         int recommendedReviewQuestionCount, DailyLearningFocus focusTier, SourceDocument sourceDocument) {
         this.learningDate = learningDate;
         this.articleTitle = articleTitle;
         this.articleUrl = articleUrl;
@@ -45,6 +47,7 @@ public class DailyLearning {
         this.concepts = concepts;
         this.reviewTopic = reviewTopic;
         this.recommendedReviewQuestionCount = recommendedReviewQuestionCount;
+        this.focusTier = focusTier;
         this.sourceDocument = sourceDocument;
         this.status = DailyLearningStatus.READY;
         this.createdAt = LocalDateTime.now();
@@ -62,6 +65,7 @@ public class DailyLearning {
     public String getConcepts() { return concepts; }
     public String getReviewTopic() { return reviewTopic; }
     public int getRecommendedReviewQuestionCount() { return recommendedReviewQuestionCount; }
+    public DailyLearningFocus getFocusTier() { return focusTier; }
     public SourceDocument getSourceDocument() { return sourceDocument; }
     public DailyLearningStatus getStatus() { return status; }
     public LocalDateTime getCompletedAt() { return completedAt; }

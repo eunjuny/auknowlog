@@ -14,6 +14,7 @@ AI를 활용하여 원하는 주제에 대한 객관식 문제를 자동으로 �
 |------|------|
 | **Backend** | Java 21, Spring Boot 3.5, Virtual Threads |
 | **Frontend** | Vue.js 3, Vite |
+| **Frontend Verification** | Vitest, Vue Test Utils, Playwright Chromium |
 | **AI** | OpenAI GPT-5.4 mini (`Responses API`, Structured Outputs) |
 | **Database** | PostgreSQL 16 (이력 저장) |
 | **Semantic Search** | PostgreSQL 16 + pgvector 0.8 (선택적 임베딩 유사도 검사) |
@@ -24,7 +25,7 @@ AI를 활용하여 원하는 주제에 대한 객관식 문제를 자동으로 �
 ## ✨ 주요 기능
 
 - 🤖 **AI 퀴즈 자동 생성** - 주제 입력만으로 객관식 퀴즈 생성
-- 📰 **데일리 기술 학습** - RSS 기사에서 요약·보충 해설·핵심 개념을 만들고, 내용 밀도에 맞춘 복습·심화 문제로 연결
+- 📰 **데일리 기술 학습** - 개발 직접 관련 RSS 기사를 우선 선택하고, 후보가 없을 때만 넓은 IT 기사를 요약·보충 해설·복습·심화 문제로 연결
 - 🎲 **정답 위치 무작위화·보기별 해설** - 서버가 문항별 보기 순서를 무작위화하고, 채점 후 정답과 오답 보기를 각각 설명
 - 📚 **학습 자료 기반 생성** - 파일·공개 URL의 본문을 청크로 저장하고, 요청 주제와 관련된 제한 문맥으로 AI 학습 로드맵·문제 생성
 - 🛡️ **AI 비용·품질 제어** - 요청 전 일일 토큰 안전 예산·출력 상한으로 과도한 호출을 차단하고, 대시보드에서 실제 사용량과 남은 예산을 확인
@@ -72,7 +73,7 @@ SPRING_DATASOURCE_URL=jdbc:postgresql://localhost:5433/auknowlog ./gradlew bootR
 
 ```bash
 cd frontend
-npm install
+npm ci
 npm run dev
 ```
 
@@ -121,6 +122,7 @@ Codex 로컬 자동화 `Auknowlog 원격 접속 메일`은 매일 오전 8시(�
 - [Prometheus 기반 AI·문제 품질 운영 관측](docs/PROMETHEUS_OBSERVABILITY.md)
 - [AI 품질 평가와 Human-in-the-loop](docs/AI_QUALITY_EVALUATION.md)
 - [데일리 기술 학습 설계](docs/DAILY_TECH_LEARNING.md)
+- [프론트엔드 브라우저 검증과 CI](docs/FRONTEND_E2E_AND_CI.md)
 - [파일·URL 학습 자료 수집 보안 설계](docs/SOURCE_INGESTION_SECURITY.md)
 - [`.roadmap.json` 단계형 학습 로드맵 형식](docs/ROADMAP_JSON_FORMAT.md)
 - [로드맵 진행 선택·Git 학습 노트 구조](docs/ROADMAP_PROGRESS_AND_GIT_EXPORT.md)
@@ -132,7 +134,7 @@ Codex 로컬 자동화 `Auknowlog 원격 접속 메일`은 매일 오전 8시(�
 
 이전 구조와 새 구조의 문제·대안·선택 근거·검증 방법은 [스택 전환 비교](docs/STACK_TRANSITION.md)에 정리했습니다. 다음 도입 기준은 [기술 의사결정 기록](docs/TECHNOLOGY_DECISIONS.md)을 참고하세요.
 
-애플리케이션의 상단 `데일리 학습` 메뉴는 서버에 저장된 오늘의 학습을 조회합니다. 매일 오전 7:30(Asia/Seoul)에 설정된 RSS에서 기사 하나를 수집하고, 안전한 URL 본문 추출 뒤 요약·보충 해설·핵심 개념·동적 복습 문제 수를 생성합니다. 생성에 실패했거나 서버가 그 시간에 꺼져 있었다면 화면의 `오늘의 학습 생성` 버튼으로 명시적으로 재시도할 수 있습니다. 복습 문제 시작과 심화 문제 생성은 각각 OpenAI 호출을 사용하며, 서버 채점 뒤 복습 퀴즈가 제출되면 오늘 학습이 완료되어 다음 첫 화면은 대시보드가 됩니다.
+애플리케이션의 상단 `데일리 학습` 메뉴는 서버에 저장된 오늘의 학습을 조회합니다. 매일 오전 7:30(Asia/Seoul)에 설정된 RSS 후보를 개발 직접 관련 → 개발 인접 → IT 확장 순서로 점수화해 하나를 고르고, 안전한 URL 본문 추출 뒤 요약·보충 해설·핵심 개념·동적 복습 문제 수를 생성합니다. 이 기사 선택 단계는 RSS 메타데이터 규칙만 사용하므로 AI 비용이 없습니다. 생성에 실패했거나 서버가 그 시간에 꺼져 있었다면 화면의 `오늘의 학습 생성` 버튼으로 명시적으로 재시도할 수 있습니다. 복습 문제 시작과 심화 문제 생성은 각각 OpenAI 호출을 사용하며, 서버 채점 뒤 복습 퀴즈가 제출되면 오늘 학습이 완료되어 다음 첫 화면은 대시보드가 됩니다.
 
 ## 🔎 운영 확인
 
@@ -163,9 +165,18 @@ cd backend
 # 실행 중인 백엔드와 Prometheus의 실제 수집 상태 확인
 cd ..
 ./scripts/verify-prometheus.sh
+
+# 브라우저 UI 회귀 검증 (OpenAI·개인 DB 호출 없음)
+cd frontend
+npm run test
+npm run build
+npx playwright install chromium
+npm run test:e2e
 ```
 
-`integrationTest`는 Testcontainers가 격리된 임시 DB를 만들고 Flyway V1~V18, `vector(512)`, HNSW 인덱스, 코사인 유사도 검색, 평가 문제 쌍·분리 기준 데이터셋 벡터 저장, 511차원 벡터 거부와 피드백·계층형 로드맵·자료 출처·학습 목표·보기별 해설·데일리 학습 연결 스키마를 검증한 뒤 컨테이너를 제거합니다. OpenAI API는 호출하지 않습니다.
+`integrationTest`는 Testcontainers가 격리된 임시 DB를 만들고 Flyway V1~V19, `vector(512)`, HNSW 인덱스, 코사인 유사도 검색, 평가 문제 쌍·분리 기준 데이터셋 벡터 저장, 511차원 벡터 거부와 피드백·계층형 로드맵·자료 출처·학습 목표·보기별 해설·데일리 학습 선택 등급 연결 스키마를 검증한 뒤 컨테이너를 제거합니다. OpenAI API는 호출하지 않습니다.
+
+프론트엔드는 Vitest로 제출 전 정답 비노출·제출 활성 상태를 빠르게 검증하고, Playwright Chromium으로 데모 생성 → 서버 채점 결과 표시, 데일리 학습 복습 완료 화면 전환, 360px 모바일 레이아웃을 고정 fixture로 검증합니다. 실제 Spring API 계약은 백엔드 통합 테스트가 담당하므로, 브라우저 테스트도 OpenAI·RSS·개인 학습 DB에 접근하지 않습니다. 자세한 범위는 [프론트엔드 브라우저 검증과 CI](docs/FRONTEND_E2E_AND_CI.md)를 참고하세요.
 
 ## ⚙️ 환경 설정
 

@@ -28,7 +28,7 @@ flowchart LR
 | 메뉴 | 기능 | 필요한 이유 |
 | --- | --- | --- |
 | 대시보드 | 풀이량·정답률·오늘 복습·약점 추천과 AI 호출·일일 안전 예산 지표를 한 화면에 제공 | 학습 상태와 AI 품질/비용 문제를 분리해 판단한다. |
-| 데일리 학습 | RSS 기사 기반 요약·보충 해설·핵심 개념을 읽고 복습·심화 문제를 시작 | 기사 소비를 이해·회상·심화 학습으로 연결하고, 복습 문제 수를 내용 밀도에 맞춘다. |
+| 데일리 학습 | 개발 직접 관련 RSS 기사를 우선 선택해 요약·보충 해설·핵심 개념을 읽고 복습·심화 문제를 시작 | 개발 학습을 우선하고 후보가 없을 때만 IT 확장 주제로 내려가며, 기사 소비를 이해·회상·심화 학습으로 연결한다. |
 | 문제 생성 | GPT 또는 비용 없는 데모 문제를 생성하고, 로드맵 단계와 연결 | 명시적으로 AI 생성을 선택해야 비용이 발생한다. |
 | 오늘의 복습 | 예정된 문제를 다시 풀고 다음 복습일을 계산 | 단발성 퀴즈를 간격 반복 학습으로 확장한다. |
 | 학습 로드맵 | 진행 중/완료 탭, 대주제·소주제·필수 학습 목표·선행 관계와 목표별 출제 진행률을 관리 | 학습 순서뿐 아니라 핵심 내용의 누락 여부와 추가 학습·다음 단계 선택을 제어하고, 완료 경로는 목록을 분리해 관리한다. |
@@ -159,7 +159,7 @@ flowchart LR
 
 Codex 로컬 자동화는 매일 오전 8시(Asia/Seoul)에 서비스 상태를 복구하고 기존 터널을 폐기한 뒤 새 `quick-email`을 실행한다. 성공한 터널은 최대 8시간 유지하고 실패 시 새 터널을 정리한다. 로컬 예약이므로 맥·Codex 호스트·네트워크·Docker가 실행 가능해야 하며, 퀴즈·임베딩 API는 호출하지 않는다. 상세 조건은 [외부 접속 운영 가이드](REMOTE_ACCESS.md)를 참고한다.
 
-데일리 학습은 `daily_learning`에 날짜별 기사·요약·보충 해설·핵심 개념·복습 주제·동적 문항 수·완료 상태를 저장한다. 매일 오전 7:30(Asia/Seoul) 스케줄러가 설정된 RSS의 최신 기사 하나를 고르고, 기존 URL 수집기의 SSRF 방어·리다이렉트·응답 크기 제한을 거쳐 원문을 `source_document`에 저장한다. 그 후 OpenAI Structured Outputs가 기사 요약, 700~1,400자 수준의 보충 해설, 3~7개 핵심 개념, 2~12개의 복습 문항 수를 결정한다. 같은 날짜 또는 같은 기사 URL이 이미 있으면 기존 결과를 반환해 재시도·스케줄 중복이 추가 비용을 만들지 않는다.
+데일리 학습은 `daily_learning`에 날짜별 기사·선택 등급·요약·보충 해설·핵심 개념·복습 주제·동적 문항 수·완료 상태를 저장한다. 매일 오전 7:30(Asia/Seoul) 스케줄러가 RSS 후보의 제목·설명·카테고리를 점수화해 `DEVELOPER_CORE`(개발 직접 관련) → `DEVELOPER_ADJACENT`(개발 인접) → `IT_EXPANSION` 순으로 기사 하나를 고른다. 이 선택 단계에는 OpenAI를 호출하지 않는다. 이어 기존 URL 수집기의 SSRF 방어·리다이렉트·응답 크기 제한을 거쳐 원문을 `source_document`에 저장한다. 그 후 OpenAI Structured Outputs가 기사 요약, 700~1,400자 수준의 보충 해설, 3~7개 핵심 개념, 2~12개의 복습 문항 수를 결정한다. 같은 날짜 또는 같은 기사 URL이 이미 있으면 기존 결과를 반환해 재시도·스케줄 중복이 추가 비용을 만들지 않는다.
 
 앱 상단 `데일리 학습` 메뉴는 서버의 오늘 상태를 조회한다. 복습 문제는 보충 해설을 포함한 저장 자료를 근거로 기존 퀴즈 생성·정답 비공개·서버 채점·풀이 기록·오답 복습 예약 흐름을 그대로 사용한다. 복습 퀴즈를 제출하면 `COMPLETED`로 전환하고, 다음 접속의 첫 화면은 대시보드가 된다. 심화 주제는 사용자가 입력하며 같은 자료를 근거로 별도 퀴즈를 생성한다. Git 저장 시 `daily-tech/{날짜}-{기사명}/learning.md`에 기사·해설을, `review/`와 `advanced/`에 퀴즈를 나누어 기록한다. 상세 실행·비용·실패 처리 기준은 [데일리 기술 학습 설계](DAILY_TECH_LEARNING.md)를 참고한다.
 
@@ -188,9 +188,9 @@ Codex 로컬 자동화는 매일 오전 8시(Asia/Seoul)에 서비스 상태를 
 | 학습 자료 | `source_document`, `source_chunk` | 원문 출처·본문 해시·분할 문맥을 저장 |
 | AI 품질 평가 | `quality_evaluation_run`, `duplicate_question_pair`, `duplicate_evaluation_result`, `objective_evaluation_case` | 평가 실행·모델·토큰, 문제 쌍의 시스템/사람 판정과 목표·문항 품질 근거를 저장 |
 | 중복 평가 기준 데이터셋 | `duplicate_evaluation_dataset`, `duplicate_evaluation_dataset_sample` | 학습 이력과 분리한 참조 라벨 문제 쌍, 두 벡터·실제 유사도와 임베딩 사용량을 저장 |
-| 데일리 학습 | `daily_learning`, `source_document`, `learning_quiz.daily_learning_id` | 날짜별 기사·AI 해설·핵심 개념과 복습/심화 퀴즈·완료 상태를 연결 |
+| 데일리 학습 | `daily_learning`, `source_document`, `learning_quiz.daily_learning_id` | 날짜별 기사·개발 관련성 선택 등급·AI 해설·핵심 개념과 복습/심화 퀴즈·완료 상태를 연결 |
 
-스키마는 Flyway V1~V18으로 관리한다. V13은 학습 목표와 문항-목표 연결을, V14는 품질 평가 실행·문제 쌍·목표 검토 데이터를, V15는 분리된 중복 평가 기준 데이터셋을, V16은 로드맵 단계의 목표 충족과 진행 확정 상태를 분리하는 시각을, V17은 보기별 해설을, V18은 날짜별 기사 학습과 데일리 퀴즈 연결을 추가한다. JPA의 자동 DDL 생성을 사용하지 않고 애플리케이션 시작 시 스키마를 검증한다.
+스키마는 Flyway V1~V19으로 관리한다. V13은 학습 목표와 문항-목표 연결을, V14는 품질 평가 실행·문제 쌍·목표 검토 데이터를, V15는 분리된 중복 평가 기준 데이터셋을, V16은 로드맵 단계의 목표 충족과 진행 확정 상태를 분리하는 시각을, V17은 보기별 해설을, V18은 날짜별 기사 학습과 데일리 퀴즈 연결을, V19는 데일리 기사 선택 등급을 추가한다. JPA의 자동 DDL 생성을 사용하지 않고 애플리케이션 시작 시 스키마를 검증한다.
 
 ## 5. 기술과 OSS 선택 근거
 
@@ -198,9 +198,10 @@ Codex 로컬 자동화는 매일 오전 8시(Asia/Seoul)에 서비스 상태를 
 | --- | --- | --- | --- |
 | 언어·서버 | Java 21, Spring Boot 3.5, Virtual Threads | 타입 안정성, 트랜잭션·검증·운영 도구 생태계와 I/O 중심 API 처리에 적합 | API, 도메인 서비스, 외부 HTTP 호출 |
 | 프론트엔드 | Vue 3, Vite, Axios | 단일 학습 도구 UI를 빠르게 구성하고 화면 단위를 지연 로딩 | 메뉴별 화면과 API 호출 |
+| 프론트 검증 | Vitest, Vue Test Utils, Playwright | 빌드만으로 발견하지 못하는 제출 상태·실제 브라우저 전환·모바일 레이아웃 회귀를 자동 차단 | 컴포넌트·Chromium E2E·GitHub Actions |
 | 영속성 | PostgreSQL 16, Spring Data JPA | 관계형 학습 데이터, 제약 조건, 트랜잭션과 분석 집계를 한 DB에서 처리 | 풀이·복습·로드맵·자료·운영 원장 |
 | 벡터 검색 | pgvector 0.8 | 별도 검색 클러스터 없이 PostgreSQL 원본 데이터와 벡터를 함께 관리 | 문제 임베딩과 코사인 유사도 검색 |
-| 스키마 관리 | Flyway | 환경마다 같은 순서의 DB 변경과 검증 가능한 이력 | V1~V18 마이그레이션 |
+| 스키마 관리 | Flyway | 환경마다 같은 순서의 DB 변경과 검증 가능한 이력 | V1~V19 마이그레이션 |
 | AI 생성·평가 | OpenAI Responses API, Structured Outputs | 퀴즈·로드맵의 JSON 계약을 제한하고, 출력 토큰 상한·서버 사전 예산 검사 아래 품질 평가도 모든 문항 ID·판정·확신도를 구조화해 재검증 | 문제·로드맵 초안, 목표별 문제 생성, 명시적 목표 품질 평가 |
 | 임베딩 | OpenAI Embeddings, `text-embedding-3-small`, 512차원 | 의미 유사 문제 후보를 비용 제한 아래 비교 | 선택적 중복 검사 |
 | 자료 추출 | Apache Tika, jsoup | 실제 파일 유형 확인·PDF 텍스트 추출·HTML 정제 | 파일/URL 미리보기 |
@@ -221,7 +222,7 @@ Codex 로컬 자동화는 매일 오전 8시(Asia/Seoul)에 서비스 상태를 
 | 풀이 | `POST /api/learning-attempts` | 서버 채점·풀이 저장·오답 복습 예약 |
 | 복습 | `GET /api/reviews`, `POST /api/reviews/{id}/answer` | 오늘의 복습 조회와 재풀이 |
 | 로드맵 | `POST /api/learning-roadmaps/ai/previews`, `POST /api/learning-roadmaps/ai/confirm`, `POST /{roadmapId}/steps/{stepId}/advance`, `DELETE /{roadmapId}` | 저장 전 AI 미리보기, 편집 결과 저장, 다음 단계 진행 확정, 로드맵 정의 안전 삭제 |
-| 데일리 학습 | `GET /api/daily-learnings/today`, `POST /generate`, `POST /{id}/review-quiz`, `/advanced-quiz` | RSS 기사 기반 오늘 학습 조회·명시적 재생성·근거 기반 복습/심화 퀴즈 생성 |
+| 데일리 학습 | `GET /api/daily-learnings/today`, `POST /generate`, `POST /{id}/review-quiz`, `/advanced-quiz` | 개발 직접 관련 우선 RSS 기사 기반 오늘 학습 조회·명시적 재생성·근거 기반 복습/심화 퀴즈 생성 |
 | 자료 | `POST /api/sources/previews/file`, `/url`, `/text`, `POST /api/sources` | 안전한 추출 미리보기와 확인 저장 |
 | 피드백 | `PUT /api/question-feedback` | 문항 품질 피드백 갱신 |
 | 대시보드 | `GET /api/dashboard` | 학습·운영 지표와 추천, 사람 검증 기반 중복 임계값 곡선 및 목표 품질 비교 차트 집계 |
@@ -271,7 +272,7 @@ cd frontend && npm install && npm run dev
 | 계층 | 실행 방법 | 검증하는 것 |
 | --- | --- | --- |
 | 단위/H2 | `cd backend && ./gradlew test` | DTO·서비스 규칙·서버 채점·복습·자료 보안·목표별 배정 및 커버리지 갱신·AI 계약 |
-| 실제 DB 통합 | `cd backend && ./gradlew integrationTest` | Testcontainers PostgreSQL 16 + pgvector, Flyway V1~V18, 학습 목표·품질 평가·데일리 학습 FK, 보기별 해설, 로드맵 진행 확정 상태, 기준 데이터셋 vector(512), HNSW, 평가 후보 SQL, 차원 불일치 거부 |
+| 실제 DB 통합 | `cd backend && ./gradlew integrationTest` | Testcontainers PostgreSQL 16 + pgvector, Flyway V1~V19, 학습 목표·품질 평가·데일리 학습 선택 등급/FK, 보기별 해설, 로드맵 진행 확정 상태, 기준 데이터셋 vector(512), HNSW, 평가 후보 SQL, 차원 불일치 거부 |
 | 전체 백엔드 | `cd backend && ./gradlew check` | 단위와 실제 DB 통합 테스트를 함께 실행 |
 | 프론트 빌드 | `cd frontend && npm run build` | Vue 생산 번들 생성 가능 여부 |
 | Prometheus 연결 | `./scripts/verify-prometheus.sh` | 핵심 metric export, 고카디널리티 label 부재, readiness와 실제 scrape target `UP`; OpenAI 호출 없음 |
@@ -319,6 +320,7 @@ Gmail 앱 비밀번호는 일반 계정 비밀번호가 아니다. Google 계정
 | `README.md` | 빠른 실행, 사용자 기능 요약, 핵심 링크 |
 | `TECHNOLOGY_DECISIONS.md` | 대안과 비교를 포함한 기술 선택 근거 |
 | `IMPROVEMENT_ROADMAP.md` | 완료 기준과 다음 단계 상태 |
+| `FRONTEND_E2E_AND_CI.md` | UI 단위 테스트, 브라우저 fixture, CI 경계와 실행 방법 |
 | [PORTFOLIO_GUIDE.md](PORTFOLIO_GUIDE.md) | 제출용 PDF·편집본, 페이지 구성, 구현 근거와 포트폴리오 갱신 절차 |
 | 주제별 문서 | pgvector, 로드맵, 자료 수집, 원격 접근, 관측의 상세 설계·실행 방법 |
 
@@ -336,6 +338,8 @@ Gmail 앱 비밀번호는 일반 계정 비밀번호가 아니다. Google 계정
 
 | 날짜 | 변경 | 문서 영향 |
 | --- | --- | --- |
+| 2026-09-28 | 데일리 개발자 우선 기사 선택 | RSS 제목·설명·카테고리를 비용 없는 서버 규칙으로 점수화해 개발 직접 관련 → 개발 인접 → IT 확장 순으로 선택. V19 `focus_tier` 저장, 화면 등급 표시와 우선순위 단위 테스트를 추가 |
+| 2026-09-28 | 프론트엔드 브라우저 검증·CI 추가 | Vitest 단위 테스트, Playwright Chromium의 생성·제출·데일리 완료·360px 회귀 시나리오, Node 22 GitHub Actions와 실패 artifact 보관을 추가. API fixture와 Spring/Testcontainers 계약 검증의 책임을 분리하고 OpenAI·개인 DB 호출 없음 명시 |
 | 2026-09-22 | RSS 기반 데일리 기술 학습 구현 | V18 `daily_learning`, 오전 7:30 생성 스케줄, URL 안전 수집·Structured Outputs 해설·동적 복습 문항 수, 기존 서버 채점·Git 노트 연결 및 비용·중복 방지 기준 반영 |
 | 2026-09-18 | AI 비용·품질 제어 1차 적용 | 퀴즈·로드맵·목표 품질 평가에 요청 전 일일 토큰 안전 예산과 `max_output_tokens`를 적용하고, 키워드 Top-K 자료 청크·대시보드 예산 근거·단위 테스트를 추가 |
 | 2026-09-18 | 정답 위치 무작위화·보기별 해설 추가 | 모델의 A 정답 편향을 문항별 서버 무작위 재배치로 보정하고, V17·채점·풀이 기록·복습 결과에 모든 보기의 설명을 연결 |

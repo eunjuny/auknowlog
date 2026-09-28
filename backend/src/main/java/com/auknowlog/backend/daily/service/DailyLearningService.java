@@ -2,6 +2,7 @@ package com.auknowlog.backend.daily.service;
 
 import com.auknowlog.backend.daily.dto.*;
 import com.auknowlog.backend.daily.entity.DailyLearning;
+import com.auknowlog.backend.daily.entity.DailyLearningFocus;
 import com.auknowlog.backend.daily.entity.DailyLearningTrack;
 import com.auknowlog.backend.daily.repository.DailyLearningRepository;
 import com.auknowlog.backend.learning.entity.LearningQuiz;
@@ -61,7 +62,7 @@ public class DailyLearningService {
         DailyLearning existing = repository.findByLearningDate(LocalDate.now()).orElse(null);
         if (existing != null) return response(existing);
         DailyArticleFeedService.ArticleCandidate candidate = explicitUrl == null || explicitUrl.isBlank()
-                ? articleFeedService.latest() : new DailyArticleFeedService.ArticleCandidate("데일리 기술 학습 기사", explicitUrl.trim(), null);
+                ? articleFeedService.latest() : DailyArticleFeedService.ArticleCandidate.userSelected(explicitUrl.trim());
         SourcePreviewResponse preview = sourcePreviewService.previewUrl(candidate.url());
         DailyLearning duplicateArticle = repository.findByArticleUrl(preview.sourceUri()).orElse(null);
         if (duplicateArticle != null) return response(duplicateArticle);
@@ -74,7 +75,7 @@ public class DailyLearningService {
                 .orElseThrow(() -> new IllegalStateException("데일리 학습 자료 저장을 확인하지 못했습니다."));
         DailyLearning daily = repository.save(new DailyLearning(LocalDate.now(), preview.title(), preview.sourceUri(),
                 candidate.publishedAt(), draft.articleSummary(), draft.supplement(), writeConcepts(draft.concepts()),
-                draft.reviewTopic().trim(), draft.recommendedReviewQuestionCount(), document));
+                draft.reviewTopic().trim(), draft.recommendedReviewQuestionCount(), candidate.focusTier(), document));
         return response(daily);
     }
 
@@ -103,7 +104,7 @@ public class DailyLearningService {
         long advancedCount = learningQuizRepository.countByDailyLearningIdAndDailyLearningTrack(daily.getId(), DailyLearningTrack.ADVANCED);
         return new DailyLearningResponse(daily.getId(), daily.getLearningDate(), daily.getArticleTitle(), daily.getArticleUrl(),
                 daily.getArticlePublishedAt(), daily.getArticleSummary(), daily.getSupplement(), readConcepts(daily.getConcepts()),
-                daily.getReviewTopic(), daily.getRecommendedReviewQuestionCount(), daily.getStatus(), reviewQuizId, advancedCount, daily.getCompletedAt());
+                daily.getReviewTopic(), daily.getRecommendedReviewQuestionCount(), daily.getFocusTier(), daily.getStatus(), reviewQuizId, advancedCount, daily.getCompletedAt());
     }
     private String writeConcepts(List<DailyLearningConcept> concepts) { try { return objectMapper.writeValueAsString(concepts); } catch (JsonProcessingException e) { throw new IllegalStateException("핵심 개념을 저장하지 못했습니다.", e); } }
     private List<DailyLearningConcept> readConcepts(String value) { try { return objectMapper.readValue(value, objectMapper.getTypeFactory().constructCollectionType(List.class, DailyLearningConcept.class)); } catch (JsonProcessingException e) { throw new IllegalStateException("저장된 핵심 개념을 읽지 못했습니다.", e); } }

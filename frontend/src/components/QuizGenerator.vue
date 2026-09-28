@@ -540,7 +540,7 @@ function cancelNextQuiz() {
 </script>
 
 <template>
-  <div class="quiz-container">
+  <div class="quiz-container" data-testid="quiz-generator">
     <div class="quiz-heading">
       <p class="eyebrow">QUIZ</p>
       <h2>새 퀴즈 만들기</h2>
@@ -569,7 +569,7 @@ function cancelNextQuiz() {
         비용 없는 데모 퀴즈로 생성 (해제 시 OpenAI API 호출)
       </label>
       <p v-if="recommendationMessage" class="recommendation-message">{{ recommendationMessage }}</p>
-      <button @click="generateQuiz" :disabled="loading || !topic">
+      <button data-testid="quiz-generate" @click="generateQuiz" :disabled="loading || !topic">
         {{ loading ? '생성 중...' : demoMode ? '데모 퀴즈 생성' : 'AI 퀴즈 생성' }}
       </button>
       <p v-if="sourceMessage" class="source-message">{{ sourceMessage }}</p>
@@ -591,6 +591,7 @@ function cancelNextQuiz() {
             class="option-item"
             :disabled="quizSubmitted"
             :aria-pressed="selectedAnswers[index] === optIndex"
+            :data-testid="`quiz-option-${index}-${optIndex}`"
             :class="{
               'selected': selectedAnswers[index] === optIndex && (!quizSubmitted || !gradingResults[index]),
               'correct-answer': gradingResults[index] && option === gradingResults[index].correctAnswer,
@@ -604,6 +605,7 @@ function cancelNextQuiz() {
         </div>
         
           <div v-if="gradingResults[index]"
+             :data-testid="`quiz-answer-${index}`"
              class="answer-section"
              :class="{
                'correct-result': gradingResults[index].correct,
@@ -688,11 +690,11 @@ function cancelNextQuiz() {
       </div>
       
       <div class="next-quiz-section">
-        <div v-if="submissionMessage" class="result-summary">
+        <div v-if="submissionMessage" class="result-summary" data-testid="quiz-submission-result">
           {{ submissionMessage }}
         </div>
       <div class="quiz-actions">
-          <button @click="submitQuiz" :disabled="loading || attemptSaving || attemptSaved || (!quizSubmitted && !isAllQuestionsAnswered())" class="submit-button">
+          <button data-testid="quiz-submit" @click="submitQuiz" :disabled="loading || attemptSaving || attemptSaved || (!quizSubmitted && !isAllQuestionsAnswered())" class="submit-button">
             {{ attemptSaving ? '서버 채점 및 저장 중...' : attemptSaved ? '채점 및 기록 저장 완료' : quizSubmitted ? '채점·저장 다시 시도' : isAllQuestionsAnswered() ? '답안 제출' : `미응답 ${getUnansweredQuestionCount()}개` }}
           </button>
           <button @click="showNextQuizOptions" :disabled="attemptSaving" class="next-quiz-button">

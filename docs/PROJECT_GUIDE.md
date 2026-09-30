@@ -49,6 +49,8 @@ flowchart TB
     Vite -->|개발 프록시| Backend
     Browser -. 선택형 전체 Compose .-> Nginx[Nginx 정적 화면·API 프록시]
     Nginx -. /api/ .-> Backend
+    Browser -. 선택형 컨테이너 인증 .-> Keycloak
+    Backend -. 공개 issuer 검증·내부 JWKS 조회 .-> Keycloak
 
     Backend --> Postgres[(PostgreSQL 16 + pgvector)]
     Backend --> AccountOps[관리자 감사 · 사용자 AI 예산 · 이메일 인증]
@@ -75,7 +77,7 @@ flowchart TB
 - AI는 형식화된 초안을 만들지만, 일일 토큰 예산·출력 상한·자료 문맥 한도·중복·의존 관계·저장은 서버 규칙으로 재검증한다.
 - 비용이 드는 외부 호출은 사용자의 명시적 생성 요청에만 수행한다. 단, 사용자가 활성화한 데일리 학습은 오전 스케줄의 기사당 1회 생성만 예외로 하고, 날짜·기사 URL 중복과 일일 안전 예산으로 제한한다.
 - 외부 접속은 기본값이 아니며, 필요할 때만 인증 프록시가 있는 임시 터널을 연다.
-- 전체 Compose는 기존 호스트 개발 모드와 별개로 Spring Boot·Vue 정적 이미지까지 기동한다. 기본 컨테이너 모드는 단일 사용자·AI/학습 메일 자동 작업 비활성이며, Keycloak 인증 배포와 공개 HTTPS는 별도 설계 대상이다. [전체 컨테이너 실행](CONTAINER_RUNTIME.md)을 참고한다.
+- 전체 Compose는 기존 호스트 개발 모드와 별개로 Spring Boot·Vue 정적 이미지까지 기동한다. 기본 컨테이너 모드는 단일 사용자·AI/학습 메일 자동 작업 비활성이다. 선택형 인증 오버레이는 Keycloak 공개 issuer와 내부 JWKS를 분리해 로컬 컨테이너 로그인·권한을 검증한다. 공개 HTTPS 운영 배포는 별도 설계 대상이다. [전체 컨테이너 실행](CONTAINER_RUNTIME.md)을 참고한다.
 - 인증 프로필에서는 Keycloak의 검증된 `sub`를 `app_user`와 연결하고, 자료·로드맵·퀴즈·풀이·복습을 `owner_id`로 분리한다. 품질 평가는 ADMIN에게만 허용한다.
 - 전체 관리자 화면은 `/api/admin/**` 별도 읽기 전용 경계로 교차 사용자 조회를 허용한다. ADMIN도 일반 학습 API에서는 개인 소유권을 적용한다. 서버에서 role을 검증하며 인증 비활성 모드에서는 관리자 API를 차단한다.
 - 관리자의 전체 학습 조회는 읽기 전용이고, 사용자별 AI 한도는 전용 정책 API에서 변경한다. 관리자 요청의 호출자·대상·응답 상태를 감사하고 USER의 403 시도도 기록한다. 이메일과 AI 예산·발송 이력은 사용자별 경계로 분리한다.
@@ -314,9 +316,10 @@ V22 운영 정책은 `AccountOperationsIntegrationTest`에서 실제 PostgreSQL 
 | 프론트 빌드 | `cd frontend && npm run build` | Vue 생산 번들 생성 가능 여부 |
 | 프론트 브라우저 | `cd frontend && npm run test:e2e` | 데모 채점·데일리 복습·모바일 주요 화면 |
 | 전체 컨테이너 | `docker compose -f docker-compose.yml -f docker-compose.app.yml up --build -d --wait` 후 `bash scripts/verify-compose-app.sh` | 실제 이미지·PostgreSQL 기동, 백엔드 Health·정적 화면·API 프록시·메일 경계 |
+| 인증 컨테이너 | `node scripts/run-compose-auth-smoke.mjs` | 분리된 실제 Keycloak·DB·Nginx·Spring Boot에서 Chromium PKCE 로그인, 사용자 기록 404·USER 403·ADMIN 200·익명 401, 테스트 자원 정리 |
 | Prometheus 연결 | `./scripts/verify-prometheus.sh` | 핵심 metric export, 고카디널리티 label 부재, readiness와 실제 scrape target `UP`; OpenAI 호출 없음 |
 | 원격 접속 메일 | `./scripts/remote-access.sh quick-email` | 공개 URL 인증 검증 뒤 로컬 SMTP API와 Gmail SMTP의 발송 요청 수락 |
-| CI | GitHub Actions `Backend verification`, `Frontend browser verification`, `Container smoke verification` | Java·pgvector 통합, Vue 브라우저 흐름, 전체 이미지 기동과 HTTP 계약을 분리 검증 |
+| CI | GitHub Actions `Backend verification`, `Frontend browser verification`, `Container smoke verification` | Java·pgvector 통합, Vue 브라우저 흐름, 기본·인증 전체 이미지 기동과 HTTP/권한 계약을 분리 검증 |
 
 실제 PostgreSQL 검증의 범위와 한계는 [pgvector·Testcontainers 통합 테스트](PGVECTOR_INTEGRATION_TEST.md)에 정리한다.
 
@@ -327,7 +330,7 @@ V22 운영 정책은 `AccountOperationsIntegrationTest`에서 실제 PostgreSQL 
 | 항목 | 현재 상태 | 다음 구현 전제 |
 | --- | --- | --- |
 | 이메일 원격 접속 알림 | 구현·수동 검증·오전 8시 예약 완료 | 수동 `quick-email` 또는 로컬 Codex 자동화에서 Gmail SMTP로 고정 수신자에게 1회 전송 |
-| 전체 컨테이너화·프론트 CI·E2E | 로컬 단일 사용자 모드 구현·실제 기동 검증 완료 | 백엔드·프론트 이미지, Compose, 브라우저 테스트와 HTTP smoke. Keycloak 인증 배포·클라우드 운영은 별도 범위 |
+| 전체 컨테이너화·프론트 CI·E2E | 로컬 단일 사용자·Keycloak 인증 모드 실제 기동 검증 완료 | 백엔드·프론트 이미지, Compose, 브라우저 테스트와 HTTP/OIDC smoke. 공개 HTTPS·클라우드 운영은 별도 범위 |
 | AI 비용·품질 제어 2차 | 구현 완료 | 공용/사용자별 예약·정산·API 시도 제한, 관리자의 한도 변경. 다음은 미정산 사고 처리·청구 대조 |
 | 인증·사용자 소유권·관리자 감사 | 구현 완료 | Keycloak·소유권·전체 관리자와 접근 감사. 다음은 고객사 tenant·감사 보존/변조 방지 |
 | 사용자별 학습 이메일 | 구현·모의 발송 검증 완료 | 이메일 인증·opt-in·시간·일일 중복 방지·재시도, 기본 꺼짐. 실제 SMTP 활성화는 별도 설정 |
@@ -383,6 +386,7 @@ Gmail 앱 비밀번호는 일반 계정 비밀번호가 아니다. Google 계정
 | 날짜 | 변경 | 문서 영향 |
 | --- | --- | --- |
 | 2026-09-30 | 전체 앱 컨테이너화·CI smoke | Java 21 백엔드·Node 22 빌드/Nginx 프론트 이미지, 선택형 Compose, AI/메일 기본 비활성·루프백 포트·로컬 전용 메일 API 차단, 분리된 PostgreSQL에서 실제 기동·HTTP 검증. Notion 키 미설정 시 기동 실패를 수정하고 명시적 내보내기에서만 오류 처리 |
+| 2026-09-30 | Keycloak 인증 컨테이너 검증 | 공개 OIDC issuer와 내부 JWKS 주소 분리, 로컬 redirect origin 제한, 분리된 Keycloak·DB·Nginx·API에서 실제 PKCE 로그인과 401/403/404/200 검증, 임시 자격 증명·볼륨 정리 |
 | 2026-09-29 | osc 추가 구현 기록과 사용자별 샘플 | test1 Kubernetes Pod 오답·test2 PostgreSQL 트랜잭션 정답 기록, 각자의 로드맵·복습 샘플과 재실행 중복 방지 SQL, 로컬 Keycloak 계정 등록 절차 및 관리자 권한 구분 추가 |
 | 2026-09-29 | osc 추가 구현 2차 운영 정책 | V22 관리자 감사·사용자/공용 AI 예약·정산·시도 제한·개인 이메일 인증/학습 알림 대기열·재시도, 계정·알림 화면과 관리자 정책/감사 화면, 실제 DB 동시성·모의 SMTP·OIDC 검증 |
 | 2026-09-29 | 전체 관리자 학습·AI 모니터링 | 앱용 app-admin USER+ADMIN 계정, 별도 읽기 전용 관리자 API·페이지/사용자 필터·풀이 문항 상세·14일 AI 사용량 화면, V21 원장 owner_id·임베딩 사용량 기록, 권한/실제 로그인 검증 |

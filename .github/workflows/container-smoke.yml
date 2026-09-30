@@ -7,7 +7,15 @@ on:
       - "frontend/**"
       - "docker-compose.yml"
       - "docker-compose.app.yml"
+      - "docker-compose.auth.yml"
+      - "docker-compose.app-auth.yml"
+      - "docker-compose.smoke.yml"
+      - "docker-compose.auth-smoke.yml"
+      - "ops/keycloak/**"
       - "scripts/verify-compose-app.sh"
+      - "scripts/setup-osc-sample-accounts.mjs"
+      - "scripts/verify-osc-samples.mjs"
+      - "scripts/run-compose-auth-smoke.mjs"
       - ".github/workflows/container-smoke.yml"
   pull_request:
     paths:
@@ -15,7 +23,15 @@ on:
       - "frontend/**"
       - "docker-compose.yml"
       - "docker-compose.app.yml"
+      - "docker-compose.auth.yml"
+      - "docker-compose.app-auth.yml"
+      - "docker-compose.smoke.yml"
+      - "docker-compose.auth-smoke.yml"
+      - "ops/keycloak/**"
       - "scripts/verify-compose-app.sh"
+      - "scripts/setup-osc-sample-accounts.mjs"
+      - "scripts/verify-osc-samples.mjs"
+      - "scripts/run-compose-auth-smoke.mjs"
       - ".github/workflows/container-smoke.yml"
 
 permissions:
@@ -40,3 +56,21 @@ jobs:
       - name: Stop the stack
         if: always()
         run: docker compose -f docker-compose.yml -f docker-compose.app.yml down -v
+
+  auth-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install browser verification dependencies
+        working-directory: frontend
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Verify real container OIDC login and ownership
+        run: node scripts/run-compose-auth-smoke.mjs

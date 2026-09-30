@@ -1,0 +1,7 @@
+# 폐기 가능한 auth smoke 프로젝트에서만 적용한다.
+services:
+  postgres:
+    container_name: auknowlog-auth-smoke-postgres
+
+  keycloak:
+    container_name: auknowlog-auth-smoke-keycloak

@@ -8,7 +8,9 @@ import { homedir } from 'node:os'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const runtime = resolve(root, '.runtime')
-const credentialPath = resolve(runtime, 'osc-sample-accounts.json')
+const credentialPath = process.env.AUKNOWLOG_OSC_CREDENTIAL_FILE
+  ? resolve(process.env.AUKNOWLOG_OSC_CREDENTIAL_FILE)
+  : resolve(runtime, 'osc-sample-accounts.json')
 mkdirSync(runtime, { recursive: true, mode: 0o700 })
 const password = () => randomBytes(24).toString('base64url')
 const credentials = existsSync(credentialPath)
@@ -26,21 +28,23 @@ mkdirSync(dockerConfig, { recursive: true, mode: 0o700 })
 writeFileSync(resolve(dockerConfig, 'config.json'), JSON.stringify({ cliPluginsExtraDirs: [
   resolve(homedir(), '.docker', 'cli-plugins'), '/Applications/Docker.app/Contents/Resources/cli-plugins'
 ] }), { mode: 0o600 })
-const context = spawnSync('docker', ['context', 'inspect', '--format', '{{.Endpoints.docker.Host}}'],
-  { encoding: 'utf8', timeout: 10000 })
-if (context.status !== 0) throw new Error('Cannot resolve the current local Docker engine.')
-const compose = spawnSync('docker', ['--config', dockerConfig, 'compose', '-f', 'docker-compose.yml', '-f', 'docker-compose.auth.yml',
-  'up', '-d', 'keycloak'], {
-  cwd: root, encoding: 'utf8', timeout: 180000,
-  env: { ...process.env, DOCKER_HOST: context.stdout.trim(), KEYCLOAK_ADMIN_USERNAME: credentials.administrator.username,
-    KEYCLOAK_ADMIN_PASSWORD: credentials.administrator.password }
-})
-if (compose.status !== 0) {
-  console.error('Keycloak startup failed; account credentials remain in the private runtime file. Check Docker network/image availability.')
-  process.exit(1)
+if (process.env.AUKNOWLOG_OSC_SKIP_COMPOSE_START !== 'true') {
+  const context = spawnSync('docker', ['context', 'inspect', '--format', '{{.Endpoints.docker.Host}}'],
+    { encoding: 'utf8', timeout: 10000 })
+  if (context.status !== 0) throw new Error('Cannot resolve the current local Docker engine.')
+  const compose = spawnSync('docker', ['--config', dockerConfig, 'compose', '-f', 'docker-compose.yml', '-f', 'docker-compose.auth.yml',
+    'up', '-d', 'keycloak'], {
+    cwd: root, encoding: 'utf8', timeout: 180000,
+    env: { ...process.env, DOCKER_HOST: context.stdout.trim(), KEYCLOAK_ADMIN_USERNAME: credentials.administrator.username,
+      KEYCLOAK_ADMIN_PASSWORD: credentials.administrator.password }
+  })
+  if (compose.status !== 0) {
+    console.error('Keycloak startup failed; account credentials remain in the private runtime file. Check Docker network/image availability.')
+    process.exit(1)
+  }
 }
 
-const base = 'http://127.0.0.1:8180'
+const base = process.env.AUKNOWLOG_OSC_KEYCLOAK_URL || 'http://127.0.0.1:8180'
 let ready = false
 for (let attempt = 0; attempt < 90; attempt++) {
   try {
@@ -85,9 +89,9 @@ for (const learner of [...credentials.learners, credentials.applicationAdmin]) {
   }
   console.log(`${learner.username}: application account ready`)
 }
-const fixture = spawnSync('docker', ['exec', '-i', 'auknowlog-postgres', 'psql', '-U', 'auknowlog',
+const fixture = spawnSync('docker', ['exec', '-i', process.env.AUKNOWLOG_OSC_DB_CONTAINER || 'auknowlog-postgres', 'psql', '-U', 'auknowlog',
   '-d', 'auknowlog', '-v', 'ON_ERROR_STOP=1'], {
   cwd: root, input: readFileSync(resolve(root, 'scripts/seed-osc-samples.sql')), encoding: 'utf8'
 })
 if (fixture.status !== 0) throw new Error('Sample database setup failed.')
-console.log('Separate sample learning data ready. Credentials are stored only in .runtime/osc-sample-accounts.json (mode 600).')
+console.log('Separate sample learning data ready. Credentials are stored only in a private runtime file (mode 600).')

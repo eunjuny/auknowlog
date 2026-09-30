@@ -50,7 +50,7 @@ AI를 활용하여 원하는 주제에 대한 객관식 문제를 자동으로 �
 
 ## 🚀 빠른 시작
 
-백엔드·프론트엔드까지 한 번에 기동하려면 루트에서 `docker compose -f docker-compose.yml -f docker-compose.app.yml up --build -d --wait`를 실행한 뒤 `bash scripts/verify-compose-app.sh`로 확인합니다. 기본 컨테이너 모드는 로컬 단일 사용자이며 자동 AI·학습 메일·임베딩을 꺼 두므로 개인 키를 이미지에 담지 않습니다. 기존 호스트 개발 서버와 포트가 겹치면 [전체 컨테이너 실행 가이드](docs/CONTAINER_RUNTIME.md)의 분리 검증 방법을 사용하세요. Keycloak 인증 모드는 아래의 기존 호스트 실행 절차를 따릅니다.
+백엔드·프론트엔드까지 한 번에 기동하려면 루트에서 `docker compose -f docker-compose.yml -f docker-compose.app.yml up --build -d --wait`를 실행한 뒤 `bash scripts/verify-compose-app.sh`로 확인합니다. 기본 컨테이너 모드는 로컬 단일 사용자이며 자동 AI·학습 메일·임베딩을 꺼 두므로 개인 키를 이미지에 담지 않습니다. Keycloak 로그인까지 컨테이너로 실행하려면 `docker-compose.auth.yml`과 `docker-compose.app-auth.yml`을 추가하고, 먼저 Git 제외 로컬 환경에 Keycloak 관리자 계정을 설정해야 합니다. 실제 로그인·권한 검증은 `node scripts/run-compose-auth-smoke.mjs`로 기존 DB와 분리해 재현할 수 있습니다. 실행·보안 경계는 [전체 컨테이너 실행 가이드](docs/CONTAINER_RUNTIME.md)를 참고하세요.
 
 ### 1. 인프라 실행
 

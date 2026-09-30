@@ -57,6 +57,8 @@ npm run dev
 
 Keycloak realm import에는 `auknowlog-web` public client, Authorization Code, PKCE S256, 로컬 redirect URI와 `USER`·`ADMIN` realm role만 포함합니다. 실제 사용자와 비밀번호는 저장소에 넣지 않습니다.
 
+백엔드·프론트엔드를 포함한 컨테이너 인증 모드는 `docker-compose.app-auth.yml`을 함께 사용합니다. 브라우저에서 보는 issuer는 `127.0.0.1`의 Keycloak 주소이고, 백엔드는 토큰의 같은 issuer를 검증하면서 JWKS만 Compose 내부 DNS로 조회합니다. 사용 예시와 기존 환경을 건드리지 않는 실제 로그인 검증은 [전체 컨테이너 실행](CONTAINER_RUNTIME.md)을 참고합니다. 검증 스크립트는 임시 관리자·test1/test2·app-admin 계정을 생성하고 완료 시 테스트 전용 DB·Keycloak 볼륨을 제거합니다.
+
 ## 보안 선택과 제약
 
 - SPA에는 client secret을 저장할 수 없으므로 public client + PKCE를 사용합니다.

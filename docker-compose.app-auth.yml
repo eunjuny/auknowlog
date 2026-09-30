@@ -1,0 +1,17 @@
+# docker-compose.yml + docker-compose.app.yml + docker-compose.auth.yml 뒤에 적용한다.
+# 브라우저의 공개 issuer와 백엔드의 내부 JWKS 경로를 분리하되 issuer 검증은 유지한다.
+services:
+  backend:
+    environment:
+      SPRING_PROFILES_ACTIVE: keycloak
+      AUKNOWLOG_OIDC_ISSUER: http://127.0.0.1:${KEYCLOAK_PORT:-8180}/realms/auknowlog
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://keycloak:8080/realms/auknowlog/protocol/openid-connect/certs
+    depends_on:
+      keycloak:
+        condition: service_started
+
+  frontend:
+    build:
+      args:
+        VITE_AUTH_ENABLED: "true"
+        VITE_KEYCLOAK_URL: http://127.0.0.1:${KEYCLOAK_PORT:-8180}

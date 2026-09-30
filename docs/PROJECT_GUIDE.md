@@ -366,7 +366,7 @@ Gmail 앱 비밀번호는 일반 계정 비밀번호가 아니다. Google 계정
 | `TECHNOLOGY_DECISIONS.md` | 대안과 비교를 포함한 기술 선택 근거 |
 | `IMPROVEMENT_ROADMAP.md` | 완료 기준과 다음 단계 상태 |
 | `FRONTEND_E2E_AND_CI.md` | UI 단위 테스트, 브라우저 fixture, CI 경계와 실행 방법 |
-| [PORTFOLIO_GUIDE.md](PORTFOLIO_GUIDE.md) | 제출용 PDF·편집본, 실제 화면 9페이지를 포함한 22페이지 구성, 구현 근거와 포트폴리오 갱신 절차 |
+| [PORTFOLIO_GUIDE.md](PORTFOLIO_GUIDE.md) | 제출용 PDF v19, 실제 화면 11페이지를 포함한 25페이지 구성, 구현 근거와 포트폴리오 갱신 절차 |
 | [AUTHENTICATION_AND_TENANCY.md](AUTHENTICATION_AND_TENANCY.md) | Keycloak OIDC·PKCE·RBAC, 사용자 소유권 모델, 실행·제약·검증 |
 | [CONTAINER_RUNTIME.md](CONTAINER_RUNTIME.md) | 전체 앱 Compose 실행, 비용·시크릿·인증 경계, 실제 smoke 검증 |
 | 주제별 문서 | pgvector, 로드맵, 자료 수집, 원격 접근, 관측의 상세 설계·실행 방법 |
@@ -392,6 +392,7 @@ Gmail 앱 비밀번호는 일반 계정 비밀번호가 아니다. Google 계정
 | 2026-09-29 | 전체 관리자 학습·AI 모니터링 | 앱용 app-admin USER+ADMIN 계정, 별도 읽기 전용 관리자 API·페이지/사용자 필터·풀이 문항 상세·14일 AI 사용량 화면, V21 원장 owner_id·임베딩 사용량 기록, 권한/실제 로그인 검증 |
 | 2026-09-29 | Keycloak OIDC·RBAC와 사용자별 학습 데이터 분리 | 선택형 Keycloak Compose/realm, Spring Security JWT 검증, USER/ADMIN 경계, V20 app_user·소유권·데일리 진행, Vue PKCE 로그인·Bearer 주입과 인증 검증 문서 반영 |
 | 2026-09-29 | 실제 화면 중심 포트폴리오 v18 | 대시보드·문제 입력·로드맵 목록·소주제 목표·풀이 기록·복습·AI 운영·중복 평가·학습 자료의 실제 화면 9페이지를 기능 흐름 앞에 배치. 화면별 사용자 행동과 서버 처리 연결, 3개 사람 검증 표본의 해석 한계, 앱 대시보드와 Prometheus 차이를 명시. 조회만 수행하며 애플리케이션 동작 변경 없음 |
+| 2026-09-30 | 컨테이너 인증 검증·포트폴리오 v19 | Vue·Nginx·Spring·PostgreSQL·Keycloak 분리 Compose에서 실제 Chromium 로그인과 401/403/404/200 권한 경계를 검증하고 CI에 추가. 제출용 PDF의 아키텍처·스택을 갱신하고 로그인·관리자 실제 화면 및 인증 흐름 3페이지를 추가. PDF 화면은 별도 테스트 DB의 샘플이며 운영 수치로 사용하지 않음 |
 | 2026-09-28 | 현재 기능·구조 중심 포트폴리오 v16 | 변경 과정 중심 서사를 현재 서비스 소개·아키텍처·주요 기능 흐름·데이터 관계·관측·검증 구조로 재편. 계층별 사용 스택과 선택 연동을 구분하고 편집 가능한 도식·표를 포함. 애플리케이션 동작 변경 없음 |
 | 2026-09-28 | 데일리 개발자 우선 기사 선택 | RSS 제목·설명·카테고리를 비용 없는 서버 규칙으로 점수화해 개발 직접 관련 → 개발 인접 → IT 확장 순으로 선택. V19 `focus_tier` 저장, 화면 등급 표시와 우선순위 단위 테스트를 추가 |
 | 2026-09-28 | 프론트엔드 브라우저 검증·CI 추가 | Vitest 단위 테스트, Playwright Chromium의 생성·제출·데일리 완료·360px 회귀 시나리오, Node 22 GitHub Actions와 실패 artifact 보관을 추가. API fixture와 Spring/Testcontainers 계약 검증의 책임을 분리하고 OpenAI·개인 DB 호출 없음 명시 |

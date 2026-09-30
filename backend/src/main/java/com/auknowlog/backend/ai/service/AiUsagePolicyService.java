@@ -11,12 +11,21 @@ import java.time.LocalDate;
 
 /**
  * OpenAI 대시보드의 과금 한도와 별개로, 애플리케이션이 요청 전 차단에 사용하는 안전 예산이다.
- * 실제 토큰은 생성 원장으로 집계하고, 요청 전에는 문자 수/4와 출력 상한을 보수적으로 예약해 판단한다.
+ * 실제 호출은 영속 버킷에서 원자적으로 예약·정산한다. 기존 문자 수/4 검사는 호환 테스트용이며
+ * 실제 외부 요청 경로는 전체 UTF-8 요청 크기와 출력 상한으로 예약한다.
  */
 @Service
 public class AiUsagePolicyService {
 
     private final AiGenerationLogRepository repository;
+    @org.springframework.beans.factory.annotation.Autowired
+    private AiBudgetReservationService reservations;
+
+    public com.fasterxml.jackson.databind.JsonNode execute(String operation, String input, int maxOutputTokens,
+            java.util.function.Supplier<com.fasterxml.jackson.databind.JsonNode> call) {
+        if (reservations == null) { assertWithinBudget(operation, input, maxOutputTokens); return call.get(); }
+        return reservations.execute(operation, input, maxOutputTokens, call);
+    }
 
     @Value("${auknowlog.ai-policy.enforce-daily-token-budget:true}")
     private boolean enforceDailyTokenBudget = true;
@@ -31,6 +40,13 @@ public class AiUsagePolicyService {
     @Transactional(readOnly = true)
     public AiBudgetSnapshot snapshot() {
         long budget = Math.max(0, dailyTokenBudget);
+        if (reservations != null) {
+            var bucket = reservations.snapshot(null);
+            long used = ((Number)bucket.get("usedTokens")).longValue();
+            long reserved = ((Number)bucket.get("reservedTokens")).longValue();
+            return new AiBudgetSnapshot(enforceDailyTokenBudget,budget,used,Math.max(0,budget-used-reserved),
+                    budget==0 ? 100 : (int)Math.min(100,Math.round((used+reserved)*100.0/budget)));
+        }
         long todayTokens = repository.findByCreatedAtGreaterThanEqual(LocalDate.now().atStartOfDay()).stream()
                 .mapToLong(log -> tokens(log.getTotalTokens()))
                 .sum();

@@ -27,6 +27,7 @@ class OpenAiEmbeddingServiceTest {
 
     private MockRestServiceServer server;
     private OpenAiEmbeddingService service;
+    private com.auknowlog.backend.ai.service.AiGenerationLedgerService ledger;
 
     @BeforeEach
     void setUp() {
@@ -35,7 +36,8 @@ class OpenAiEmbeddingServiceTest {
         LangfuseTracingService langfuseTracingService = mock(LangfuseTracingService.class);
         when(langfuseTracingService.startEmbedding(any(), anyInt(), anyInt()))
                 .thenReturn(LangfuseTracingService.noopScope());
-        service = new OpenAiEmbeddingService(builder, langfuseTracingService);
+        ledger = mock(com.auknowlog.backend.ai.service.AiGenerationLedgerService.class);
+        service = new OpenAiEmbeddingService(builder, langfuseTracingService, ledger);
         ReflectionTestUtils.setField(service, "apiKey", "test-key");
         ReflectionTestUtils.setField(service, "apiUrl", "https://api.openai.com/v1/embeddings");
         ReflectionTestUtils.setField(service, "model", "text-embedding-3-small");
@@ -63,6 +65,18 @@ class OpenAiEmbeddingServiceTest {
         assertThat(result.model()).isEqualTo("text-embedding-3-small");
         assertThat(result.values()).containsExactly(0.1f, 0.2f, 0.3f);
         assertThat(result.inputTokens()).isEqualTo(8);
+        org.mockito.Mockito.verify(ledger).recordEmbedding(org.mockito.ArgumentMatchers.eq("text-embedding-3-small"),
+                org.mockito.ArgumentMatchers.eq(8L), any(), org.mockito.ArgumentMatchers.isNull());
+        server.verify();
+    }
+
+    @Test
+    void recordsFailedEmbeddingWithoutInventingTokens() {
+        server.expect(requestTo("https://api.openai.com/v1/embeddings"))
+                .andRespond(org.springframework.test.web.client.response.MockRestResponseCreators.withServerError());
+        org.junit.jupiter.api.Assertions.assertThrows(RuntimeException.class, () -> service.embed("sample"));
+        org.mockito.Mockito.verify(ledger).recordEmbedding(org.mockito.ArgumentMatchers.eq("text-embedding-3-small"),
+                org.mockito.ArgumentMatchers.isNull(), any(), org.mockito.ArgumentMatchers.anyString());
         server.verify();
     }
 }

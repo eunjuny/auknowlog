@@ -3,6 +3,7 @@ package com.auknowlog.backend.source.service;
 import com.auknowlog.backend.source.entity.SourceChunk;
 import com.auknowlog.backend.source.repository.SourceChunkRepository;
 import com.auknowlog.backend.source.repository.SourceDocumentRepository;
+import com.auknowlog.backend.auth.service.CurrentUserService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -23,15 +24,17 @@ class SourceServiceContextSelectionTest {
     void setUp() {
         documentRepository = mock(SourceDocumentRepository.class);
         chunkRepository = mock(SourceChunkRepository.class);
+        CurrentUserService currentUser = mock(CurrentUserService.class);
+        when(currentUser.currentUserId()).thenReturn(1L);
         service = new SourceService(documentRepository, chunkRepository,
-                mock(SourceContentSupport.class), mock(UrlSafetyValidator.class));
+                mock(SourceContentSupport.class), mock(UrlSafetyValidator.class), currentUser);
         ReflectionTestUtils.setField(service, "quizContextMaxChunks", 2);
         ReflectionTestUtils.setField(service, "quizContextMaxCharacters", 10_000);
     }
 
     @Test
     void choosesTopicRelevantChunksWithoutCallingEmbeddingApi() {
-        when(documentRepository.existsById(7L)).thenReturn(true);
+        when(documentRepository.existsAccessibleById(7L, 1L)).thenReturn(true);
         when(chunkRepository.findBySourceDocumentIdOrderByChunkOrderAsc(7L)).thenReturn(List.of(
                 new SourceChunk(null, 1, "이 문서는 서비스 소개와 학습 방법을 설명합니다."),
                 new SourceChunk(null, 2, "Kubernetes Pod는 컨테이너 실행의 최소 단위입니다."),

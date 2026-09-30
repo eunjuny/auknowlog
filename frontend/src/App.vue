@@ -3,8 +3,11 @@ import { defineAsyncComponent, onMounted, ref } from 'vue'
 import axios from 'axios'
 import QuizGenerator from './components/QuizGenerator.vue'
 import LearningHistory from './components/LearningHistory.vue'
+import { authSession, hasRole, logout } from './auth'
 
 const DashboardView = defineAsyncComponent(() => import('./components/DashboardView.vue'))
+const AdminMonitoringView = defineAsyncComponent(() => import('./components/AdminMonitoringView.vue'))
+const AccountSettingsView = defineAsyncComponent(() => import('./components/AccountSettingsView.vue'))
 const RoadmapView = defineAsyncComponent(() => import('./components/RoadmapView.vue'))
 const ReviewQueue = defineAsyncComponent(() => import('./components/ReviewQueue.vue'))
 const SourceLibrary = defineAsyncComponent(() => import('./components/SourceLibrary.vue'))
@@ -23,6 +26,7 @@ const roadmapDraft = ref(null)
 const preloadedQuiz = ref(null)
 const activeDailyQuizId = ref(null)
 const dailyView = ref(null)
+const canManageQuality = hasRole('ADMIN')
 
 onMounted(async () => {
   try {
@@ -141,6 +145,7 @@ function startRoadmapQuiz(roadmapQuiz) {
           <p class="product-name">Auknowlog</p>
           <h1>기술 학습 퀴즈</h1>
         </div>
+        <div class="header-actions">
         <nav aria-label="주요 메뉴">
           <button type="button" :class="{ active: activeView === 'dashboard' }" :aria-current="activeView === 'dashboard' ? 'page' : undefined" @click="showDashboard">대시보드</button>
           <button type="button" :class="{ active: activeView === 'daily' }" :aria-current="activeView === 'daily' ? 'page' : undefined" @click="showDailyLearning">데일리 학습</button>
@@ -149,13 +154,22 @@ function startRoadmapQuiz(roadmapQuiz) {
           <button type="button" :class="{ active: activeView === 'roadmap' }" :aria-current="activeView === 'roadmap' ? 'page' : undefined" @click="showRoadmap">학습 로드맵</button>
           <button type="button" :class="{ active: activeView === 'sources' }" :aria-current="activeView === 'sources' ? 'page' : undefined" @click="showSources">학습 자료</button>
           <button type="button" :class="{ active: activeView === 'history' }" :aria-current="activeView === 'history' ? 'page' : undefined" @click="showHistory">풀이 기록</button>
-          <button type="button" :class="{ active: activeView === 'quality' }" :aria-current="activeView === 'quality' ? 'page' : undefined" @click="showQuality">품질 평가</button>
+          <button v-if="canManageQuality" type="button" :class="{ active: activeView === 'quality' }" :aria-current="activeView === 'quality' ? 'page' : undefined" @click="showQuality">품질 평가</button>
+          <button v-if="authSession.enabled && canManageQuality" type="button" :class="{ active: activeView === 'admin' }" @click="activeView = 'admin'">전체 관리자</button>
+          <button type="button" :class="{ active: activeView === 'account' }" @click="activeView = 'account'">계정·알림</button>
         </nav>
+        <div v-if="authSession.enabled" class="user-session">
+          <span>{{ authSession.displayName || authSession.username }}</span>
+          <button type="button" @click="logout">로그아웃</button>
+        </div>
+        </div>
       </div>
     </header>
 
     <main>
       <DashboardView v-if="activeView === 'dashboard'" @start-recommended-quiz="startRecommendedQuiz" @create-learning-roadmap="createRoadmapFromRecommendation" />
+      <AdminMonitoringView v-if="activeView === 'admin' && authSession.enabled && canManageQuality" />
+      <AccountSettingsView v-if="activeView === 'account'" />
       <DailyLearningView ref="dailyView" v-if="dailyMounted" v-show="activeView === 'daily'" @completed="completeDailyLearning" @open-quiz="openDailyQuiz" />
       <QuizGenerator v-show="activeView === 'quiz'" :recommended-quiz="recommendedQuiz" :preloaded-quiz="preloadedQuiz" @open-roadmap="showRoadmap" @attempt-saved="handleAttemptSaved" />
       <ReviewQueue v-if="reviewMounted" v-show="activeView === 'review'" />
@@ -247,6 +261,9 @@ header h1 {
 }
 
 header nav { display: flex; gap: 8px; }
+.header-actions { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.user-session { display: flex; align-items: center; gap: 8px; padding-left: 12px; border-left: 1px solid var(--line); white-space: nowrap; font-size: .84rem; color: var(--muted); }
+.user-session button { padding: 7px 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); cursor: pointer; }
 header nav button {
   padding: 9px 12px;
   color: var(--muted);
@@ -271,8 +288,10 @@ main {
 
 @media (max-width: 980px) {
   .header-content { align-items: flex-start; flex-direction: column; }
+  .header-actions { width: 100%; flex-direction: column; align-items: flex-start; }
   header nav { width: 100%; overflow-x: auto; padding-bottom: 3px; }
   header nav button { flex: 0 0 auto; white-space: nowrap; }
+  .user-session { border-left: 0; padding-left: 0; }
 }
 
 @media (max-width: 680px) {

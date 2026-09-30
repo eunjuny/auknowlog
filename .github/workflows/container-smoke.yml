@@ -1,0 +1,42 @@
+name: Container smoke verification
+
+on:
+  push:
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "docker-compose.yml"
+      - "docker-compose.app.yml"
+      - "scripts/verify-compose-app.sh"
+      - ".github/workflows/container-smoke.yml"
+  pull_request:
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "docker-compose.yml"
+      - "docker-compose.app.yml"
+      - "scripts/verify-compose-app.sh"
+      - ".github/workflows/container-smoke.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  app-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      AUKNOWLOG_DAILY_LEARNING_ENABLED: "false"
+      AUKNOWLOG_LEARNING_MAIL_ENABLED: "false"
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build and start the local stack
+        run: docker compose -f docker-compose.yml -f docker-compose.app.yml up --build -d --wait
+      - name: Check HTTP contract
+        run: bash scripts/verify-compose-app.sh
+      - name: Show container state on failure
+        if: failure()
+        run: docker compose -f docker-compose.yml -f docker-compose.app.yml ps
+      - name: Stop the stack
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.app.yml down -v

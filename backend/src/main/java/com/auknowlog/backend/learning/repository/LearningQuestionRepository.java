@@ -14,6 +14,8 @@ public interface LearningQuestionRepository extends JpaRepository<LearningQuesti
 
     Optional<LearningQuestion> findByQuizIdAndQuestionOrder(Long quizId, int questionOrder);
 
+    Optional<LearningQuestion> findByQuizIdAndQuizOwnerIdAndQuestionOrder(Long quizId, Long ownerId, int questionOrder);
+
     @Query(value = "SELECT * FROM learning_question WHERE id = :id FOR UPDATE", nativeQuery = true)
     Optional<LearningQuestion> findByIdForUpdate(@Param("id") Long id);
 }

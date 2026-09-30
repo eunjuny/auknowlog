@@ -47,7 +47,7 @@ class OpenAiQualityEvaluationServiceTest {
         service = new OpenAiQualityEvaluationService(
                 builder, objectMapper, repository,
                 new AiGenerationMetrics(new SimpleMeterRegistry()), ledgerService,
-                mock(AiUsagePolicyService.class)
+                com.auknowlog.backend.ai.service.AiPolicyTestSupport.passthroughPolicy()
         );
         ReflectionTestUtils.setField(service, "apiKey", "test-key");
         ReflectionTestUtils.setField(service, "apiUrl", "https://api.openai.com/v1/responses");

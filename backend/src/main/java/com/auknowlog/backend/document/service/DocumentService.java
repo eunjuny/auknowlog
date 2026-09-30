@@ -1,5 +1,6 @@
 package com.auknowlog.backend.document.service;
 
+import com.auknowlog.backend.auth.service.CurrentUserService;
 import com.auknowlog.backend.quiz.dto.Question;
 import com.auknowlog.backend.quiz.dto.QuizResponse;
 import com.auknowlog.backend.learning.entity.LearningQuiz;
@@ -27,16 +28,18 @@ public class DocumentService {
     private static final Path SAVE_DIR = Paths.get("./src/main/resources/saved_quizzes/");
     private final LearningQuizRepository learningQuizRepository;
     private final Path saveDirectory;
+    private final CurrentUserService currentUserService;
 
     @Autowired
-    public DocumentService(LearningQuizRepository learningQuizRepository) {
-        this(learningQuizRepository, SAVE_DIR);
+    public DocumentService(LearningQuizRepository learningQuizRepository, CurrentUserService currentUserService) {
+        this(learningQuizRepository, SAVE_DIR, currentUserService);
     }
 
     /** 테스트에서는 임시 디렉터리를 주입해 실제 학습 노트 디렉터리를 건드리지 않는다. */
-    DocumentService(LearningQuizRepository learningQuizRepository, Path saveDirectory) {
+    DocumentService(LearningQuizRepository learningQuizRepository, Path saveDirectory, CurrentUserService currentUserService) {
         this.learningQuizRepository = learningQuizRepository;
         this.saveDirectory = saveDirectory;
+        this.currentUserService = currentUserService;
     }
 
     public String saveQuizAsMarkdown(QuizResponse quizResponse) throws IOException {
@@ -70,7 +73,7 @@ public class DocumentService {
         if (quizId == null || quizId < 1) {
             throw new IllegalArgumentException("저장할 퀴즈 식별자가 필요합니다.");
         }
-        LearningQuiz quiz = learningQuizRepository.findById(quizId)
+        LearningQuiz quiz = learningQuizRepository.findByIdAndOwnerId(quizId, currentUserService.currentUserId())
                 .orElseThrow(() -> new java.util.NoSuchElementException("저장할 퀴즈를 찾을 수 없습니다."));
 
         Path directory = saveDirectory;

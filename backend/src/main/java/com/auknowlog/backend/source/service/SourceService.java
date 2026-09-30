@@ -1,5 +1,6 @@
 package com.auknowlog.backend.source.service;
 
+import com.auknowlog.backend.auth.service.CurrentUserService;
 import com.auknowlog.backend.source.dto.SourceChunkContext;
 import com.auknowlog.backend.source.dto.SourceCreateRequest;
 import com.auknowlog.backend.source.dto.SourceCreateResponse;
@@ -30,6 +31,7 @@ public class SourceService {
     private final SourceChunkRepository sourceChunkRepository;
     private final SourceContentSupport contentSupport;
     private final UrlSafetyValidator urlSafetyValidator;
+    private final CurrentUserService currentUserService;
 
     @Value("${auknowlog.ai-policy.source.quiz.max-chunks:4}")
     private int quizContextMaxChunks = 4;
@@ -46,18 +48,21 @@ public class SourceService {
     public SourceService(SourceDocumentRepository sourceDocumentRepository,
                          SourceChunkRepository sourceChunkRepository,
                          SourceContentSupport contentSupport,
-                         UrlSafetyValidator urlSafetyValidator) {
+                         UrlSafetyValidator urlSafetyValidator,
+                         CurrentUserService currentUserService) {
         this.sourceDocumentRepository = sourceDocumentRepository;
         this.sourceChunkRepository = sourceChunkRepository;
         this.contentSupport = contentSupport;
         this.urlSafetyValidator = urlSafetyValidator;
+        this.currentUserService = currentUserService;
     }
 
     @Transactional
     public SourceCreateResponse create(SourceCreateRequest request) {
         String normalizedContent = contentSupport.normalize(request.content());
         String contentHash = contentSupport.sha256(normalizedContent);
-        SourceDocument existing = sourceDocumentRepository.findByContentHash(contentHash).orElse(null);
+        Long ownerId = currentUserService.currentUserId();
+        SourceDocument existing = sourceDocumentRepository.findByOwnerIdAndContentHash(ownerId, contentHash).orElse(null);
         if (existing != null) {
             return new SourceCreateResponse(
                     existing.getId(),
@@ -72,7 +77,7 @@ public class SourceService {
         String sourceUri = sourceType == SourceType.URL ? validatedUri(request.sourceUri()) : null;
         String originalName = sourceType == SourceType.FILE ? normalizedOriginalName(request.originalName()) : null;
         String mimeType = normalizedMimeType(request.mimeType(), sourceType);
-        SourceDocument document = sourceDocumentRepository.save(new SourceDocument(
+        SourceDocument document = new SourceDocument(
                 request.title().trim(),
                 normalizedContent,
                 sourceType,
@@ -80,7 +85,9 @@ public class SourceService {
                 originalName,
                 mimeType,
                 contentHash
-        ));
+        );
+        document.assignOwner(currentUserService.currentUser());
+        document = sourceDocumentRepository.save(document);
         List<String> chunks = contentSupport.splitIntoChunks(normalizedContent);
         for (int index = 0; index < chunks.size(); index++) {
             sourceChunkRepository.save(new SourceChunk(document, index + 1, chunks.get(index)));
@@ -95,7 +102,7 @@ public class SourceService {
 
     @Transactional(readOnly = true)
     public List<SourceChunkContext> getQuizContext(Long sourceId, String topic) {
-        if (!sourceDocumentRepository.existsById(sourceId)) {
+        if (!sourceDocumentRepository.existsAccessibleById(sourceId, currentUserService.currentUserId())) {
             throw new java.util.NoSuchElementException("학습 자료를 찾을 수 없습니다.");
         }
         return selectRelevantChunkContexts(sourceId, topic, quizContextMaxChunks, quizContextMaxCharacters);
@@ -108,7 +115,7 @@ public class SourceService {
 
     @Transactional(readOnly = true)
     public SourceRoadmapContext getRoadmapContext(Long sourceId, String topic) {
-        SourceDocument document = sourceDocumentRepository.findById(sourceId)
+        SourceDocument document = sourceDocumentRepository.findAccessibleById(sourceId, currentUserService.currentUserId())
                 .orElseThrow(() -> new java.util.NoSuchElementException("학습 자료를 찾을 수 없습니다."));
         List<SourceChunkContext> chunks = selectRelevantChunkContexts(
                 sourceId, topic, roadmapContextMaxChunks, roadmapContextMaxCharacters);
@@ -171,7 +178,7 @@ public class SourceService {
 
     @Transactional(readOnly = true)
     public List<SourceSummaryResponse> getSources() {
-        List<SourceDocument> documents = sourceDocumentRepository.findTop50ByOrderByCreatedAtDesc();
+        List<SourceDocument> documents = sourceDocumentRepository.findTop50ByOwnerIdOrderByCreatedAtDesc(currentUserService.currentUserId());
         if (documents.isEmpty()) {
             return List.of();
         }

@@ -1,5 +1,6 @@
 package com.auknowlog.backend.source.entity;
 
+import com.auknowlog.backend.auth.entity.AppUser;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -8,6 +9,9 @@ import jakarta.persistence.Id;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Table;
+import jakarta.persistence.FetchType;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 
 import java.time.LocalDateTime;
 
@@ -18,6 +22,13 @@ public class SourceDocument {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "owner_id", nullable = false)
+    private AppUser owner;
+
+    @Column(nullable = false)
+    private boolean shared;
 
     @Column(nullable = false)
     private String title;
@@ -75,11 +86,17 @@ public class SourceDocument {
         this.processingStatus = SourceProcessingStatus.READY;
         this.fetchedAt = sourceType == SourceType.URL ? LocalDateTime.now() : null;
         this.createdAt = LocalDateTime.now();
+        this.shared = false;
     }
 
     public Long getId() {
         return id;
     }
+
+    public void assignOwner(AppUser owner) { this.owner = owner; }
+    public AppUser getOwner() { return owner; }
+    public boolean isShared() { return shared; }
+    public void shareForDailyLearning() { this.shared = true; }
 
     public String getTitle() {
         return title;

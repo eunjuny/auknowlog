@@ -1,0 +1,27 @@
+{
+  "realm": "auknowlog",
+  "enabled": true,
+  "displayName": "Auknowlog",
+  "registrationAllowed": false,
+  "resetPasswordAllowed": true,
+  "roles": {
+    "realm": [
+      { "name": "USER", "description": "개인 학습 기능 사용자" },
+      { "name": "ADMIN", "description": "품질 평가와 운영 기능 관리자" }
+    ]
+  },
+  "clients": [
+    {
+      "clientId": "auknowlog-web",
+      "name": "Auknowlog Web",
+      "enabled": true,
+      "publicClient": true,
+      "standardFlowEnabled": true,
+      "directAccessGrantsEnabled": false,
+      "protocol": "openid-connect",
+      "redirectUris": ["http://127.0.0.1:5173/*", "http://localhost:5173/*"],
+      "webOrigins": ["http://127.0.0.1:5173", "http://localhost:5173"],
+      "attributes": { "pkce.code.challenge.method": "S256" }
+    }
+  ]
+}

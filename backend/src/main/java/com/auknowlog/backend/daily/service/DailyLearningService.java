@@ -1,5 +1,6 @@
 package com.auknowlog.backend.daily.service;
 
+import com.auknowlog.backend.auth.service.CurrentUserService;
 import com.auknowlog.backend.daily.dto.*;
 import com.auknowlog.backend.daily.entity.DailyLearning;
 import com.auknowlog.backend.daily.entity.DailyLearningFocus;
@@ -39,16 +40,22 @@ public class DailyLearningService {
     private final LearningService learningService;
     private final LearningQuizRepository learningQuizRepository;
     private final ObjectMapper objectMapper;
+    private final CurrentUserService currentUserService;
+    private final DailyLearningProgressService dailyLearningProgressService;
 
     public DailyLearningService(DailyLearningRepository repository, DailyArticleFeedService articleFeedService,
                                 SourcePreviewService sourcePreviewService, SourceService sourceService,
                                 SourceDocumentRepository sourceDocumentRepository, DailyLearningAiService aiService,
                                 QuizGenerationService quizGenerationService, LearningService learningService,
-                                LearningQuizRepository learningQuizRepository, ObjectMapper objectMapper) {
+                                LearningQuizRepository learningQuizRepository, ObjectMapper objectMapper,
+                                CurrentUserService currentUserService,
+                                DailyLearningProgressService dailyLearningProgressService) {
         this.repository = repository; this.articleFeedService = articleFeedService; this.sourcePreviewService = sourcePreviewService;
         this.sourceService = sourceService; this.sourceDocumentRepository = sourceDocumentRepository; this.aiService = aiService;
         this.quizGenerationService = quizGenerationService; this.learningService = learningService;
         this.learningQuizRepository = learningQuizRepository; this.objectMapper = objectMapper;
+        this.currentUserService = currentUserService;
+        this.dailyLearningProgressService = dailyLearningProgressService;
     }
 
     @Transactional(readOnly = true)
@@ -71,8 +78,9 @@ public class DailyLearningService {
         SourceCreateResponse source = sourceService.create(new SourceCreateRequest(
                 preview.title(), preview.content() + "\n\n[AI 보충 해설]\n" + draft.supplement(), SourceType.URL,
                 preview.sourceUri(), null, preview.mimeType()));
-        SourceDocument document = sourceDocumentRepository.findById(source.sourceId())
+        SourceDocument document = sourceDocumentRepository.findByIdAndOwnerId(source.sourceId(), currentUserService.currentUserId())
                 .orElseThrow(() -> new IllegalStateException("데일리 학습 자료 저장을 확인하지 못했습니다."));
+        document.shareForDailyLearning();
         DailyLearning daily = repository.save(new DailyLearning(LocalDate.now(), preview.title(), preview.sourceUri(),
                 candidate.publishedAt(), draft.articleSummary(), draft.supplement(), writeConcepts(draft.concepts()),
                 draft.reviewTopic().trim(), draft.recommendedReviewQuestionCount(), candidate.focusTier(), document));
@@ -87,7 +95,8 @@ public class DailyLearningService {
 
     private QuizViewResponse createQuiz(DailyLearning daily, DailyLearningTrack track, String requestedTopic, int requestedCount) {
         if (track == DailyLearningTrack.REVIEW) {
-            LearningQuiz existing = learningQuizRepository.findFirstByDailyLearningIdAndDailyLearningTrackOrderByIdDesc(daily.getId(), track).orElse(null);
+            LearningQuiz existing = learningQuizRepository.findFirstByOwnerIdAndDailyLearningIdAndDailyLearningTrackOrderByIdDesc(
+                    currentUserService.currentUserId(), daily.getId(), track).orElse(null);
             if (existing != null) return learningService.viewQuiz(existing.getId());
         }
         String topic = track == DailyLearningTrack.REVIEW ? daily.getReviewTopic() : requestedTopic.trim();
@@ -99,12 +108,16 @@ public class DailyLearningService {
 
     private DailyLearning find(Long id) { return repository.findDetailedById(id).orElseThrow(() -> new java.util.NoSuchElementException("데일리 학습을 찾을 수 없습니다.")); }
     private DailyLearningResponse response(DailyLearning daily) {
-        Long reviewQuizId = learningQuizRepository.findFirstByDailyLearningIdAndDailyLearningTrackOrderByIdDesc(daily.getId(), DailyLearningTrack.REVIEW)
+        var progress = dailyLearningProgressService.findProgress(daily.getId()).orElse(null);
+        Long ownerId = currentUserService.currentUserId();
+        Long reviewQuizId = learningQuizRepository.findFirstByOwnerIdAndDailyLearningIdAndDailyLearningTrackOrderByIdDesc(ownerId, daily.getId(), DailyLearningTrack.REVIEW)
                 .map(LearningQuiz::getId).orElse(null);
-        long advancedCount = learningQuizRepository.countByDailyLearningIdAndDailyLearningTrack(daily.getId(), DailyLearningTrack.ADVANCED);
+        long advancedCount = learningQuizRepository.countByOwnerIdAndDailyLearningIdAndDailyLearningTrack(ownerId, daily.getId(), DailyLearningTrack.ADVANCED);
         return new DailyLearningResponse(daily.getId(), daily.getLearningDate(), daily.getArticleTitle(), daily.getArticleUrl(),
                 daily.getArticlePublishedAt(), daily.getArticleSummary(), daily.getSupplement(), readConcepts(daily.getConcepts()),
-                daily.getReviewTopic(), daily.getRecommendedReviewQuestionCount(), daily.getFocusTier(), daily.getStatus(), reviewQuizId, advancedCount, daily.getCompletedAt());
+                daily.getReviewTopic(), daily.getRecommendedReviewQuestionCount(), daily.getFocusTier(),
+                progress == null ? com.auknowlog.backend.daily.entity.DailyLearningStatus.READY : progress.getStatus(),
+                reviewQuizId, advancedCount, progress == null ? null : progress.getCompletedAt());
     }
     private String writeConcepts(List<DailyLearningConcept> concepts) { try { return objectMapper.writeValueAsString(concepts); } catch (JsonProcessingException e) { throw new IllegalStateException("핵심 개념을 저장하지 못했습니다.", e); } }
     private List<DailyLearningConcept> readConcepts(String value) { try { return objectMapper.readValue(value, objectMapper.getTypeFactory().constructCollectionType(List.class, DailyLearningConcept.class)); } catch (JsonProcessingException e) { throw new IllegalStateException("저장된 핵심 개념을 읽지 못했습니다.", e); } }

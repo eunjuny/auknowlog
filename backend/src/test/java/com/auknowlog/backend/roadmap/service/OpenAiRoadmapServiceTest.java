@@ -48,7 +48,7 @@ class OpenAiRoadmapServiceTest {
                 new AiGenerationMetrics(new SimpleMeterRegistry()),
                 mock(AiGenerationLedgerService.class),
                 tracingService,
-                mock(AiUsagePolicyService.class)
+                com.auknowlog.backend.ai.service.AiPolicyTestSupport.passthroughPolicy()
         );
         ReflectionTestUtils.setField(service, "apiKey", "test-key");
         ReflectionTestUtils.setField(service, "apiUrl", "https://api.openai.com/v1/responses");

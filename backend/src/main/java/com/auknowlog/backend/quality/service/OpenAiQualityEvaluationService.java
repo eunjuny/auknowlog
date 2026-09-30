@@ -90,7 +90,6 @@ public class OpenAiQualityEvaluationService {
                 throw new OpenAiUnavailableException("OpenAI API 키가 설정되지 않아 목표 품질 평가를 실행할 수 없습니다.");
             }
             String inputText = inputText(input);
-            aiUsagePolicyService.assertWithinBudget("목표 품질 평가", inputText, maxOutputTokens);
             JsonNode response = callWithRetry(request(inputText));
             Assessment assessment = parse(response, input);
             int reviewRequired = persistCases(runId, input, assessment);
@@ -118,6 +117,7 @@ public class OpenAiQualityEvaluationService {
             );
         } catch (RuntimeException exception) {
             repository.failRun(runId, failureType(exception));
+            if (exception instanceof com.auknowlog.backend.ai.service.AiBudgetExceededException) throw exception;
             Duration duration = Duration.ofNanos(System.nanoTime() - startedAt);
             metrics.recordFailure("quality", modelName, failureType(exception), duration);
             ledgerService.recordQualityFailure(modelName, failureType(exception), duration);
@@ -164,13 +164,13 @@ public class OpenAiQualityEvaluationService {
     private JsonNode callWithRetry(Map<String, Object> request) {
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
-                return restClient.post()
+                return aiUsagePolicyService.execute("QUALITY_EVALUATION", request.toString(), maxOutputTokens, () -> restClient.post()
                         .uri(apiUrl)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(request)
                         .retrieve()
-                        .body(JsonNode.class);
+                        .body(JsonNode.class));
             } catch (HttpStatusCodeException exception) {
                 HttpStatus status = HttpStatus.resolve(exception.getStatusCode().value());
                 boolean retryable = status == HttpStatus.TOO_MANY_REQUESTS

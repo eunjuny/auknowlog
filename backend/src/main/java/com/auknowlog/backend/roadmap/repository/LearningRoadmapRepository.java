@@ -7,5 +7,9 @@ import java.util.List;
 
 public interface LearningRoadmapRepository extends JpaRepository<LearningRoadmap, Long> {
 
-    List<LearningRoadmap> findByStatusOrderByCreatedAtDesc(String status);
+    List<LearningRoadmap> findByOwnerIdAndStatusOrderByCreatedAtDesc(Long ownerId, String status);
+
+    List<LearningRoadmap> findAllByStatusOrderByCreatedAtDesc(String status);
+
+    java.util.Optional<LearningRoadmap> findByIdAndOwnerId(Long id, Long ownerId);
 }

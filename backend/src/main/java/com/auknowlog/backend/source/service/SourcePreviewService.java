@@ -1,5 +1,6 @@
 package com.auknowlog.backend.source.service;
 
+import com.auknowlog.backend.auth.service.CurrentUserService;
 import com.auknowlog.backend.common.observability.SourceIngestionMetrics;
 import com.auknowlog.backend.source.dto.SourcePreviewResponse;
 import com.auknowlog.backend.source.entity.SourceDocument;
@@ -23,6 +24,7 @@ public class SourcePreviewService {
     private final SourceDocumentRepository sourceDocumentRepository;
     private final SourceIngestionMetrics metrics;
     private final int maxFileBytes;
+    private final CurrentUserService currentUserService;
 
     public SourcePreviewService(
             SourceContentExtractor contentExtractor,
@@ -30,12 +32,14 @@ public class SourcePreviewService {
             UrlSourceFetcher urlSourceFetcher,
             SourceDocumentRepository sourceDocumentRepository,
             SourceIngestionMetrics metrics,
+            CurrentUserService currentUserService,
             @Value("${auknowlog.source.file.max-bytes:10485760}") int maxFileBytes) {
         this.contentExtractor = contentExtractor;
         this.contentSupport = contentSupport;
         this.urlSourceFetcher = urlSourceFetcher;
         this.sourceDocumentRepository = sourceDocumentRepository;
         this.metrics = metrics;
+        this.currentUserService = currentUserService;
         this.maxFileBytes = maxFileBytes;
     }
 
@@ -108,7 +112,8 @@ public class SourcePreviewService {
             String sourceUri,
             String originalName) {
         String contentHash = contentSupport.sha256(extracted.content());
-        Optional<SourceDocument> existing = sourceDocumentRepository.findByContentHash(contentHash);
+        Optional<SourceDocument> existing = sourceDocumentRepository
+                .findByOwnerIdAndContentHash(currentUserService.currentUserId(), contentHash);
         return new SourcePreviewResponse(
                 sourceType,
                 extracted.title(),

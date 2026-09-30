@@ -1,5 +1,6 @@
 package com.auknowlog.backend.feedback.service;
 
+import com.auknowlog.backend.auth.service.CurrentUserService;
 import com.auknowlog.backend.feedback.dto.QuestionFeedbackRequest;
 import com.auknowlog.backend.feedback.dto.QuestionFeedbackResponse;
 import com.auknowlog.backend.feedback.entity.QuestionFeedback;
@@ -19,17 +20,21 @@ public class QuestionFeedbackService {
 
     private final LearningQuestionRepository learningQuestionRepository;
     private final QuestionFeedbackRepository questionFeedbackRepository;
+    private final CurrentUserService currentUserService;
 
     public QuestionFeedbackService(LearningQuestionRepository learningQuestionRepository,
-                                   QuestionFeedbackRepository questionFeedbackRepository) {
+                                   QuestionFeedbackRepository questionFeedbackRepository,
+                                   CurrentUserService currentUserService) {
         this.learningQuestionRepository = learningQuestionRepository;
         this.questionFeedbackRepository = questionFeedbackRepository;
+        this.currentUserService = currentUserService;
     }
 
     @Transactional
     public QuestionFeedbackResponse save(QuestionFeedbackRequest request) {
         LearningQuestion question = learningQuestionRepository
-                .findByQuizIdAndQuestionOrder(request.quizId(), request.questionOrder())
+                .findByQuizIdAndQuizOwnerIdAndQuestionOrder(
+                        request.quizId(), currentUserService.currentUserId(), request.questionOrder())
                 .orElseThrow(() -> new NoSuchElementException("해당 퀴즈의 문항을 찾을 수 없습니다."));
         String comment = normalizeComment(request.comment());
 
@@ -64,6 +69,7 @@ public class QuestionFeedbackService {
         return questionFeedbackRepository.findQuestionTextsByTypeAndTopic(
                 QuestionFeedbackType.TOO_SIMILAR,
                 topic.trim(),
+                currentUserService.currentUserId(),
                 PageRequest.of(0, Math.min(limit, 10))
         );
     }

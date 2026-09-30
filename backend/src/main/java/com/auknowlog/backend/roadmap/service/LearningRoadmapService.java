@@ -1,5 +1,6 @@
 package com.auknowlog.backend.roadmap.service;
 
+import com.auknowlog.backend.auth.service.CurrentUserService;
 import com.auknowlog.backend.learning.entity.LearningAttempt;
 import com.auknowlog.backend.learning.repository.LearningAttemptRepository;
 import com.auknowlog.backend.learning.repository.LearningAttemptAnswerRepository;
@@ -69,6 +70,7 @@ public class LearningRoadmapService {
     private final LearningObjectiveRepository learningObjectiveRepository;
     private final SourceDocumentRepository sourceDocumentRepository;
     private final ObjectMapper objectMapper;
+    private final CurrentUserService currentUserService;
 
     public LearningRoadmapService(LearningRoadmapRepository learningRoadmapRepository,
                                   LearningRoadmapWeekRepository learningRoadmapWeekRepository,
@@ -77,7 +79,8 @@ public class LearningRoadmapService {
                                   LearningAttemptAnswerRepository learningAttemptAnswerRepository,
                                   LearningObjectiveRepository learningObjectiveRepository,
                                   SourceDocumentRepository sourceDocumentRepository,
-                                  ObjectMapper objectMapper) {
+                                  ObjectMapper objectMapper,
+                                  CurrentUserService currentUserService) {
         this.learningRoadmapRepository = learningRoadmapRepository;
         this.learningRoadmapWeekRepository = learningRoadmapWeekRepository;
         this.learningRoadmapStepRepository = learningRoadmapStepRepository;
@@ -86,6 +89,7 @@ public class LearningRoadmapService {
         this.learningObjectiveRepository = learningObjectiveRepository;
         this.sourceDocumentRepository = sourceDocumentRepository;
         this.objectMapper = objectMapper;
+        this.currentUserService = currentUserService;
     }
 
     /** 기존 주차형 계획을 유지한다. 새 화면은 createStageBased를 기본으로 사용한다. */
@@ -93,13 +97,15 @@ public class LearningRoadmapService {
     public LearningRoadmapSummary create(RoadmapCreateRequest request) {
         String topic = request.topic().trim();
         int durationWeeks = request.durationWeeks();
-        LearningRoadmap roadmap = learningRoadmapRepository.save(new LearningRoadmap(
+        LearningRoadmap roadmap = new LearningRoadmap(
                 normalizedTitle(request.title(), topic, durationWeeks),
                 topic,
                 LocalDate.now(),
                 durationWeeks,
                 request.questionsPerWeek()
-        ));
+        );
+        roadmap.assignOwner(currentUserService.currentUser());
+        roadmap = learningRoadmapRepository.save(roadmap);
 
         for (int index = 0; index < durationWeeks; index++) {
             LocalDate weekStart = roadmap.getStartDate().plusWeeks(index);
@@ -129,7 +135,7 @@ public class LearningRoadmapService {
     @Transactional
     public LearningRoadmapSummary createAiGenerated(RoadmapDefinitionRequest request, Long sourceDocumentId) {
         SourceDocument sourceDocument = sourceDocumentId == null ? null : sourceDocumentRepository
-                .findById(sourceDocumentId)
+                .findAccessibleById(sourceDocumentId, currentUserService.currentUserId())
                 .orElseThrow(() -> new NoSuchElementException("학습 자료를 찾을 수 없습니다."));
         return createStageBased(request, "AI_GENERATED", writeDefinition(request), sourceDocument);
     }
@@ -165,7 +171,7 @@ public class LearningRoadmapService {
 
     @Transactional(readOnly = true)
     public ActiveLearningRoadmapResponse getActive() {
-        LearningRoadmap activeRoadmap = learningRoadmapRepository.findByStatusOrderByCreatedAtDesc("ACTIVE")
+        LearningRoadmap activeRoadmap = learningRoadmapRepository.findByOwnerIdAndStatusOrderByCreatedAtDesc(currentUserService.currentUserId(), "ACTIVE")
                 .stream()
                 .findFirst()
                 .orElse(null);
@@ -175,11 +181,11 @@ public class LearningRoadmapService {
     @Transactional(readOnly = true)
     public LearningRoadmapCollectionResponse getRoadmaps() {
         return new LearningRoadmapCollectionResponse(
-                learningRoadmapRepository.findByStatusOrderByCreatedAtDesc("ACTIVE")
+                learningRoadmapRepository.findByOwnerIdAndStatusOrderByCreatedAtDesc(currentUserService.currentUserId(), "ACTIVE")
                         .stream()
                         .map(this::toSummary)
                         .toList(),
-                learningRoadmapRepository.findByStatusOrderByCreatedAtDesc("COMPLETED")
+                learningRoadmapRepository.findByOwnerIdAndStatusOrderByCreatedAtDesc(currentUserService.currentUserId(), "COMPLETED")
                         .stream()
                         .map(this::toSummary)
                         .toList()
@@ -188,7 +194,7 @@ public class LearningRoadmapService {
 
     @Transactional(readOnly = true)
     public LearningRoadmapSummary getById(Long roadmapId) {
-        LearningRoadmap roadmap = learningRoadmapRepository.findById(roadmapId)
+        LearningRoadmap roadmap = learningRoadmapRepository.findByIdAndOwnerId(roadmapId, currentUserService.currentUserId())
                 .orElseThrow(() -> new NoSuchElementException("학습 로드맵을 찾을 수 없습니다."));
         return toSummary(roadmap);
     }
@@ -199,7 +205,7 @@ public class LearningRoadmapService {
      */
     @Transactional
     public LearningRoadmapSummary confirmStepAdvance(Long roadmapId, Long stepId) {
-        LearningRoadmap roadmap = learningRoadmapRepository.findById(roadmapId)
+        LearningRoadmap roadmap = learningRoadmapRepository.findByIdAndOwnerId(roadmapId, currentUserService.currentUserId())
                 .filter(candidate -> "ACTIVE".equals(candidate.getStatus()))
                 .orElseThrow(() -> new NoSuchElementException("진행 중인 학습 로드맵을 찾을 수 없습니다."));
         LearningRoadmapStep step = learningRoadmapStepRepository.findById(stepId)
@@ -233,7 +239,7 @@ public class LearningRoadmapService {
      */
     @Transactional
     public void deleteRoadmap(Long roadmapId) {
-        LearningRoadmap roadmap = learningRoadmapRepository.findById(roadmapId)
+        LearningRoadmap roadmap = learningRoadmapRepository.findByIdAndOwnerId(roadmapId, currentUserService.currentUserId())
                 .orElseThrow(() -> new NoSuchElementException("삭제할 학습 로드맵을 찾을 수 없습니다."));
         learningRoadmapRepository.delete(roadmap);
         learningRoadmapRepository.flush();
@@ -241,7 +247,7 @@ public class LearningRoadmapService {
 
     @Transactional
     public void completeIfSatisfied(Long roadmapId) {
-        LearningRoadmap roadmap = learningRoadmapRepository.findById(roadmapId)
+        LearningRoadmap roadmap = learningRoadmapRepository.findByIdAndOwnerId(roadmapId, currentUserService.currentUserId())
                 .orElseThrow(() -> new NoSuchElementException("학습 로드맵을 찾을 수 없습니다."));
         if ("ACTIVE".equals(roadmap.getStatus()) && toSummary(roadmap).completed()) {
             roadmap.complete();
@@ -253,9 +259,9 @@ public class LearningRoadmapService {
     @Transactional
     public void reconcileCompletedRoadmaps() {
         List<LearningRoadmap> candidates = new java.util.ArrayList<>(
-                learningRoadmapRepository.findByStatusOrderByCreatedAtDesc("ACTIVE")
+                learningRoadmapRepository.findAllByStatusOrderByCreatedAtDesc("ACTIVE")
         );
-        candidates.addAll(learningRoadmapRepository.findByStatusOrderByCreatedAtDesc("ARCHIVED"));
+        candidates.addAll(learningRoadmapRepository.findAllByStatusOrderByCreatedAtDesc("ARCHIVED"));
         for (LearningRoadmap roadmap : candidates) {
             if (toSummary(roadmap).completed()) {
                 roadmap.complete();
@@ -271,7 +277,7 @@ public class LearningRoadmapService {
         long totalTarget = request.steps().stream().mapToLong(this::questionTarget).sum();
         int questionsPerWeek = (int) Math.min(20, Math.max(1,
                 (long) Math.ceil((double) totalTarget / durationWeeks)));
-        LearningRoadmap roadmap = learningRoadmapRepository.save(new LearningRoadmap(
+        LearningRoadmap roadmap = new LearningRoadmap(
                 request.title().trim(),
                 topic,
                 blankToNull(request.description()),
@@ -281,7 +287,9 @@ public class LearningRoadmapService {
                 durationWeeks,
                 questionsPerWeek,
                 sourceDocument
-        ));
+        );
+        roadmap.assignOwner(currentUserService.currentUser());
+        roadmap = learningRoadmapRepository.save(roadmap);
 
         Map<String, List<LearningRoadmapStep>> atomicStepsByMajorKey = new LinkedHashMap<>();
         int stepOrder = 1;

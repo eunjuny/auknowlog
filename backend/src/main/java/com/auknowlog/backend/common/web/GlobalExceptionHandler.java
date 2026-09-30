@@ -15,6 +15,11 @@ import java.util.NoSuchElementException;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    @ExceptionHandler(com.auknowlog.backend.ai.service.AiBudgetExceededException.class)
+    public ResponseEntity<Map<String,Object>> handleAiLimit(com.auknowlog.backend.ai.service.AiBudgetExceededException e) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(Map.of("message",e.getMessage(),"code",429));
+    }
+
     @ExceptionHandler(OpenAiUnavailableException.class)
     public ResponseEntity<Map<String, Object>> handleOpenAiUnavailable(OpenAiUnavailableException e) {
         // 프론트에서 메시지를 그대로 보여주기 좋게 JSON으로 반환

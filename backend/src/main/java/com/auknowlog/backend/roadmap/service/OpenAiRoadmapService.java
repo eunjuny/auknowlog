@@ -87,7 +87,6 @@ public class OpenAiRoadmapService {
                     throw new OpenAiUnavailableException("OpenAI API 키가 설정되지 않아 AI 로드맵을 만들 수 없습니다.");
                 }
                 String inputText = inputText(topic, durationWeeks, sourceContext);
-                aiUsagePolicyService.assertWithinBudget("로드맵 생성", inputText, maxOutputTokens);
                 JsonNode response = callWithRetry(request(inputText));
                 RoadmapDefinitionRequest definition = parse(response, topic, durationWeeks);
                 Duration duration = Duration.ofNanos(System.nanoTime() - startedAt);
@@ -110,6 +109,7 @@ public class OpenAiRoadmapService {
                 throw exception;
             }
         } catch (RuntimeException exception) {
+            if (exception instanceof com.auknowlog.backend.ai.service.AiBudgetExceededException) throw exception;
             Duration duration = Duration.ofNanos(System.nanoTime() - startedAt);
             String failureType = exception instanceof OpenAiUnavailableException ? "unavailable" : "invalid_response";
             metrics.recordFailure("roadmap", modelName, failureType, duration);
@@ -121,13 +121,13 @@ public class OpenAiRoadmapService {
     private JsonNode callWithRetry(Map<String, Object> request) {
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
-                return restClient.post()
+                return aiUsagePolicyService.execute("ROADMAP_GENERATION", request.toString(), maxOutputTokens, () -> restClient.post()
                         .uri(apiUrl)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(request)
                         .retrieve()
-                        .body(JsonNode.class);
+                        .body(JsonNode.class));
             } catch (HttpStatusCodeException exception) {
                 HttpStatus status = HttpStatus.resolve(exception.getStatusCode().value());
                 boolean retryable = status == HttpStatus.TOO_MANY_REQUESTS

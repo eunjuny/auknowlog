@@ -109,7 +109,6 @@ public class OpenAiQuizService {
                 }
 
                 String prompt = createQuizPrompt(topic, numberOfQuestions, existingQuestions, sourceContext, objectiveAllocations);
-                aiUsagePolicyService.assertWithinBudget("퀴즈 생성", prompt, maxOutputTokens);
                 JsonNode response = callOpenAiWithRetry(createRequest(prompt));
                 QuizResponse quiz = parseQuizResponse(response, numberOfQuestions, objectiveAllocations);
                 Duration duration = Duration.ofNanos(System.nanoTime() - startedAt);
@@ -129,6 +128,7 @@ public class OpenAiQuizService {
                 throw e;
             }
         } catch (RuntimeException e) {
+            if (e instanceof com.auknowlog.backend.ai.service.AiBudgetExceededException) throw e;
             Duration duration = Duration.ofNanos(System.nanoTime() - startedAt);
             String failureType = classifyFailure(e);
             aiGenerationMetrics.recordFailure("quiz", modelName, failureType, duration);
@@ -157,13 +157,13 @@ public class OpenAiQuizService {
     private JsonNode callOpenAiWithRetry(Map<String, Object> request) {
         for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
             try {
-                return restClient.post()
+                return aiUsagePolicyService.execute("QUIZ_GENERATION", request.toString(), maxOutputTokens, () -> restClient.post()
                         .uri(apiUrl)
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
                         .contentType(MediaType.APPLICATION_JSON)
                         .body(request)
                         .retrieve()
-                        .body(JsonNode.class);
+                        .body(JsonNode.class));
             } catch (HttpStatusCodeException e) {
                 HttpStatus status = HttpStatus.resolve(e.getStatusCode().value());
                 boolean retryable = status == HttpStatus.TOO_MANY_REQUESTS

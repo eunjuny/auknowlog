@@ -1,5 +1,6 @@
 package com.auknowlog.backend.dashboard.service;
 
+import com.auknowlog.backend.auth.service.CurrentUserService;
 import com.auknowlog.backend.ai.entity.AiGenerationLog;
 import com.auknowlog.backend.ai.dto.AiBudgetSnapshot;
 import com.auknowlog.backend.ai.repository.AiGenerationLogRepository;
@@ -50,6 +51,7 @@ public class DashboardService {
     private final QuestionHistoryRepository questionHistoryRepository;
     private final QuestionFeedbackRepository questionFeedbackRepository;
     private final QualityEvaluationService qualityEvaluationService;
+    private final CurrentUserService currentUserService;
 
     public DashboardService(LearningAttemptRepository learningAttemptRepository,
                             ReviewScheduleRepository reviewScheduleRepository,
@@ -57,7 +59,8 @@ public class DashboardService {
                             AiUsagePolicyService aiUsagePolicyService,
                             QuestionHistoryRepository questionHistoryRepository,
                             QuestionFeedbackRepository questionFeedbackRepository,
-                            QualityEvaluationService qualityEvaluationService) {
+                            QualityEvaluationService qualityEvaluationService,
+                            CurrentUserService currentUserService) {
         this.learningAttemptRepository = learningAttemptRepository;
         this.reviewScheduleRepository = reviewScheduleRepository;
         this.aiGenerationLogRepository = aiGenerationLogRepository;
@@ -65,6 +68,7 @@ public class DashboardService {
         this.questionHistoryRepository = questionHistoryRepository;
         this.questionFeedbackRepository = questionFeedbackRepository;
         this.qualityEvaluationService = qualityEvaluationService;
+        this.currentUserService = currentUserService;
     }
 
     @Transactional(readOnly = true)
@@ -73,8 +77,14 @@ public class DashboardService {
         LocalDate firstActivityDate = today.minusDays(ACTIVITY_DAYS - 1L);
         LocalDateTime activityStart = firstActivityDate.atStartOfDay();
 
-        List<LearningAttempt> allAttempts = learningAttemptRepository.findAllWithQuiz();
-        List<AiGenerationLog> recentAiLogs = aiGenerationLogRepository.findByCreatedAtGreaterThanEqual(activityStart);
+        List<LearningAttempt> allAttempts = learningAttemptRepository.findAllWithQuiz(currentUserService.currentUserId());
+        var authentication = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication();
+        boolean personalScope = authentication != null
+                && authentication.getPrincipal() instanceof org.springframework.security.oauth2.jwt.Jwt
+                && authentication.getAuthorities().stream().noneMatch(a -> a.getAuthority().equals("ROLE_ADMIN"));
+        List<AiGenerationLog> recentAiLogs = personalScope
+                ? aiGenerationLogRepository.findByOwnerIdAndCreatedAtGreaterThanEqual(currentUserService.currentUserId(), activityStart)
+                : aiGenerationLogRepository.findByCreatedAtGreaterThanEqual(activityStart);
 
         return new DashboardSummary(
                 today,
@@ -130,7 +140,8 @@ public class DashboardService {
                 totalQuestions,
                 correctAnswers,
                 percentage(correctAnswers, totalQuestions),
-                reviewScheduleRepository.countByStatusAndNextReviewAtLessThanEqual("PENDING", LocalDateTime.now()),
+                reviewScheduleRepository.countByQuestionQuizOwnerIdAndStatusAndNextReviewAtLessThanEqual(
+                        currentUserService.currentUserId(), "PENDING", LocalDateTime.now()),
                 activity,
                 topicAccuracy,
                 buildRecommendations(topics)
@@ -272,7 +283,8 @@ public class DashboardService {
 
     private QualityFeedbackDashboardSummary buildQualityFeedbackSummary() {
         Map<String, Long> feedbackTypes = new HashMap<>();
-        for (QuestionFeedback feedback : questionFeedbackRepository.findAll()) {
+        Long ownerId = currentUserService.currentUserId();
+        for (QuestionFeedback feedback : questionFeedbackRepository.findByQuestionQuizOwnerId(ownerId)) {
             feedbackTypes.merge(feedback.getFeedbackType().name(), 1L, Long::sum);
         }
 
@@ -286,8 +298,8 @@ public class DashboardService {
                 .toList();
 
         return new QualityFeedbackDashboardSummary(
-                questionFeedbackRepository.count(),
-                questionFeedbackRepository.countByStatus("OPEN"),
+                questionFeedbackRepository.countByQuestionQuizOwnerId(ownerId),
+                questionFeedbackRepository.countByQuestionQuizOwnerIdAndStatus(ownerId, "OPEN"),
                 typeMetrics
         );
     }

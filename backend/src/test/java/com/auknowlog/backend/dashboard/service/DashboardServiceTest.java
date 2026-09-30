@@ -10,6 +10,7 @@ import com.auknowlog.backend.learning.repository.ReviewScheduleRepository;
 import com.auknowlog.backend.quality.dto.QualityEvaluationSummary;
 import com.auknowlog.backend.quality.service.QualityEvaluationService;
 import com.auknowlog.backend.question.repository.QuestionHistoryRepository;
+import com.auknowlog.backend.auth.service.CurrentUserService;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
@@ -30,19 +31,21 @@ class DashboardServiceTest {
         QuestionHistoryRepository questions = mock(QuestionHistoryRepository.class);
         QuestionFeedbackRepository feedback = mock(QuestionFeedbackRepository.class);
         QualityEvaluationService qualityEvaluation = mock(QualityEvaluationService.class);
+        CurrentUserService currentUser = mock(CurrentUserService.class);
 
-        when(attempts.findAllWithQuiz()).thenReturn(List.of());
-        when(reviews.countByStatusAndNextReviewAtLessThanEqual(any(), any())).thenReturn(0L);
+        when(currentUser.currentUserId()).thenReturn(1L);
+        when(attempts.findAllWithQuiz(1L)).thenReturn(List.of());
+        when(reviews.countByQuestionQuizOwnerIdAndStatusAndNextReviewAtLessThanEqual(any(), any(), any())).thenReturn(0L);
         when(aiLogs.findByCreatedAtGreaterThanEqual(any())).thenReturn(List.of());
         when(aiUsagePolicy.snapshot()).thenReturn(new AiBudgetSnapshot(true, 50_000, 0, 50_000, 0));
         when(questions.count()).thenReturn(0L);
-        when(feedback.findAll()).thenReturn(List.of());
-        when(feedback.count()).thenReturn(0L);
-        when(feedback.countByStatus("OPEN")).thenReturn(0L);
+        when(feedback.findByQuestionQuizOwnerId(1L)).thenReturn(List.of());
+        when(feedback.countByQuestionQuizOwnerId(1L)).thenReturn(0L);
+        when(feedback.countByQuestionQuizOwnerIdAndStatus(1L, "OPEN")).thenReturn(0L);
         when(qualityEvaluation.summary()).thenReturn(qualitySummary());
 
         DashboardSummary dashboard = new DashboardService(
-                attempts, reviews, aiLogs, aiUsagePolicy, questions, feedback, qualityEvaluation
+                attempts, reviews, aiLogs, aiUsagePolicy, questions, feedback, qualityEvaluation, currentUser
         ).getSummary();
 
         assertThat(dashboard.qualityEvaluation().duplicateHumanSampleCount()).isEqualTo(3);

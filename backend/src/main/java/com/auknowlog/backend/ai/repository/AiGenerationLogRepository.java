@@ -9,4 +9,5 @@ import java.util.List;
 public interface AiGenerationLogRepository extends JpaRepository<AiGenerationLog, Long> {
 
     List<AiGenerationLog> findByCreatedAtGreaterThanEqual(LocalDateTime createdAt);
+    List<AiGenerationLog> findByOwnerIdAndCreatedAtGreaterThanEqual(Long ownerId, LocalDateTime createdAt);
 }

@@ -7,8 +7,10 @@ import com.auknowlog.backend.daily.entity.DailyLearningTrack;
 
 public interface LearningQuizRepository extends JpaRepository<LearningQuiz, Long> {
 
-    java.util.Optional<LearningQuiz> findFirstByDailyLearningIdAndDailyLearningTrackOrderByIdDesc(Long dailyLearningId,
+    java.util.Optional<LearningQuiz> findByIdAndOwnerId(Long id, Long ownerId);
+
+    java.util.Optional<LearningQuiz> findFirstByOwnerIdAndDailyLearningIdAndDailyLearningTrackOrderByIdDesc(Long ownerId, Long dailyLearningId,
                                                                                                      DailyLearningTrack track);
 
-    long countByDailyLearningIdAndDailyLearningTrack(Long dailyLearningId, DailyLearningTrack track);
+    long countByOwnerIdAndDailyLearningIdAndDailyLearningTrack(Long ownerId, Long dailyLearningId, DailyLearningTrack track);
 }

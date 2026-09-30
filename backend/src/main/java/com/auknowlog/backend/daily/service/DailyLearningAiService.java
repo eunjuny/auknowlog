@@ -49,13 +49,12 @@ public class DailyLearningAiService {
     public DailyLearningAiDraft generate(String title, String articleBody) {
         if (apiKey == null || apiKey.isBlank()) throw new IllegalStateException("OpenAI API key is not configured");
         String prompt = prompt(title, articleBody);
-        usagePolicy.assertWithinBudget("데일리 학습 해설 생성", prompt, maxOutputTokens);
         long started = System.nanoTime();
         try {
-            JsonNode response = restClient.post().uri(apiUrl)
+            JsonNode response = usagePolicy.execute("DAILY_LEARNING_GENERATION", request(prompt).toString(), maxOutputTokens, () -> restClient.post().uri(apiUrl)
                     .header(HttpHeaders.AUTHORIZATION, "Bearer " + apiKey)
                     .contentType(MediaType.APPLICATION_JSON).body(request(prompt))
-                    .retrieve().body(JsonNode.class);
+                    .retrieve().body(JsonNode.class));
             DailyLearningAiDraft draft = objectMapper.readValue(outputText(response), DailyLearningAiDraft.class);
             validate(draft);
             Duration duration = Duration.ofNanos(System.nanoTime() - started);
@@ -68,6 +67,7 @@ public class DailyLearningAiService {
             ledger.recordDailyLearningFailure(model, "upstream_rejected", Duration.ofNanos(System.nanoTime() - started));
             throw new OpenAiUnavailableException("데일리 학습 AI 생성 요청이 거절되었습니다.", exception);
         } catch (RuntimeException exception) {
+            if (exception instanceof com.auknowlog.backend.ai.service.AiBudgetExceededException) throw exception;
             metrics.recordFailure("daily_learning", model, "invalid_response", Duration.ofNanos(System.nanoTime() - started));
             ledger.recordDailyLearningFailure(model, "invalid_response", Duration.ofNanos(System.nanoTime() - started));
             throw exception;

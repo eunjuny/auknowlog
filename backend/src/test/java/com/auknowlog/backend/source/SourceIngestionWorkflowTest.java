@@ -18,6 +18,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 
 @SpringBootTest(properties = {
         "spring.datasource.url=jdbc:h2:mem:source_ingestion;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1",
@@ -99,5 +100,44 @@ class SourceIngestionWorkflowTest {
                         .content("{\"url\":\"http://127.0.0.1:8080/actuator/env\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("내부 네트워크")));
+    }
+
+    @Test
+    void keepsIdenticalSourceContentSeparateForDifferentAuthenticatedUsers() throws Exception {
+        String request = objectMapper.createObjectNode()
+                .put("title", "tenant-isolation-source")
+                .put("content", "동일한 본문도 사용자 소유권 단위로 별도 저장됩니다.")
+                .put("sourceType", "TEXT")
+                .put("mimeType", "text/plain")
+                .toString();
+
+        String first = mockMvc.perform(post("/api/sources")
+                        .with(jwt().jwt(token -> token.subject("user-a-sub")
+                                .claim("preferred_username", "learner-a")))
+                        .contentType(MediaType.APPLICATION_JSON).content(request))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reused").value(false))
+                .andReturn().getResponse().getContentAsString();
+
+        String second = mockMvc.perform(post("/api/sources")
+                        .with(jwt().jwt(token -> token.subject("user-b-sub")
+                                .claim("preferred_username", "learner-b")))
+                        .contentType(MediaType.APPLICATION_JSON).content(request))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reused").value(false))
+                .andReturn().getResponse().getContentAsString();
+
+        long firstId = objectMapper.readTree(first).path("sourceId").asLong();
+        long secondId = objectMapper.readTree(second).path("sourceId").asLong();
+        assertThat(secondId).isNotEqualTo(firstId);
+
+        String firstUserSources = mockMvc.perform(get("/api/sources")
+                        .with(jwt().jwt(token -> token.subject("user-a-sub")
+                                .claim("preferred_username", "learner-a"))))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+        java.util.List<Long> visibleIds = new java.util.ArrayList<>();
+        objectMapper.readTree(firstUserSources).forEach(node -> visibleIds.add(node.path("sourceId").asLong()));
+        assertThat(visibleIds).contains(firstId).doesNotContain(secondId);
     }
 }

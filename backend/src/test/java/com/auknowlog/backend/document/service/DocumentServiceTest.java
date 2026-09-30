@@ -2,6 +2,7 @@ package com.auknowlog.backend.document.service;
 
 import com.auknowlog.backend.learning.entity.LearningQuiz;
 import com.auknowlog.backend.learning.repository.LearningQuizRepository;
+import com.auknowlog.backend.auth.service.CurrentUserService;
 import com.auknowlog.backend.roadmap.entity.LearningRoadmap;
 import com.auknowlog.backend.roadmap.entity.LearningRoadmapStep;
 import org.junit.jupiter.api.Test;
@@ -23,8 +24,9 @@ class DocumentServiceTest {
     void savesRoadmapQuizUnderMajorTopicAndSequencesRepeatedSubtopic() throws Exception {
         LearningQuizRepository repository = mock(LearningQuizRepository.class);
         LearningQuiz quiz = roadmapQuiz(41L, 7L, "Kubernetes 운영", "Kubernetes 기초", "Pod");
-        when(repository.findById(41L)).thenReturn(Optional.of(quiz));
-        DocumentService service = new DocumentService(repository, temporaryDirectory);
+        CurrentUserService currentUser = currentUser();
+        when(repository.findByIdAndOwnerId(41L, 1L)).thenReturn(Optional.of(quiz));
+        DocumentService service = new DocumentService(repository, temporaryDirectory, currentUser);
 
         Path first = Path.of(service.saveQuizMarkdown(41L, "first note"));
         Path second = Path.of(service.saveQuizMarkdown(41L, "second note"));
@@ -46,8 +48,9 @@ class DocumentServiceTest {
     void usesMajorTopicAsFileNameWhenRoadmapStepHasNoSubtopic() throws Exception {
         LearningQuizRepository repository = mock(LearningQuizRepository.class);
         LearningQuiz quiz = roadmapQuiz(42L, 8L, "Java 로드맵", "JVM 운영", null);
-        when(repository.findById(42L)).thenReturn(Optional.of(quiz));
-        DocumentService service = new DocumentService(repository, temporaryDirectory);
+        CurrentUserService currentUser = currentUser();
+        when(repository.findByIdAndOwnerId(42L, 1L)).thenReturn(Optional.of(quiz));
+        DocumentService service = new DocumentService(repository, temporaryDirectory, currentUser);
 
         Path stored = Path.of(service.saveQuizMarkdown(42L, "major topic note"));
 
@@ -72,5 +75,11 @@ class DocumentServiceTest {
         when(step.getMajorTopicTitle()).thenReturn(majorTopicTitle);
         when(step.getSubtopicTitle()).thenReturn(subtopicTitle);
         return quiz;
+    }
+
+    private CurrentUserService currentUser() {
+        CurrentUserService service = mock(CurrentUserService.class);
+        when(service.currentUserId()).thenReturn(1L);
+        return service;
     }
 }

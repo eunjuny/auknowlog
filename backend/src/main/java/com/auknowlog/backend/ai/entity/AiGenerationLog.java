@@ -30,6 +30,11 @@ public class AiGenerationLog {
     private Long outputTokens;
     private Long totalTokens;
 
+    private Long ownerId;
+
+    public void assignOwner(Long ownerId) { this.ownerId = ownerId; }
+    public Long getOwnerId() { return ownerId; }
+
     @Column(nullable = false)
     private long latencyMs;
 

@@ -21,6 +21,7 @@
 | DDL 자동 변경은 환경별 결과가 달라짐 | Flyway | 스키마를 V1~V16 마이그레이션으로 관리하고 Hibernate는 `validate`만 수행 | H2는 빠른 도메인 테스트, Testcontainers PostgreSQL은 V1~V16과 pgvector·학습 목표·평가 FK·로드맵 진행 확정 상태 검증 |
 | AI가 만든 품질 점수만으로 운영 기준을 정하면 자기평가 편향이 생김 | Human-in-the-loop 평가 저장 | AI는 기준 목표·문항 판정 초안을 만들고 애매하거나 부정적인 사례만 사람이 확정. 정밀도·재현율은 사람 라벨만 사용 | 평가 계약 모킹 테스트, 실제 pgvector 문제 쌍 저장과 화면의 잠정/검증 지표 분리 |
 | 외부 확인을 위해 URL·임시 비밀번호를 매번 수동 복사해야 함 | Spring Mail + Gmail SMTP | `quick-email`이 인증 검증을 마친 뒤 고정된 본인 수신자에게만 한 번 발송. SMTP는 STARTTLS(587), 자격 증명은 로컬 비밀 설정에 둔다 | SMTP 발송 서비스 단위 테스트, 인증 프록시 자체 테스트, 실제 Gmail SMTP 수동 발송 확인 |
+| 호스트 Java/Node에 의존해 새 환경의 앱 실행을 재현하기 어려움 | 선택형 전체 Docker Compose + 멀티스테이지 이미지 | 기존 로컬 개발 모드를 유지하면서 Java 21 백엔드, Node 빌드·Nginx 정적 프론트, pgvector DB를 한 명령으로 실행. 루프백 공개·비루트 백엔드·기본 AI/메일 비활성 | 실제 이미지 빌드, Compose Health, HTTP API 프록시와 로컬 전용 메일 경계 smoke. 운영용 Keycloak/HTTPS는 별도 범위 |
 
 ## 비용 안전 장치
 

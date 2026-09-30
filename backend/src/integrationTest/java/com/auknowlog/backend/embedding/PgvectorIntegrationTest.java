@@ -89,6 +89,8 @@ class PgvectorIntegrationTest {
                 """, String.class);
 
         assertThat(successfulMigration).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject("SELECT count(*) FROM flyway_schema_history WHERE version='21' AND success=TRUE", Integer.class))
+                .isEqualTo(1);
         assertThat(extensionVersion).startsWith("0.8.");
         assertThat(vectorColumnType).isEqualTo("vector(512)");
         assertThat(indexDefinition)
@@ -201,7 +203,7 @@ class PgvectorIntegrationTest {
         String sourceHashIndex = jdbcTemplate.queryForObject("""
                 SELECT indexdef
                 FROM pg_indexes
-                WHERE schemaname = 'public' AND indexname = 'uk_source_document_content_hash'
+                WHERE schemaname = 'public' AND indexname = 'uk_source_document_owner_content_hash'
                 """, String.class);
         Integer roadmapSourceColumn = jdbcTemplate.queryForObject("""
                 SELECT COUNT(*)
@@ -226,7 +228,7 @@ class PgvectorIntegrationTest {
 
         assertThat(sourceMigration).isEqualTo(2);
         assertThat(sourceMetadataColumns).isEqualTo(7);
-        assertThat(sourceHashIndex).containsIgnoringCase("UNIQUE").contains("content_hash");
+        assertThat(sourceHashIndex).containsIgnoringCase("UNIQUE").contains("owner_id").contains("content_hash");
         assertThat(roadmapSourceColumn).isEqualTo(1);
         assertThat(roadmapSourceForeignKey).isEqualTo(1);
         assertThat(roadmapSourceIndex).contains("source_document_id");

@@ -19,16 +19,18 @@ public class NotionService {
     private final RestClient notionClient;
     private final ObjectMapper objectMapper;
     private final String defaultParentPageId;
+    private final String notionApiKey;
 
     public NotionService(
             RestClient.Builder builder,
             ObjectMapper objectMapper,
-            @Value("${auknowlog.notion.api.key}") String notionApiKey,
+            @Value("${auknowlog.notion.api.key:}") String notionApiKey,
             @Value("${auknowlog.notion.version:2022-06-28}") String notionVersion,
             @Value("${auknowlog.notion.parent.page-id:}") String defaultParentPageId
     ) {
         this.objectMapper = objectMapper;
         this.defaultParentPageId = defaultParentPageId == null ? "" : defaultParentPageId.trim();
+        this.notionApiKey = notionApiKey;
 
         this.notionClient = builder
                 .baseUrl("https://api.notion.com/v1")
@@ -39,6 +41,9 @@ public class NotionService {
 
     public String createPageWithMarkdown(String title, String markdown, String parentPageId,
                                          String databaseId, String databaseTitleProperty) {
+        if (!StringUtils.hasText(notionApiKey)) {
+            throw new IllegalStateException("Notion API 키가 설정되어 있지 않습니다.");
+        }
         String effectiveTitle = (title == null || title.isBlank()) ? "퀴즈 결과" : title.trim();
         String effectiveDbTitleProp = (databaseTitleProperty == null || databaseTitleProperty.isBlank()) ? "Name" : databaseTitleProperty.trim();
 

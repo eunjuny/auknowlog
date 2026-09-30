@@ -17,9 +17,12 @@ public class AiGenerationLedgerService {
     private static final Logger log = LoggerFactory.getLogger(AiGenerationLedgerService.class);
 
     private final AiGenerationLogRepository repository;
+    private final com.auknowlog.backend.auth.service.CurrentUserService currentUserService;
 
-    public AiGenerationLedgerService(AiGenerationLogRepository repository) {
+    public AiGenerationLedgerService(AiGenerationLogRepository repository,
+            com.auknowlog.backend.auth.service.CurrentUserService currentUserService) {
         this.repository = repository;
+        this.currentUserService = currentUserService;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -125,8 +128,19 @@ public class AiGenerationLedgerService {
         return usage.path(field).asLong();
     }
 
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void recordEmbedding(String model, Long inputTokens, Duration duration, String failureType) {
+        record(new AiGenerationLog("EMBEDDING", model, failureType == null ? "SUCCESS" : "FAILED",
+                inputTokens, 0L, inputTokens, duration.toMillis(), failureType));
+    }
+
     private void record(AiGenerationLog logEntry) {
         try {
+            var authentication = org.springframework.security.core.context.SecurityContextHolder
+                    .getContext().getAuthentication();
+            if (authentication != null) {
+                logEntry.assignOwner(currentUserService.currentUserId());
+            }
             repository.save(logEntry);
         } catch (RuntimeException e) {
             // 원장 기록 실패가 사용자 요청까지 실패시키지는 않도록 분리한다.

@@ -13,12 +13,14 @@ import java.util.Optional;
 
 public interface LearningAttemptRepository extends JpaRepository<LearningAttempt, Long> {
 
-    Page<LearningAttempt> findAllByOrderBySubmittedAtDesc(Pageable pageable);
+    Page<LearningAttempt> findByQuizOwnerIdOrderBySubmittedAtDesc(Long ownerId, Pageable pageable);
 
-    @Query("select attempt from LearningAttempt attempt join fetch attempt.quiz")
-    List<LearningAttempt> findAllWithQuiz();
+    @Query("select attempt from LearningAttempt attempt join fetch attempt.quiz quiz where quiz.owner.id = :ownerId")
+    List<LearningAttempt> findAllWithQuiz(@Param("ownerId") Long ownerId);
 
     Optional<LearningAttempt> findByQuizId(Long quizId);
+
+    Optional<LearningAttempt> findByIdAndQuizOwnerId(Long id, Long ownerId);
 
     @Query("""
             select attempt from LearningAttempt attempt

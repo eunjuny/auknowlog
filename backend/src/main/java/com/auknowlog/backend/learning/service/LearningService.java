@@ -1,5 +1,6 @@
 package com.auknowlog.backend.learning.service;
 
+import com.auknowlog.backend.auth.service.CurrentUserService;
 import com.auknowlog.backend.learning.dto.AttemptAnswerRequest;
 import com.auknowlog.backend.learning.dto.AttemptRequest;
 import com.auknowlog.backend.learning.dto.AttemptResult;
@@ -59,6 +60,7 @@ public class LearningService {
     private final DailyLearningRepository dailyLearningRepository;
     private final DailyLearningProgressService dailyLearningProgressService;
     private final ObjectMapper objectMapper;
+    private final CurrentUserService currentUserService;
 
     public LearningService(LearningQuizRepository learningQuizRepository,
                            LearningQuestionRepository learningQuestionRepository,
@@ -72,7 +74,8 @@ public class LearningService {
                            LearningRoadmapService learningRoadmapService,
                            DailyLearningRepository dailyLearningRepository,
                            DailyLearningProgressService dailyLearningProgressService,
-                           ObjectMapper objectMapper) {
+                           ObjectMapper objectMapper,
+                           CurrentUserService currentUserService) {
         this.learningQuizRepository = learningQuizRepository;
         this.learningQuestionRepository = learningQuestionRepository;
         this.learningAttemptRepository = learningAttemptRepository;
@@ -86,11 +89,12 @@ public class LearningService {
         this.dailyLearningRepository = dailyLearningRepository;
         this.dailyLearningProgressService = dailyLearningProgressService;
         this.objectMapper = objectMapper;
+        this.currentUserService = currentUserService;
     }
 
     @Transactional
     public void linkDailyLearning(Long quizId, Long dailyLearningId, DailyLearningTrack track) {
-        LearningQuiz quiz = learningQuizRepository.findById(quizId)
+        LearningQuiz quiz = learningQuizRepository.findByIdAndOwnerId(quizId, currentUserService.currentUserId())
                 .orElseThrow(() -> new java.util.NoSuchElementException("학습 퀴즈를 찾을 수 없습니다."));
         var daily = dailyLearningRepository.findById(dailyLearningId)
                 .orElseThrow(() -> new java.util.NoSuchElementException("데일리 학습을 찾을 수 없습니다."));
@@ -99,7 +103,7 @@ public class LearningService {
 
     @Transactional(readOnly = true)
     public com.auknowlog.backend.quiz.dto.QuizViewResponse viewQuiz(Long quizId) {
-        LearningQuiz quiz = learningQuizRepository.findById(quizId)
+        LearningQuiz quiz = learningQuizRepository.findByIdAndOwnerId(quizId, currentUserService.currentUserId())
                 .orElseThrow(() -> new java.util.NoSuchElementException("학습 퀴즈를 찾을 수 없습니다."));
         List<LearningQuestion> questions = learningQuestionRepository.findByQuizIdOrderByQuestionOrderAsc(quizId);
         return new com.auknowlog.backend.quiz.dto.QuizViewResponse(quiz.getId(), quiz.getTitle(), questions.stream()
@@ -112,7 +116,8 @@ public class LearningService {
     @Transactional
     public QuizResponse storeGeneratedQuiz(String topic, Long sourceId, Long roadmapId, Long roadmapStepId,
                                            QuizResponse response) {
-        LearningRoadmap roadmap = roadmapId == null ? null : learningRoadmapRepository.findById(roadmapId)
+        Long ownerId = currentUserService.currentUserId();
+        LearningRoadmap roadmap = roadmapId == null ? null : learningRoadmapRepository.findByIdAndOwnerId(roadmapId, ownerId)
                 .filter(candidate -> "ACTIVE".equals(candidate.getStatus()))
                 .orElseThrow(() -> new java.util.NoSuchElementException("활성 학습 로드맵을 찾을 수 없습니다."));
         Long roadmapSourceId = roadmap != null && roadmap.getSourceDocument() != null
@@ -122,7 +127,7 @@ public class LearningService {
             throw new IllegalArgumentException("자료 기반 로드맵은 연결된 학습 자료만 사용할 수 있습니다.");
         }
         Long effectiveSourceId = roadmapSourceId != null ? roadmapSourceId : sourceId;
-        SourceDocument sourceDocument = effectiveSourceId == null ? null : sourceDocumentRepository.findById(effectiveSourceId)
+        SourceDocument sourceDocument = effectiveSourceId == null ? null : sourceDocumentRepository.findAccessibleById(effectiveSourceId, ownerId)
                 .orElseThrow(() -> new java.util.NoSuchElementException("학습 자료를 찾을 수 없습니다."));
         LearningRoadmapStep roadmapStep = roadmapStepId == null ? null : learningRoadmapStepRepository.findById(roadmapStepId)
                 .orElseThrow(() -> new java.util.NoSuchElementException("학습 로드맵 단계를 찾을 수 없습니다."));
@@ -139,8 +144,9 @@ public class LearningService {
                 ? Map.of()
                 : learningObjectiveRepository.findByRoadmapStepIdOrderByObjectiveOrder(roadmapStep.getId()).stream()
                 .collect(Collectors.toMap(LearningObjective::getObjectiveKey, objective -> objective));
-        LearningQuiz quiz = learningQuizRepository.save(new LearningQuiz(
-                sourceDocument, roadmap, roadmapStep, topic, response.quizTitle()));
+        LearningQuiz quiz = new LearningQuiz(sourceDocument, roadmap, roadmapStep, topic, response.quizTitle());
+        quiz.assignOwner(currentUserService.currentUser());
+        quiz = learningQuizRepository.save(quiz);
 
         for (int index = 0; index < response.questions().size(); index++) {
             Question question = response.questions().get(index);
@@ -195,7 +201,7 @@ public class LearningService {
 
     @Transactional
     public AttemptResult recordAttempt(AttemptRequest request) {
-        LearningQuiz quiz = learningQuizRepository.findById(request.quizId())
+        LearningQuiz quiz = learningQuizRepository.findByIdAndOwnerId(request.quizId(), currentUserService.currentUserId())
                 .orElseThrow(() -> new java.util.NoSuchElementException("퀴즈를 찾을 수 없습니다."));
         List<LearningQuestion> questions = learningQuestionRepository.findByQuizIdOrderByQuestionOrderAsc(quiz.getId());
         Map<Integer, AttemptAnswerRequest> answersByOrder = answersByQuestionOrder(request.answers());
@@ -281,7 +287,7 @@ public class LearningService {
         int page = Math.max(0, requestedPage);
         int size = Math.min(50, Math.max(1, requestedSize));
         Page<LearningAttempt> attempts = learningAttemptRepository
-                .findAllByOrderBySubmittedAtDesc(PageRequest.of(page, size));
+                .findByQuizOwnerIdOrderBySubmittedAtDesc(currentUserService.currentUserId(), PageRequest.of(page, size));
 
         List<LearningAttemptSummary> summaries = attempts.getContent().stream()
                 .map(this::toAttemptSummary)
@@ -299,7 +305,7 @@ public class LearningService {
 
     @Transactional(readOnly = true)
     public LearningAttemptDetail getAttemptDetail(Long attemptId) {
-        LearningAttempt attempt = learningAttemptRepository.findById(attemptId)
+        LearningAttempt attempt = learningAttemptRepository.findByIdAndQuizOwnerId(attemptId, currentUserService.currentUserId())
                 .orElseThrow(() -> new java.util.NoSuchElementException("풀이 기록을 찾을 수 없습니다."));
 
         List<LearningAttemptQuestionResult> questions = learningAttemptAnswerRepository

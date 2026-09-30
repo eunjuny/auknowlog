@@ -48,6 +48,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @AutoConfigureMockMvc
 class LearningWorkflowIntegrationTest {
 
+    // Reservation locking and PostgreSQL SQL are verified in AccountOperationsIntegrationTest,
+    // not emulated in this H2-only learning/dashboard workflow.
+    @org.springframework.test.context.bean.override.mockito.MockitoBean
+    private com.auknowlog.backend.ai.service.AiBudgetReservationService budgetReservations;
+
     @Autowired
     private MockMvc mockMvc;
 
@@ -341,6 +346,8 @@ class LearningWorkflowIntegrationTest {
                 "QUIZ_GENERATION", "gpt-5.4-mini", "FAILED", null, null, null, 1_000L, "unavailable"
         ));
 
+        org.mockito.Mockito.when(budgetReservations.snapshot(null))
+                .thenReturn(java.util.Map.of("usedTokens",120L,"reservedTokens",0L));
         mockMvc.perform(get("/api/dashboard"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.learning.totalAttempts").value(1))

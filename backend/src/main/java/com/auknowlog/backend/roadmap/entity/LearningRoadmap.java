@@ -1,5 +1,6 @@
 package com.auknowlog.backend.roadmap.entity;
 
+import com.auknowlog.backend.auth.entity.AppUser;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -21,6 +22,10 @@ public class LearningRoadmap {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "owner_id", nullable = false)
+    private AppUser owner;
 
     @Column(nullable = false)
     private String title;
@@ -99,6 +104,9 @@ public class LearningRoadmap {
     public Long getId() {
         return id;
     }
+
+    public void assignOwner(AppUser owner) { this.owner = owner; }
+    public AppUser getOwner() { return owner; }
 
     public String getTitle() {
         return title;

@@ -17,6 +17,12 @@ public interface QuestionFeedbackRepository extends JpaRepository<QuestionFeedba
 
     long countByStatus(String status);
 
+    List<QuestionFeedback> findByQuestionQuizOwnerId(Long ownerId);
+
+    long countByQuestionQuizOwnerId(Long ownerId);
+
+    long countByQuestionQuizOwnerIdAndStatus(Long ownerId, String status);
+
     @Query("""
             select question.questionText
             from QuestionFeedback feedback
@@ -25,11 +31,13 @@ public interface QuestionFeedbackRepository extends JpaRepository<QuestionFeedba
             where feedback.feedbackType = :feedbackType
               and feedback.status = 'OPEN'
               and lower(quiz.topic) = lower(:topic)
+              and quiz.owner.id = :ownerId
             order by feedback.updatedAt desc
             """)
     List<String> findQuestionTextsByTypeAndTopic(
             @Param("feedbackType") QuestionFeedbackType feedbackType,
             @Param("topic") String topic,
+            @Param("ownerId") Long ownerId,
             Pageable pageable
     );
 }

@@ -51,7 +51,7 @@ class OpenAiQuizServiceTest {
         server = MockRestServiceServer.bindTo(builder).build();
         meterRegistry = new SimpleMeterRegistry();
         aiGenerationLedgerService = mock(AiGenerationLedgerService.class);
-        aiUsagePolicyService = mock(AiUsagePolicyService.class);
+        aiUsagePolicyService = com.auknowlog.backend.ai.service.AiPolicyTestSupport.passthroughPolicy();
         langfuseTracingService = mock(LangfuseTracingService.class);
         when(langfuseTracingService.startGeneration(any(), any(), org.mockito.ArgumentMatchers.anyMap(), org.mockito.ArgumentMatchers.anyMap()))
                 .thenReturn(LangfuseTracingService.noopScope());
@@ -109,7 +109,7 @@ class OpenAiQuizServiceTest {
                 .summary().totalAmount()).isEqualTo(200);
         verify(aiGenerationLedgerService).recordQuizSuccess(
                 org.mockito.ArgumentMatchers.eq("gpt-5.4-mini"), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
-        verify(aiUsagePolicyService).assertWithinBudget(org.mockito.ArgumentMatchers.eq("퀴즈 생성"), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(2400));
+        verify(aiUsagePolicyService).execute(org.mockito.ArgumentMatchers.eq("QUIZ_GENERATION"), org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.eq(2400), org.mockito.ArgumentMatchers.any());
         server.verify();
     }
 

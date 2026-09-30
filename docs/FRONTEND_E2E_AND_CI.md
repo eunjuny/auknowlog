@@ -57,6 +57,8 @@ npm run test:e2e
 
 실패 시에만 Playwright 보고서와 trace·스크린샷을 14일간 artifact로 보관합니다. 백엔드 변경은 기존 `backend-integration.yml`에서 Java 21과 `./gradlew check`로 단위·Testcontainers 통합 테스트를 실행합니다. CI는 OpenAI API 키, Gmail 설정, Quick Tunnel 정보, 개인 데이터베이스를 사용하지 않습니다.
 
+`container-smoke.yml`은 별도 경계입니다. 백엔드·프론트 이미지를 빌드하고 pgvector PostgreSQL과 함께 기동한 뒤 Health·정적 화면·실제 `/api` 프록시·원격 접속 메일 API 차단을 확인합니다. OpenAI/SMTP 키를 주입하지 않으며 실행 결과는 폐기 가능한 CI 볼륨과 함께 정리합니다. [전체 컨테이너 실행](CONTAINER_RUNTIME.md)을 참고합니다.
+
 ## 한계와 다음 단계
 
 - 현재 Playwright는 브라우저와 고정 API fixture를 연결합니다. 실서버 E2E는 별도의 일회성 테스트 DB와 서버 기동 시간이 필요하므로, 백엔드 계약 테스트와 중복하지 않았습니다.

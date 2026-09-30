@@ -1,5 +1,6 @@
 package com.auknowlog.backend.learning.service;
 
+import com.auknowlog.backend.auth.service.CurrentUserService;
 import com.auknowlog.backend.learning.dto.ReviewAnswerRequest;
 import com.auknowlog.backend.learning.dto.ReviewAnswerResponse;
 import com.auknowlog.backend.learning.dto.ReviewQueueItem;
@@ -31,17 +32,20 @@ public class ReviewService {
     private final LearningQuestionRepository learningQuestionRepository;
     private final LearningAttemptAnswerRepository learningAttemptAnswerRepository;
     private final ObjectMapper objectMapper;
+    private final CurrentUserService currentUserService;
 
     public ReviewService(ReviewScheduleRepository reviewScheduleRepository,
                          ReviewAttemptRepository reviewAttemptRepository,
                          LearningQuestionRepository learningQuestionRepository,
                          LearningAttemptAnswerRepository learningAttemptAnswerRepository,
-                         ObjectMapper objectMapper) {
+                         ObjectMapper objectMapper,
+                         CurrentUserService currentUserService) {
         this.reviewScheduleRepository = reviewScheduleRepository;
         this.reviewAttemptRepository = reviewAttemptRepository;
         this.learningQuestionRepository = learningQuestionRepository;
         this.learningAttemptAnswerRepository = learningAttemptAnswerRepository;
         this.objectMapper = objectMapper;
+        this.currentUserService = currentUserService;
     }
 
     @Transactional
@@ -52,7 +56,7 @@ public class ReviewService {
     @Transactional
     public ReviewRegistrationResponse registerAfterGrading(ReviewRegistrationRequest request) {
         LearningQuestion question = learningQuestionRepository
-                .findByQuizIdAndQuestionOrder(request.quizId(), request.questionOrder())
+                .findByQuizIdAndQuizOwnerIdAndQuestionOrder(request.quizId(), currentUserService.currentUserId(), request.questionOrder())
                 .orElseThrow(() -> new NoSuchElementException("복습에 추가할 문항을 찾을 수 없습니다."));
         LearningAttemptAnswer gradedAnswer = learningAttemptAnswerRepository.findByQuestionId(question.getId())
                 .orElseThrow(() -> new IllegalArgumentException("채점이 완료된 문항만 복습에 추가할 수 있습니다."));
@@ -63,7 +67,7 @@ public class ReviewService {
     public ReviewQueueResponse getQueue() {
         LocalDateTime now = LocalDateTime.now();
         List<ReviewQueueItem> items = reviewScheduleRepository
-                .findTop100ByStatusOrderByNextReviewAtAsc("PENDING")
+                .findTop100ByQuestionQuizOwnerIdAndStatusOrderByNextReviewAtAsc(currentUserService.currentUserId(), "PENDING")
                 .stream()
                 .map(schedule -> toQueueItem(schedule, now))
                 .toList();
@@ -75,12 +79,14 @@ public class ReviewService {
     public ReviewAnswerResponse answer(Long reviewScheduleId, ReviewAnswerRequest request) {
         ReviewAttempt previousSubmission = reviewAttemptRepository.findBySubmissionId(request.submissionId()).orElse(null);
         if (previousSubmission != null) {
+            requireOwner(previousSubmission.getReviewSchedule());
             validateSubmissionOwner(reviewScheduleId, previousSubmission);
             return toAnswerResponse(previousSubmission, true);
         }
 
         ReviewSchedule schedule = reviewScheduleRepository.findByIdForUpdate(reviewScheduleId)
                 .orElseThrow(() -> new NoSuchElementException("복습 일정을 찾을 수 없습니다."));
+        requireOwner(schedule);
         previousSubmission = reviewAttemptRepository.findBySubmissionId(request.submissionId()).orElse(null);
         if (previousSubmission != null) {
             validateSubmissionOwner(reviewScheduleId, previousSubmission);
@@ -124,9 +130,18 @@ public class ReviewService {
         }
     }
 
+    private void requireOwner(ReviewSchedule schedule) {
+        if (!schedule.getQuestion().getQuiz().getOwner().getId().equals(currentUserService.currentUserId())) {
+            throw new NoSuchElementException("복습 일정을 찾을 수 없습니다.");
+        }
+    }
+
     private ReviewRegistrationResponse schedule(Long questionId, LocalDateTime nextReviewAt) {
         LearningQuestion lockedQuestion = learningQuestionRepository.findByIdForUpdate(questionId)
                 .orElseThrow(() -> new NoSuchElementException("복습에 추가할 문항을 찾을 수 없습니다."));
+        if (!lockedQuestion.getQuiz().getOwner().getId().equals(currentUserService.currentUserId())) {
+            throw new NoSuchElementException("복습에 추가할 문항을 찾을 수 없습니다.");
+        }
         ReviewSchedule existing = reviewScheduleRepository.findByQuestionIdAndStatus(questionId, "PENDING")
                 .orElse(null);
         if (existing != null) {

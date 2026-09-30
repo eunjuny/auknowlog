@@ -1,5 +1,6 @@
 package com.auknowlog.backend.learning.entity;
 
+import com.auknowlog.backend.auth.entity.AppUser;
 import com.auknowlog.backend.daily.entity.DailyLearning;
 import com.auknowlog.backend.daily.entity.DailyLearningTrack;
 import com.auknowlog.backend.source.entity.SourceDocument;
@@ -26,6 +27,10 @@ public class LearningQuiz {
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "owner_id", nullable = false)
+    private AppUser owner;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "source_document_id")
@@ -80,6 +85,9 @@ public class LearningQuiz {
     public Long getId() {
         return id;
     }
+
+    public void assignOwner(AppUser owner) { this.owner = owner; }
+    public AppUser getOwner() { return owner; }
 
     public String getTopic() {
         return topic;
